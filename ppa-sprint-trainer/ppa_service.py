@@ -1433,14 +1433,19 @@ PHASE_C_HTML = """<!doctype html>
 
   /* Recent reps list */
   .reps-list{display:flex;flex-direction:column;gap:6px}
-  .rep-row{display:grid;grid-template-columns:44px 1fr 32px;gap:10px;align-items:center;
-           padding:10px 12px;background:#0a0a0c;border:1px solid var(--line);border-radius:8px;
-           font-size:15px;font-variant-numeric:tabular-nums}
+  .rep-row{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;
+           padding:10px 12px;background:#0a0a0c;border:1px solid var(--line);
+           border-left:3px solid transparent;border-radius:8px;cursor:pointer;
+           font-size:15px;font-variant-numeric:tabular-nums;
+           transition:background 120ms,border-color 120ms;-webkit-tap-highlight-color:transparent}
+  .rep-row:hover,.rep-row:focus-visible{border-left-color:var(--accent);
+           background:rgba(212,130,58,0.07);outline:none}
+  .rep-row.active{border-left-color:var(--accent);background:rgba(212,130,58,0.05)}
   .rep-row .num{color:var(--muted);font-weight:600}
   .rep-row .stats{color:var(--fg);font-weight:500}
   .rep-row .stats .sep{color:#3a3a44;margin:0 8px}
-  .rep-row .icon{color:var(--muted);font-size:18px;text-align:center;cursor:pointer;background:transparent;border:0;padding:0}
-  .rep-row .icon:hover{color:var(--accent)}
+  .rep-row .chev{color:var(--muted);font-size:20px;line-height:1}
+  .rep-row:hover .chev,.rep-row.active .chev{color:var(--accent)}
   .reps-empty{color:var(--muted);text-align:center;padding:14px;font-size:14px}
 
   /* Bottom bar (sticky) */
@@ -3079,7 +3084,10 @@ function renderRepsList(reps){
   const recent=reps.slice().reverse().slice(0,5);
   repsList.innerHTML=recent.map(r=>{
     const isInvalid = r.valid === false;
-    return '<div class="rep-row'+(isInvalid?' invalid':'')+'">'+
+    const isActive = repsList.getAttribute('data-active-rep') === String(r.rep_idx);
+    return '<div class="rep-row'+(isInvalid?' invalid':'')+(isActive?' active':'')+'" '+
+        'role="button" tabindex="0" data-rep="'+r.rep_idx+'" '+
+        'aria-label="Show detail for rep '+r.rep_idx+'">'+
       '<div class="num">Rep '+r.rep_idx+(isInvalid?'<span class="invalid-tag">invalid</span>':'')+'</div>'+
       '<div class="stats">'+
         (r.peak_speed_mps||0).toFixed(2)+' m/s'+
@@ -3094,7 +3102,7 @@ function renderRepsList(reps){
         '<button class="v-toggle'+(isInvalid?' invalid':'')+'" data-rep="'+r.rep_idx+'" '+
           'title="'+(isInvalid?'Mark valid':'Mark invalid (false start, slip, etc.)')+'">'+
           (isInvalid?'↺':'✗')+'</button>'+
-        '<button class="icon" data-rep="'+r.rep_idx+'" title="Show chart">▸</button>'+
+        '<span class="chev" aria-hidden="true">›</span>'+
       '</div>'+
     '</div>';
   }).join('');
@@ -3120,9 +3128,9 @@ function renderRepsList(reps){
       }catch(e){ alert('Network error'); }
     };
   });
-  repsList.querySelectorAll('.icon').forEach(b=>{
-    b.onclick=async()=>{
-      const idx=parseInt(b.getAttribute('data-rep'),10);
+  repsList.querySelectorAll('.rep-row').forEach(row=>{
+    const activate=async()=>{
+      const idx=parseInt(row.getAttribute('data-rep'),10);
       const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
       cachedSamples=sj.samples||[];
       window._lastSamples = cachedSamples;
@@ -3130,7 +3138,16 @@ function renderRepsList(reps){
       // Surface the rep's full metric panel on click
       const repObj = (window._lastReps||[]).find(r=>r.rep_idx===idx);
       if(repObj) renderRunDetail(repObj);
+      // Persist which rep is expanded so its left-border accent survives re-render
+      repsList.setAttribute('data-active-rep', idx);
+      repsList.querySelectorAll('.rep-row').forEach(x=>
+        x.classList.toggle('active', x.getAttribute('data-rep')===String(idx)));
     };
+    row.addEventListener('click', activate);
+    row.addEventListener('keydown', e=>{
+      if(e.target!==row) return;   // let the v-toggle button handle its own keys
+      if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activate(); }
+    });
   });
 }
 
