@@ -1181,6 +1181,7 @@ PHASE_C_HTML = """<!doctype html>
 <link rel="icon" type="image/png" href="/static/icon-192.png">
 <style>
   :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
+          --accent-soft:rgba(212,130,58,0.14);
           --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
           --card:#16161a; --line:#2c2c34; }
   *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
@@ -1206,6 +1207,18 @@ PHASE_C_HTML = """<!doctype html>
     .mode-bar{flex-wrap:wrap}
     .mode-pill{flex:1 1 calc(50% - 4px);font-size:13px}
   }
+
+  /* Drill picker — 2-column tile grid (replaces the old select) */
+  .drill-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .drill-tile{display:flex;flex-direction:column;gap:3px;align-items:flex-start;
+              min-height:70px;padding:10px 12px;text-align:left;cursor:pointer;
+              background:#0a0a0c;color:var(--fg);border:1px solid var(--line);
+              border-radius:8px;transition:border-color 120ms,background 120ms}
+  .drill-tile:hover{border-color:var(--accent)}
+  .drill-tile.selected{border-color:var(--accent);background:var(--accent-soft)}
+  .drill-tile .dt-label{font-size:13px;font-weight:700;letter-spacing:0.02em}
+  .drill-tile .dt-desc{font-size:11px;font-weight:400;color:var(--muted);
+                       line-height:1.3;text-transform:none;letter-spacing:0}
   .card{background:var(--card);border:1px solid var(--line);
         border-radius:14px;padding:18px;margin-bottom:14px}
   .meta{color:var(--muted);font-size:11px;letter-spacing:0.12em;text-transform:uppercase}
@@ -1847,12 +1860,8 @@ PHASE_C_HTML = """<!doctype html>
 
   <div class="field">
     <label>Drill</label>
-    <select id="cfg-drill">
-      <option>FreeTest</option><option>ASkip</option><option>BSkip</option>
-      <option>Ankling</option><option>SkippingJumps</option><option>ApproachJump</option>
-      <option>HighKnee</option><option>FastLeg</option><option>Acceleration</option>
-      <option>Sprint</option><option>StraightLegRun</option>
-    </select>
+    <input type="hidden" id="cfg-drill" value="Acceleration">
+    <div class="drill-grid" id="drill-grid"></div>
   </div>
   <div class="field">
     <button id="history-btn" class="ghost" style="width:100%">Athlete history</button>
@@ -3225,6 +3234,56 @@ function checkGearCapacity(){
   gearWarn.style.display = overGear1 ? 'inline' : 'none';
 }
 
+// Drill picker — tile grid. Backend values are the enum strings; the labels
+// are rugby-friendly display copy. Tiles shown are filtered by the active mode.
+const DRILLS = {
+  Acceleration:   {label:'Acceleration · 10m', desc:'First 10m drive phase'},
+  Sprint:         {label:'Top-end speed',      desc:'Max-velocity sprint',
+                   assisted:{label:'Overspeed sprint', desc:'Motor-towed overspeed'}},
+  ASkip:          {label:'A-Skip',             desc:'Posture + dorsiflexion'},
+  BSkip:          {label:'B-Skip',             desc:'A-Skip plus leg extension'},
+  Ankling:        {label:'Ankling',            desc:'Quick low-amplitude steps'},
+  HighKnee:       {label:'High knee',          desc:'Knee-drive cadence'},
+  FastLeg:        {label:'Fast leg',           desc:'Single-leg cycling action'},
+  StraightLegRun: {label:'Straight-leg run',   desc:'Stiff-leg foot strike'},
+  ApproachJump:   {label:'Approach jump',      desc:'Run-up into a jump'},
+  SkippingJumps:  {label:'Skipping jumps',     desc:'Continuous skip-jumps'},
+  FreeTest:       {label:'Free run',           desc:'Unstructured free run'},
+};
+const DRILLS_BY_MODE = {
+  resisted: ['Acceleration','Sprint','ASkip','BSkip','Ankling','HighKnee','FastLeg','StraightLegRun'],
+  assisted: ['ApproachJump','SkippingJumps','Sprint'],
+  cod:      ['FreeTest'],
+  gym:      ['FreeTest','HighKnee','FastLeg'],
+};
+const cfgDrill = document.getElementById('cfg-drill');   // hidden input — backend value
+const drillGrid = document.getElementById('drill-grid');
+function renderDrillGrid(mode){
+  if(!drillGrid) return;
+  const list = DRILLS_BY_MODE[mode] || DRILLS_BY_MODE.resisted;
+  if(list.indexOf(cfgDrill.value) < 0) cfgDrill.value = list[0];
+  drillGrid.innerHTML = list.map(v=>{
+    const d = DRILLS[v] || {label:v, desc:''};
+    const ov = (mode === 'assisted' && d.assisted) ? d.assisted : d;
+    const on = (v === cfgDrill.value);
+    return '<button type="button" class="drill-tile'+(on?' selected':'')+'" '+
+        'data-drill="'+v+'" aria-pressed="'+(on?'true':'false')+'">'+
+      '<span class="dt-label">'+ov.label+'</span>'+
+      '<span class="dt-desc">'+ov.desc+'</span>'+
+    '</button>';
+  }).join('');
+  drillGrid.querySelectorAll('.drill-tile').forEach(t=>{
+    t.addEventListener('click', ()=>{
+      cfgDrill.value = t.getAttribute('data-drill');
+      drillGrid.querySelectorAll('.drill-tile').forEach(x=>{
+        const sel = x.getAttribute('data-drill') === cfgDrill.value;
+        x.classList.toggle('selected', sel);
+        x.setAttribute('aria-pressed', sel ? 'true' : 'false');
+      });
+    });
+  });
+}
+
 // Mode pill bar is the single source of truth for `mode`. Selecting a pill
 // shows/hides the settings-sheet fields that apply to that mode and pushes
 // the new mode to the backend athletic config.
@@ -3245,6 +3304,7 @@ function applyMode(mode, opts){
   const dl = document.getElementById('cfg-resist-dist-l');
   if(rl) rl.textContent = (mode === 'assisted') ? 'Assistance (kg)' : 'Working resistance (kg)';
   if(dl) dl.textContent = (mode === 'assisted') ? 'Tow distance (m)' : 'Resist distance (m)';
+  renderDrillGrid(mode);
   if(opts.push !== false){
     fetch('/api/c/athletic/config',{method:'POST',
       headers:{'Content-Type':'application/json'},
