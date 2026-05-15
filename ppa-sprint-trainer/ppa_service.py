@@ -1188,9 +1188,13 @@ PHASE_C_HTML = """<!doctype html>
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;
        min-height:100vh;display:flex;flex-direction:column}
   .wrap{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:18px}
-  /* Keep topbar content clear of the fixed phase-pill / e-stop stack on
-     viewports narrow enough for them to overlap the right edge. */
-  @media (max-width:1099px){ .wrap{padding-right:100px} }
+  /* Keep the topbar + mode bar clear of the fixed phase-pill / e-stop stack.
+     Only needed when the sheet isn't open (an open desktop sheet already
+     reserves its own column and shifts the e-stop left). */
+  @media (max-width:1363px){
+    body:not(.sheet-open) .topbar,
+    body:not(.sheet-open) .mode-bar{padding-right:90px}
+  }
   .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
   h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
   h1 .accent{color:var(--accent)}
@@ -1207,6 +1211,12 @@ PHASE_C_HTML = """<!doctype html>
   @media (max-width:414px){
     .mode-bar{flex-wrap:wrap}
     .mode-pill{flex:1 1 calc(50% - 4px);font-size:13px}
+  }
+  /* Small phones — tighten type one notch so nothing forces a horizontal scroll */
+  @media (max-width:414px){
+    h1{font-size:18px}
+    .stat-line .v.primary{font-size:46px}
+    .stat-line .v.secondary{font-size:26px}
   }
 
   /* Drill picker — 2-column tile grid (replaces the old select) */
@@ -1239,7 +1249,7 @@ PHASE_C_HTML = """<!doctype html>
 
   /* Top grid: chart 60% + stats 40% */
   .top-grid{display:grid;grid-template-columns:3fr 2fr;gap:14px}
-  @media (max-width:780px){ .top-grid{grid-template-columns:1fr} }
+  @media (max-width:767px){ .top-grid{grid-template-columns:1fr} }
 
   /* Chart card */
   .chart-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;
@@ -1273,7 +1283,7 @@ PHASE_C_HTML = """<!doctype html>
   .session-stats .ss-l{font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
   .session-stats .ss-v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--fg)}
   .session-stats .ss-v.muted{color:var(--muted);font-weight:400}
-  @media (max-width:780px){ .session-stats{grid-template-columns:repeat(3,1fr)} .session-stats > div:nth-child(n+4){display:none} }
+  @media (max-width:767px){ .session-stats{grid-template-columns:repeat(3,1fr)} .session-stats > div:nth-child(n+4){display:none} }
 
   /* Solo countdown overlay (§9) — fullscreen takeover with huge number */
   .cd-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:90;
@@ -1364,7 +1374,7 @@ PHASE_C_HTML = """<!doctype html>
   .rd-tab:hover{color:var(--fg)}
   .rd-tab.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
   .rd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-  @media (max-width:780px){ .rd-grid{grid-template-columns:1fr} .rd-tabs{flex-wrap:wrap} }
+  @media (max-width:767px){ .rd-grid{grid-template-columns:1fr} .rd-tabs{flex-wrap:wrap} }
   .rd-section .rd-h{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;font-weight:600}
   .rd-row{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;font-size:13px;border-bottom:1px solid #1f1f26}
   .rd-row:last-child{border-bottom:0}
@@ -1511,10 +1521,13 @@ PHASE_C_HTML = """<!doctype html>
   /* Desktop: the sheet is open by default and gets its own column — the main
      content reflows into the space beside it instead of sitting underneath. */
   @media (min-width:1100px){
-    body.sheet-open .wrap{max-width:none;margin:0;padding-right:418px}
+    body.sheet-open .wrap{max-width:1200px;margin:0 auto;padding-right:418px}
     body.sheet-open .bottombar{padding-right:398px}
     body.sheet-open #estop-btn,
     body.sheet-open #phase-pill{right:398px}
+  }
+  @media (min-width:1280px){
+    body.sheet-open .wrap{max-width:1400px}
   }
 
   /* Reports (collapsible) */
