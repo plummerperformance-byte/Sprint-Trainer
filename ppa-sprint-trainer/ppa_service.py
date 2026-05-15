@@ -1185,8 +1185,9 @@ PHASE_C_HTML = """<!doctype html>
           --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
           --card:#16161a; --line:#2c2c34; }
   *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
-  body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;padding-bottom:120px}
-  .wrap{max-width:1200px;margin:0 auto;padding:18px}
+  body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;
+       min-height:100vh;display:flex;flex-direction:column}
+  .wrap{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:18px}
   /* Keep topbar content clear of the fixed phase-pill / e-stop stack on
      viewports narrow enough for them to overlap the right edge. */
   @media (max-width:1099px){ .wrap{padding-right:100px} }
@@ -1469,15 +1470,29 @@ PHASE_C_HTML = """<!doctype html>
   .rep-row:hover .chev,.rep-row.active .chev{color:var(--accent)}
   .reps-empty{color:var(--muted);text-align:center;padding:14px;font-size:14px}
 
-  /* Bottom bar (sticky) */
-  .bottombar{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,12,0.96);
+  /* Bottom bar (sticky — scrolls with content, rests at the viewport bottom) */
+  .bottombar{position:sticky;bottom:0;background:rgba(10,10,12,0.96);
              border-top:1px solid var(--line);padding:12px 18px;z-index:40;
              backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
   .bottombar-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .bottombar select{flex:1;min-width:140px}
   .bottombar .add-input{width:120px}
+  .bottombar button{min-height:44px}
   .bottombar .gear{width:44px;height:44px;padding:0;background:transparent;color:var(--fg);
                    border:1px solid var(--line);border-radius:9px;font-size:20px;cursor:pointer}
+  /* Phone: a single phase-aware primary action fills the thumb zone, the
+     motor toggle becomes an icon, and the athlete picker moves to the header. */
+  #primary-action{display:none}
+  @media (max-width:767px){
+    .bottombar-inner{flex-wrap:nowrap}
+    #rep-btn{display:none}
+    #gear{order:1}
+    #primary-action{display:block;order:2;flex:1;min-height:56px;font-size:17px;font-weight:700}
+    #motor-btn{order:3;width:56px;height:56px;min-height:56px;padding:0;flex:0 0 auto}
+    #motor-btn .mb-label{display:none}
+    #motor-btn::before{content:"\23FB";font-size:22px}
+  }
+  #athlete-header-slot select{max-width:150px;font-size:12px;padding:6px 8px}
 
   /* Settings sheet (slides in from right on coach) */
   .sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,0.5);opacity:0;pointer-events:none;
@@ -1522,8 +1537,9 @@ PHASE_C_HTML = """<!doctype html>
 
   <div class="topbar">
     <h1>PPA <span class="accent">·</span> Sprint Trainer</h1>
-    <div style="display:flex;align-items:center;gap:14px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
       <select id="rig-select" title="Active rig" style="padding:6px 10px;font-size:12px"></select>
+      <span id="athlete-header-slot"></span>
       <div class="state-tag" id="state-tag">Connecting…</div>
     </div>
   </div>
@@ -1828,11 +1844,12 @@ PHASE_C_HTML = """<!doctype html>
 
 <!-- Sticky bottom bar -->
 <div class="bottombar">
-  <div class="bottombar-inner">
-    <button id="motor-btn">Motor OFF</button>
+  <div class="bottombar-inner" id="bottombar-inner">
+    <button id="motor-btn"><span class="mb-label">Motor OFF</span></button>
     <button id="rep-btn" disabled>Start rep</button>
     <select id="athlete-select"><option value="">— Athlete —</option></select>
     <button id="gear" class="gear" title="Settings">⚙</button>
+    <button id="primary-action">Arm rig</button>
   </div>
 </div>
 
@@ -2031,25 +2048,52 @@ function buildAthleticCfg(){
     countdown_s:parseInt(document.getElementById('cfg-countdown').value,10)||0,
   };
 }
+async function armRig(){
+  const r=await fetch('/api/c/arm',{method:'POST'});
+  if(!r.ok){const j=await r.json().catch(()=>({}));alert("Couldn't start motor: "+(j.detail||JSON.stringify(j)));return;}
+  await fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(buildAthleticCfg())});
+  const aid=document.getElementById('athlete-select').value;
+  await fetch('/api/c/athletic/start'+(aid?('?athlete_id='+encodeURIComponent(aid)):''),{method:'POST'});
+}
+async function disarmRig(){
+  await fetch('/api/c/athletic/stop',{method:'POST'});
+  await fetch('/api/c/disarm',{method:'POST'});
+}
+async function repAction(){
+  const c=await(await fetch('/api/c/state')).json();
+  const url=(c.athletic_phase==='ready')?'/api/c/athletic/start_rep':'/api/c/athletic/stop_rep';
+  const r=await fetch(url,{method:'POST'});
+  if(!r.ok){const j=await r.json().catch(()=>({}));alert('Rep: '+(j.detail||JSON.stringify(j)));}
+}
 motorBtn.onclick=async()=>{
   motorBtn.disabled=true;
   try{
     const c=await(await fetch('/api/c/state')).json();
-    if(c.phase_c==='armed'){
-      await fetch('/api/c/athletic/stop',{method:'POST'});
-      await fetch('/api/c/disarm',{method:'POST'});
-    }else{
-      const r=await fetch('/api/c/arm',{method:'POST'});
-      if(!r.ok){const j=await r.json().catch(()=>({}));alert("Couldn't start motor: "+(j.detail||JSON.stringify(j)));}
-      else{
-        await fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(buildAthleticCfg())});
-        const aid=document.getElementById('athlete-select').value;
-        await fetch('/api/c/athletic/start'+(aid?('?athlete_id='+encodeURIComponent(aid)):''),{method:'POST'});
-      }
-    }
+    if(c.phase_c==='armed') await disarmRig(); else await armRig();
   }catch(e){}
   motorBtn.disabled=false;
 };
+// Phone primary action — one phase-aware button: Arm rig → Start/Next rep → Stop.
+const primaryBtn=document.getElementById('primary-action');
+primaryBtn.onclick=async()=>{
+  primaryBtn.disabled=true;
+  try{
+    const c=await(await fetch('/api/c/state')).json();
+    if(c.phase_c!=='armed') await armRig(); else await repAction();
+  }catch(e){}
+  primaryBtn.disabled=false;
+};
+// Athlete picker lives in the header on phone, in the bottombar on desktop.
+const athleteSel=document.getElementById('athlete-select');
+function placeAthlete(){
+  if(window.innerWidth < 768){
+    document.getElementById('athlete-header-slot').appendChild(athleteSel);
+  }else{
+    document.getElementById('bottombar-inner').insertBefore(athleteSel, document.getElementById('gear'));
+  }
+}
+placeAthlete();
+window.addEventListener('resize', placeAthlete);
 
 // ============== UNITS TOGGLE (§15.2) ==============
 // Pure-client preference. Conversions applied at render time only — exports
@@ -2398,13 +2442,7 @@ function showPreRepCard(cfg, athleteName, onGo){
 
 repBtn.onclick=async()=>{
   repBtn.disabled=true;
-  try{
-    const c=await(await fetch('/api/c/state')).json();
-    const url=(c.athletic_phase==='ready')
-      ? '/api/c/athletic/start_rep' : '/api/c/athletic/stop_rep';
-    const r=await fetch(url,{method:'POST'});
-    if(!r.ok){const j=await r.json().catch(()=>({}));alert('Rep: '+(j.detail||JSON.stringify(j)));}
-  }catch(e){}
+  try{ await repAction(); }catch(e){}
   repBtn.disabled=false;
 };
 
@@ -3476,12 +3514,30 @@ async function refresh(){
   stateTag.innerHTML=stateLabels[c.phase_c]||c.phase_c;
 
   const armed=c.phase_c==='armed';
-  motorBtn.textContent=armed?'Motor ON':'Motor OFF';
+  const mbLabel=motorBtn.querySelector('.mb-label');
+  if(mbLabel) mbLabel.textContent=armed?'Motor ON':'Motor OFF';
   motorBtn.classList.toggle('on',armed);
   const repActive=c.athletic_phase==='resist'||c.athletic_phase==='return';
   repBtn.disabled=!(armed && c.athletic_mode);
   repBtn.textContent=repActive?'Stop rep':'Start rep';
   repBtn.classList.toggle('on',repActive);
+
+  // Phone primary action — phase-aware label/colour
+  if(primaryBtn){
+    if(!armed){
+      primaryBtn.textContent='Arm rig';
+      primaryBtn.classList.remove('disarm');
+      primaryBtn.disabled=false;
+    }else if(repActive){
+      primaryBtn.textContent='Stop';
+      primaryBtn.classList.add('disarm');
+      primaryBtn.disabled=false;
+    }else{
+      primaryBtn.textContent=((window._lastReps||[]).length>0)?'Next rep':'Start rep';
+      primaryBtn.classList.remove('disarm');
+      primaryBtn.disabled=!(armed && c.athletic_mode);
+    }
+  }
 
   // Phase pill (fixed top-right of viewport)
   const ph=c.athletic_mode?c.athletic_phase:'off';
