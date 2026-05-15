@@ -3844,8 +3844,13 @@ SETUP_HTML = """<!doctype html>
          color:var(--fg);border:1px solid var(--line);border-radius:6px}
   label{display:block;color:var(--muted);font-size:11px;letter-spacing:0.12em;
         text-transform:uppercase;margin:0 0 4px}
-  .setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-  @media (max-width:860px){ .setup-grid{grid-template-columns:1fr} }
+  .setup-tabs{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+  .setup-tab{padding:10px 18px;font-size:13px;font-weight:700;letter-spacing:0.04em;
+             background:var(--card);color:var(--muted);border:1px solid var(--line);
+             border-radius:10px;cursor:pointer;min-height:44px}
+  .setup-tab:hover{color:var(--fg)}
+  .setup-tab.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
+  section[data-panel][hidden]{display:none}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
         padding:18px;margin-bottom:14px}
   .card h2{margin:0 0 14px;font-size:16px;font-weight:600}
@@ -3862,6 +3867,11 @@ SETUP_HTML = """<!doctype html>
                   text-transform:none;letter-spacing:0;color:var(--fg);margin:0}
   .curve-axis-btn{flex:1;padding:8px;border:none;border-radius:5px;font-size:11px;
                   cursor:pointer;min-height:36px}
+  .curve-preset{padding:7px 12px;font-size:12px;font-weight:600;background:#0a0a0c;
+                color:var(--muted);border:1px solid var(--line);border-radius:6px;
+                cursor:pointer;min-height:36px}
+  .curve-preset:hover{color:var(--fg);border-color:var(--accent)}
+  .curve-preset.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
   .hist-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .hist-list{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto}
   .hist-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
@@ -3887,8 +3897,14 @@ SETUP_HTML = """<!doctype html>
     <a class="livelink" href="/coach">&larr; Live session</a>
   </div>
 
-  <div class="setup-grid">
-    <div>
+  <nav class="setup-tabs" id="setup-tabs">
+    <button class="setup-tab active" data-tab="athletes">Athletes</button>
+    <button class="setup-tab" data-tab="drills">Drills &amp; Presets</button>
+    <button class="setup-tab" data-tab="reports">Reports</button>
+    <button class="setup-tab" data-tab="settings">Settings</button>
+  </nav>
+
+  <section data-panel="athletes">
       <div class="card">
         <h2>Athletes</h2>
         <div class="field">
@@ -3959,7 +3975,9 @@ SETUP_HTML = """<!doctype html>
           <div class="hist-list" id="hist-sessions"></div>
         </div>
       </div>
+  </section>
 
+  <section data-panel="drills" hidden>
       <div class="card">
         <h2>Templates</h2>
         <div class="field">
@@ -3979,11 +3997,17 @@ SETUP_HTML = """<!doctype html>
         </div>
         <div class="meta">Templates store the rig's current mode, drill, resistance and curve.</div>
       </div>
-    </div>
 
-    <div>
       <div class="card">
         <h2>Resistance curve</h2>
+        <div class="curve-preset-row" id="curve-preset-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+          <button type="button" class="curve-preset" data-curve="flat">Flat</button>
+          <button type="button" class="curve-preset" data-curve="sprint_accel">Sprint-accel</button>
+          <button type="button" class="curve-preset" data-curve="plateau_drop">Plateau-drop</button>
+          <button type="button" class="curve-preset" data-curve="pyramid">Pyramid</button>
+          <button type="button" class="curve-preset" data-curve="block_start">Block start</button>
+          <button type="button" class="curve-preset" data-curve="custom">Custom</button>
+        </div>
         <div class="row" style="gap:6px;margin-bottom:6px">
           <button type="button" class="curve-axis-btn" data-axis="off">Off</button>
           <button type="button" class="curve-axis-btn" data-axis="distance">By distance</button>
@@ -3993,7 +4017,16 @@ SETUP_HTML = """<!doctype html>
              style="display:block;border:1px solid var(--line);border-radius:6px;touch-action:none"></svg>
         <div class="meta" id="curve-meta" style="margin-top:4px">Off — flat working resistance is used.</div>
       </div>
+  </section>
 
+  <section data-panel="reports" hidden>
+      <div class="card">
+        <h2>Reports</h2>
+        <p class="meta" style="line-height:1.7">Rep comparison, Force&ndash;Velocity profiles and longitudinal trends will live here. Wired in a later phase.</p>
+      </div>
+  </section>
+
+  <section data-panel="settings" hidden>
       <div class="card">
         <h2>Session defaults</h2>
         <div class="num-grid">
@@ -4035,8 +4068,7 @@ SETUP_HTML = """<!doctype html>
           </div>
         </div>
       </div>
-    </div>
-  </div>
+  </section>
 </div>
 
 <script>
@@ -4339,6 +4371,20 @@ document.getElementById('cfg-gear').addEventListener('change',e=>
     set('cfg-countdown',cfg.countdown_s);
     if(cfg.gear!=null) document.getElementById('cfg-gear').value=String(cfg.gear);
   }catch(e){}
+})();
+
+// ---- Tab switching ----
+(function(){
+  const tabs=document.querySelectorAll('.setup-tab');
+  const panels=document.querySelectorAll('section[data-panel]');
+  function show(name){
+    tabs.forEach(t=>t.classList.toggle('active',t.getAttribute('data-tab')===name));
+    panels.forEach(p=>{ p.hidden = p.getAttribute('data-panel')!==name; });
+    localStorage.setItem('ppa.setup.tab',name);
+  }
+  tabs.forEach(t=>t.addEventListener('click',()=>show(t.getAttribute('data-tab'))));
+  const stored=localStorage.getItem('ppa.setup.tab');
+  show((stored && document.querySelector('section[data-panel="'+stored+'"]'))?stored:'athletes');
 })();
 
 loadAthletes();
