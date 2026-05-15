@@ -1300,7 +1300,7 @@ PHASE_C_HTML = """<!doctype html>
      confirmation. Sized for sweaty thumb on a phone. Sits below phase pill. */
   .estop-btn{position:fixed;top:80px;right:18px;width:64px;height:64px;
              border-radius:50%;background:var(--bad);color:#fff;border:3px solid #ff8a8a;
-             font-size:14px;font-weight:800;letter-spacing:0.08em;cursor:pointer;z-index:60;
+             font-size:14px;font-weight:800;letter-spacing:0.08em;cursor:pointer;z-index:100;
              box-shadow:0 6px 18px rgba(232,90,90,0.4);
              -webkit-tap-highlight-color:transparent}
   .estop-btn:hover,.estop-btn:active{background:#ff6b6b;transform:scale(1.05)}
@@ -1485,6 +1485,14 @@ PHASE_C_HTML = """<!doctype html>
   .sheet-actions{display:flex;gap:10px;margin-top:10px}
   .sheet-close{position:absolute;top:14px;right:14px;background:transparent;color:var(--muted);
                border:0;font-size:22px;cursor:pointer}
+  /* Desktop: the sheet is open by default and gets its own column — the main
+     content reflows into the space beside it instead of sitting underneath. */
+  @media (min-width:1100px){
+    body.sheet-open .wrap{max-width:none;margin:0;padding-right:418px}
+    body.sheet-open .bottombar{padding-right:398px}
+    body.sheet-open #estop-btn,
+    body.sheet-open #phase-pill{right:398px}
+  }
 
   /* Reports (collapsible) */
   details.report{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
@@ -2376,11 +2384,30 @@ if(estopBtn){
 }
 
 // ---- Settings sheet ----
+// Open by default on desktop, closed on phone; the open/closed choice is
+// remembered in localStorage. The dark mask only shows when the sheet
+// overlays content (phone) — on desktop the sheet has its own column.
 const sheet=document.getElementById('sheet');
 const sheetMask=document.getElementById('sheet-mask');
-function openSheet(){sheet.classList.add('show');sheetMask.classList.add('show');}
-function closeSheet(){sheet.classList.remove('show');sheetMask.classList.remove('show');}
-document.getElementById('gear').onclick=openSheet;
+const SHEET_DESKTOP_MIN=1100;
+function sheetIsDesktop(){ return window.innerWidth >= SHEET_DESKTOP_MIN; }
+function applySheet(open){
+  sheet.classList.toggle('show', open);
+  document.body.classList.toggle('sheet-open', open);
+  sheetMask.classList.toggle('show', open && !sheetIsDesktop());
+  localStorage.setItem('ppa.sheet.open', open ? '1' : '0');
+}
+function openSheet(){ applySheet(true); }
+function closeSheet(){ applySheet(false); }
+function toggleSheet(){ applySheet(!sheet.classList.contains('show')); }
+(function(){
+  const stored=localStorage.getItem('ppa.sheet.open');
+  const open = stored===null ? sheetIsDesktop() : stored==='1';
+  sheet.style.transition='none';   // no slide-in on first paint
+  applySheet(open);
+  requestAnimationFrame(()=>{ sheet.style.transition=''; });
+})();
+document.getElementById('gear').onclick=toggleSheet;
 document.getElementById('sheet-close').onclick=closeSheet;
 document.getElementById('sheet-done').onclick=closeSheet;
 sheetMask.onclick=closeSheet;
