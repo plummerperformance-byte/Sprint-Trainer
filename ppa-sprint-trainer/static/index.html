@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0a0c">
+<title>PPA</title>
+<style>
+/* =========================================================================
+   PPA dashboard — single CSS file, ~600 lines budget, no external deps.
+   ========================================================================= */
+:root {
+  --bg: #0a0a0c;
+  --surface: #16161a;
+  --surface-2: #1e1e24;
+  --surface-3: #25252c;
+  --line: #2c2c34;
+  --line-strong: #3a3a44;
+  --fg: #f0f0f3;
+  --fg-muted: #8a8a96;
+  --fg-faint: #5a5a64;
+  --accent: #d4823a;
+  --accent-soft: rgba(212, 130, 58, 0.12);
+  --accent-line: rgba(212, 130, 58, 0.35);
+  --danger: #e85a5a;
+  --warn: #d4a13a;
+  --success: #5aa86a;
+  --radius: 14px;
+  --radius-sm: 9px;
+  --pad: 18px;
+  --gap: 14px;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+  font-family: -apple-system, "Segoe UI", "Inter", system-ui, Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px; line-height: 1.45;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ----- header ----- */
+header {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: rgba(10, 10, 12, 0.92); backdrop-filter: blur(8px);
+  z-index: 10;
+}
+.brand {
+  font-weight: 700; letter-spacing: 0.18em; font-size: 13px; color: var(--fg);
+}
+.brand .accent { color: var(--accent); }
+.spacer { flex: 1; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px 5px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; letter-spacing: 0.02em;
+  background: var(--surface-2); color: var(--fg-muted); border: 1px solid var(--line);
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-muted); }
+.pill.connected { color: var(--success); border-color: rgba(90, 168, 106, 0.25); }
+.pill.connected .dot { background: var(--success); box-shadow: 0 0 6px rgba(90, 168, 106, 0.4); }
+.pill.connecting { color: var(--warn); border-color: rgba(212, 161, 58, 0.25); }
+.pill.connecting .dot { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+.pill.nodrive { color: var(--fg-faint); }
+.pill.armed { color: var(--danger); border-color: rgba(232, 90, 90, 0.3); background: rgba(232, 90, 90, 0.08); }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.icon-btn {
+  appearance: none; border: 1px solid var(--line); background: var(--surface-2);
+  color: var(--fg-muted); width: 36px; height: 36px; border-radius: 9px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: 100ms;
+}
+.icon-btn:hover { color: var(--fg); border-color: var(--line-strong); }
+.icon-btn.has-badge { position: relative; }
+.icon-btn.has-badge::after {
+  content: ""; position: absolute; top: 7px; right: 7px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+}
+.icon-btn svg { width: 18px; height: 18px; }
+
+/* ----- main layout ----- */
+main {
+  max-width: 720px; margin: 0 auto; padding: 16px;
+  display: flex; flex-direction: column; gap: var(--gap);
+}
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: var(--pad);
+}
+.card h2 {
+  margin: 0 0 12px; font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--fg-muted); font-weight: 600;
+}
+
+/* ----- session card (hero when no session) ----- */
+#session-card.empty .session-active-only { display: none; }
+#session-card:not(.empty) .session-empty-only { display: none; }
+
+.session-empty {
+  text-align: center; padding: 12px 4px;
+}
+.session-empty .empty-msg {
+  color: var(--fg-muted); margin-bottom: 18px; font-size: 14px;
+}
+.session-empty .picker-row {
+  display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap;
+  justify-content: center; margin-bottom: 14px;
+}
+.session-empty select, .session-empty input[type=number] {
+  padding: 12px 14px; background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--radius-sm); color: var(--fg); font-size: 15px; min-width: 160px;
+}
+.session-empty input[type=number] { max-width: 90px; }
+.session-empty select:focus, .session-empty input:focus {
+  outline: none; border-color: var(--accent-line); background: var(--surface-3);
+}
+.btn {
+  appearance: none; border: 0; padding: 12px 22px; border-radius: var(--radius-sm);
+  font-size: 15px; font-weight: 600; cursor: pointer; letter-spacing: 0.01em;
+  transition: 120ms;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: #1a0e04; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-secondary { background: var(--surface-3); color: var(--fg); border: 1px solid var(--line); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--line-strong); }
+.btn-danger { background: rgba(232, 90, 90, 0.15); color: var(--danger); border: 1px solid rgba(232, 90, 90, 0.3); }
+.btn-danger:hover:not(:disabled) { background: rgba(232, 90, 90, 0.22); }
+.btn-warn { background: var(--warn); color: #2a1d05; }
+.btn-ghost { background: transparent; color: var(--fg-muted); border: 1px solid var(--line); }
+.btn-ghost:hover:not(:disabled) { color: var(--fg); border-color: var(--line-strong); }
+
+.session-active {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.session-active .info { flex: 1; min-width: 0; }
+.session-active .athlete-name {
+  font-size: 18px; font-weight: 700; letter-spacing: 0.005em;
+}
+.session-active .session-meta {
+  font-size: 13px; color: var(--fg-muted); margin-top: 2px;
+}
+.session-active .rep-count {
+  text-align: center; padding: 0 14px;
+}
+.session-active .rep-count .num {
+  font-size: 36px; font-weight: 700; color: var(--accent); line-height: 1;
+}
+.session-active .rep-count .label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--fg-muted);
+  margin-top: 4px;
+}
+
+/* ----- live big-number card ----- */
+.live-grid {
+  display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 12px;
+}
+@media (max-width: 540px) {
+  .live-grid { grid-template-columns: 1fr 1fr; }
+  .live-grid .metric:first-child { grid-column: 1 / -1; }
+}
+.metric .label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--fg-muted); font-weight: 600;
+}
+.metric .primary {
+  font-size: 38px; font-weight: 700; line-height: 1.05; margin-top: 4px;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.metric .primary .unit { font-size: 16px; font-weight: 500; color: var(--fg-muted); margin-left: 4px; }
+.metric .secondary {
+  font-size: 13px; color: var(--fg-muted); margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.metric.big .primary { font-size: 56px; }
+.metric.big .primary .unit { font-size: 20px; }
+
+/* ----- in-rep accumulating panel ----- */
+#rep-live { display: none; }
+#rep-live.visible { display: block; }
+#rep-live.visible .rep-live-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+}
+#rep-live .pulse-bar {
+  height: 3px; background: var(--accent); border-radius: 2px;
+  margin-top: 10px; opacity: 0.8;
+  animation: rep-pulse 1.4s ease-in-out infinite;
+}
+@keyframes rep-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+/* ----- rep summary slide-in ----- */
+#rep-summary {
+  position: fixed; bottom: 18px; left: 18px; right: 18px; max-width: 700px; margin: 0 auto;
+  background: var(--surface); border: 1px solid var(--accent-line); border-radius: var(--radius);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 130, 58, 0.05);
+  padding: 16px 18px; transform: translateY(140%); opacity: 0;
+  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms;
+  z-index: 50; pointer-events: none;
+}
+#rep-summary.visible { transform: translateY(0); opacity: 1; pointer-events: auto; }
+#rep-summary .rs-head {
+  display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px;
+}
+#rep-summary .rs-rep-no { font-size: 22px; font-weight: 700; }
+#rep-summary .rs-peak { font-size: 13px; color: var(--accent); margin-left: auto; text-align: right; }
+#rep-summary .rs-peak .avg { display: block; font-size: 11px; color: var(--fg-muted); margin-top: 2px; }
+#rep-summary .rs-close {
+  background: transparent; border: 0; color: var(--fg-muted); cursor: pointer;
+  font-size: 20px; padding: 0 4px; line-height: 1;
+}
+.rs-peakavg-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  font-size: 13px; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid var(--line);
+}
+.rs-peakavg-row .label {
+  color: var(--fg-muted); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+.rs-peakavg-row .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rs-peakavg-row .v .avg { display: block; color: var(--fg-muted); font-size: 11px; font-weight: 500; margin-top: 1px; }
+.rs-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px 14px;
+  font-size: 13px;
+}
+.rs-grid .label { color: var(--fg-muted); font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.1em; }
+.rs-grid .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rs-splits {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;
+}
+.rs-split {
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 8px; font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.rs-split.hit { border-color: var(--accent-line); color: var(--accent); }
+.rs-split .d { color: var(--fg-muted); margin-right: 4px; }
+
+/* phase bar */
+.phase-bar {
+  display: flex; height: 8px; border-radius: 4px; overflow: hidden;
+  background: var(--surface-3); margin-top: 12px;
+}
+.phase-bar .seg.accel { background: rgba(90, 168, 106, 0.55); }
+.phase-bar .seg.maxv  { background: var(--accent); }
+.phase-bar .seg.decel { background: rgba(232, 90, 90, 0.55); }
+.phase-legend {
+  display: flex; gap: 14px; font-size: 11px; color: var(--fg-muted);
+  margin-top: 6px;
+}
+.phase-legend .swatch {
+  display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 4px; vertical-align: middle;
+}
+
+/* ----- collapsible sections ----- */
+details.section {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden;
+}
+details.section > summary {
+  padding: 14px 18px; cursor: pointer; list-style: none;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600; color: var(--fg-muted);
+  letter-spacing: 0.06em; text-transform: uppercase;
+}
+details.section > summary::-webkit-details-marker { display: none; }
+details.section > summary::after {
+  content: ""; margin-left: auto; width: 8px; height: 8px;
+  border-right: 2px solid var(--fg-muted); border-bottom: 2px solid var(--fg-muted);
+  transform: rotate(45deg); transition: 200ms;
+}
+details.section[open] > summary::after { transform: rotate(-135deg); }
+details.section[open] > summary { color: var(--fg); border-bottom: 1px solid var(--line); }
+.section-body { padding: 14px 18px; }
+
+/* small kv grid for diagnostics */
+.kv-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+.kv {
+  background: var(--surface-2); border-radius: 9px; padding: 10px 12px;
+}
+.kv .k {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fg-muted);
+}
+.kv .v {
+  font-size: 16px; font-weight: 600; margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* control rows */
+.ctrl-row { padding: 10px 0; border-top: 1px solid var(--line); }
+.ctrl-row:first-child { border-top: 0; padding-top: 0; }
+.ctrl-row label { font-size: 13px; color: var(--fg-muted); display: block; margin-bottom: 8px; }
+.ctrl-row .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ctrl-row input[type=range] { flex: 1; min-width: 140px; }
+.ctrl-row input[type=number] {
+  width: 80px; padding: 8px 10px; background: var(--surface-2);
+  border: 1px solid var(--line); color: var(--fg); border-radius: 7px;
+  font-variant-numeric: tabular-nums;
+}
+.ctrl-row select {
+  padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--fg); border-radius: 7px;
+}
+
+/* ----- recent sessions link ----- */
+.text-link {
+  appearance: none; border: 0; background: transparent; padding: 8px 4px;
+  color: var(--accent); cursor: pointer; font-size: 14px; font-weight: 500;
+}
+.text-link:hover { text-decoration: underline; }
+
+/* ----- modal ----- */
+.modal-back {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+  display: none; align-items: flex-end; justify-content: center; z-index: 100;
+  animation: fade 160ms ease both;
+}
+.modal-back.open { display: flex; }
+@media (min-width: 600px) {
+  .modal-back { align-items: center; padding: 20px; }
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--line);
+  border-top-left-radius: 16px; border-top-right-radius: 16px;
+  width: 100%; max-width: 720px; max-height: 90vh; overflow-y: auto;
+  padding: 20px 18px; animation: slideUp 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@media (min-width: 600px) {
+  .modal { border-radius: 16px; }
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+}
+.modal-head h2 { margin: 0; font-size: 16px; }
+
+/* sessions list */
+.session-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 10px;
+  margin-bottom: 8px; cursor: pointer; align-items: center;
+  background: var(--surface-2); transition: 120ms;
+}
+.session-row:hover { background: var(--surface-3); border-color: var(--line-strong); }
+.session-row .athlete { font-weight: 600; }
+.session-row .when { font-size: 12px; color: var(--fg-muted); margin-top: 2px; }
+.session-row .recovered-tag {
+  display: inline-block; font-size: 10px; color: var(--warn);
+  padding: 2px 6px; background: rgba(212, 161, 58, 0.12);
+  border-radius: 4px; margin-left: 6px; letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.session-row .duration { font-size: 13px; color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+.session-row .reps {
+  font-size: 22px; font-weight: 700; text-align: right;
+  font-variant-numeric: tabular-nums; min-width: 48px;
+}
+.session-row .reps .label { display: block; font-size: 9px; font-weight: 500;
+  text-transform: uppercase; color: var(--fg-muted); letter-spacing: 0.1em; margin-top: 2px; }
+
+/* sparkline */
+.sparkline {
+  display: flex; align-items: flex-end; gap: 2px;
+  height: 24px; margin-top: 6px;
+}
+.sparkline .bar {
+  width: 4px; background: var(--accent); border-radius: 1px; opacity: 0.85;
+}
+
+/* session detail */
+.detail-headline {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px;
+}
+.detail-headline .stat {
+  background: var(--surface-2); padding: 10px 12px; border-radius: 9px;
+}
+.detail-headline .stat .v {
+  font-size: 22px; font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.detail-headline .stat .v .unit { font-size: 11px; color: var(--fg-muted); margin-left: 3px; font-weight: 500; }
+.detail-headline .stat .k {
+  font-size: 10px; color: var(--fg-muted); text-transform: uppercase;
+  letter-spacing: 0.08em; margin-top: 2px;
+}
+.detail-meta { font-size: 13px; color: var(--fg-muted); margin-bottom: 16px; }
+.detail-meta b { color: var(--fg); }
+.detail-meta .recovered-note {
+  display: inline-block; margin-bottom: 8px; padding: 6px 10px;
+  background: rgba(212, 161, 58, 0.08); border: 1px solid rgba(212, 161, 58, 0.3);
+  border-radius: 7px; color: var(--warn); font-size: 12px;
+}
+
+.rep-card {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 14px; margin-bottom: 8px;
+}
+.rep-card .head {
+  display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px;
+}
+.rep-card .num { font-weight: 700; font-size: 14px; }
+.rep-card .peak { color: var(--accent); font-variant-numeric: tabular-nums; font-size: 13px; }
+.rep-card .meta { font-size: 12px; color: var(--fg-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.rep-card .splits { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+
+/* ----- log slide-in panel ----- */
+.log-panel {
+  position: fixed; right: 0; top: 0; bottom: 0; width: 320px; max-width: 86vw;
+  background: var(--surface); border-left: 1px solid var(--line);
+  transform: translateX(100%); transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  display: flex; flex-direction: column; z-index: 200;
+}
+.log-panel.open { transform: translateX(0); box-shadow: -10px 0 30px rgba(0, 0, 0, 0.4); }
+.log-panel .head {
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.log-panel .head h3 { margin: 0; font-size: 13px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--fg-muted); }
+.log-list {
+  flex: 1; overflow-y: auto; padding: 10px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px;
+}
+.log-row { color: var(--fg-muted); padding: 3px 4px; line-height: 1.4; }
+.log-row.ok { color: var(--success); }
+.log-row.err { color: var(--danger); }
+.log-row.warn { color: var(--warn); }
+.log-row .count { color: var(--fg-faint); margin-left: 4px; }
+.log-row .ts { color: var(--fg-faint); margin-right: 6px; }
+
+/* small utilities */
+.hidden { display: none !important; }
+.tcenter { text-align: center; }
+.right { margin-left: auto; }
+.muted { color: var(--fg-muted); }
+.warn { color: var(--warn); }
+.danger { color: var(--danger); }
+.accent { color: var(--accent); }
+
+/* desktop tweaks */
+@media (min-width: 720px) {
+  main { padding: 22px; gap: 16px; }
+  .session-active .athlete-name { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">PPA<span class="accent"> ·</span> Sprint Trainer</div>
+  <div class="spacer"></div>
+  <div id="conn-pill" class="pill connecting"><span class="dot"></span><span id="conn-pill-label">Connecting…</span></div>
+  <button class="icon-btn" id="log-toggle" aria-label="activity log" title="activity log">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="4" y1="6" x2="20" y2="6"/>
+      <line x1="4" y1="12" x2="20" y2="12"/>
+      <line x1="4" y1="18" x2="13" y2="18"/>
+    </svg>
+  </button>
+</header>
+
+<main>
+
+  <!-- SESSION CARD -->
+  <section id="session-card" class="card empty">
+    <div class="session-empty session-empty-only">
+      <div class="empty-msg" id="session-empty-msg">Pick an athlete and start a session to begin recording.</div>
+      <div class="picker-row">
+        <select id="athlete-select" aria-label="athlete">
+          <option value="">Select athlete…</option>
+        </select>
+        <button class="btn btn-secondary" id="new-athlete-btn">+ new</button>
+        <input type="number" id="hmi-load-input" placeholder="kg" min="0" step="0.5" aria-label="HMI load kg">
+      </div>
+      <button class="btn btn-primary" id="start-session-btn" disabled>Start session</button>
+    </div>
+
+    <div class="session-active session-active-only">
+      <div class="info">
+        <div class="athlete-name" id="session-athlete-name">—</div>
+        <div class="session-meta" id="session-meta">—</div>
+      </div>
+      <div class="rep-count">
+        <div class="num tabular" id="rep-counter">0</div>
+        <div class="label">reps</div>
+      </div>
+      <button class="btn btn-danger" id="end-session-btn">End session</button>
+    </div>
+  </section>
+
+  <!-- LIVE BIG-NUMBER CARD -->
+  <section class="card">
+    <h2>Live</h2>
+    <div class="live-grid">
+      <div class="metric big">
+        <div class="label">Speed</div>
+        <div class="primary tabular"><span id="v-speed-mps">—</span><span class="unit">m/s</span></div>
+        <div class="secondary"><span id="v-speed-rpm">—</span> RPM</div>
+      </div>
+      <div class="metric">
+        <div class="label">Torque</div>
+        <div class="primary tabular"><span id="v-torque">—</span><span class="unit">%</span></div>
+      </div>
+      <div class="metric">
+        <div class="label">Position</div>
+        <div class="primary tabular"><span id="v-pos-delta">—</span><span class="unit">m</span></div>
+        <div class="secondary tabular"><span id="v-pos-counts">—</span> counts</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- IN-REP ACCUMULATING METRICS -->
+  <section id="rep-live" class="card">
+    <h2 style="display:flex; align-items:center"><span>Recording rep #<span id="rep-live-num">—</span></span><span class="right accent" style="font-size:11px; letter-spacing: 0.1em">LIVE</span></h2>
+    <div class="rep-live-grid">
+      <div class="metric">
+        <div class="label">Speed</div>
+        <div class="primary tabular"><span id="rep-live-speed">0.0</span><span class="unit">m/s</span></div>
+      </div>
+      <div class="metric">
+        <div class="label">Distance</div>
+        <div class="primary tabular"><span id="rep-live-dist">0.0</span><span class="unit">m</span></div>
+      </div>
+      <div class="metric">
+        <div class="label">Elapsed</div>
+        <div class="primary tabular"><span id="rep-live-elapsed">0.0</span><span class="unit">s</span></div>
+      </div>
+    </div>
+    <div class="pulse-bar"></div>
+  </section>
+
+  <!-- RECENT SESSIONS LINK -->
+  <button class="text-link" id="sessions-list-btn" style="text-align:left">Recent sessions →</button>
+
+  <!-- DRIVE DIAGNOSTICS (collapsed) -->
+  <details class="section">
+    <summary>Drive diagnostics</summary>
+    <div class="section-body">
+      <div class="kv-grid">
+        <div class="kv"><div class="k">Status</div><div class="v" id="diag-status">—</div></div>
+        <div class="kv"><div class="k">Control mode</div><div class="v" id="diag-mode">—</div></div>
+        <div class="kv"><div class="k">Fault code</div><div class="v" id="diag-fault">—</div></div>
+        <div class="kv"><div class="k">Bus voltage</div><div class="v tabular" id="diag-bus">— V</div></div>
+        <div class="kv"><div class="k">Module temp</div><div class="v tabular" id="diag-temp">— °C</div></div>
+        <div class="kv"><div class="k">Position abs</div><div class="v tabular" id="diag-pos-abs">—</div></div>
+        <div class="kv"><div class="k">Torque limit src</div><div class="v" id="diag-tl-src">—</div></div>
+        <div class="kv"><div class="k">Limit fwd / rev</div><div class="v tabular" id="diag-tl-fr">— / —</div></div>
+      </div>
+    </div>
+  </details>
+
+  <!-- ADVANCED — arm + control writes -->
+  <details class="section">
+    <summary>Advanced</summary>
+    <div class="section-body">
+      <div class="ctrl-row">
+        <label>Service write authority</label>
+        <div class="row">
+          <span id="arm-state-label" class="muted">DISARMED. Write endpoints inactive.</span>
+          <button class="btn btn-warn right" id="arm-btn">ARM</button>
+        </div>
+      </div>
+      <div class="ctrl-row" id="ctrl-fwd">
+        <label>External forward torque limit (P03.11)</label>
+        <div class="row">
+          <input type="range" id="r-fwd" min="0" max="300" step="0.5" value="100">
+          <input type="number" id="n-fwd" min="0" max="300" step="0.5" value="100" class="tabular">
+          <button class="btn btn-secondary" id="apply-fwd" disabled>Apply</button>
+        </div>
+      </div>
+      <div class="ctrl-row" id="ctrl-rev">
+        <label>External reverse torque limit (P03.12)</label>
+        <div class="row">
+          <input type="range" id="r-rev" min="0" max="300" step="0.5" value="100">
+          <input type="number" id="n-rev" min="0" max="300" step="0.5" value="100" class="tabular">
+          <button class="btn btn-secondary" id="apply-rev" disabled>Apply</button>
+        </div>
+      </div>
+      <div class="ctrl-row" id="ctrl-source">
+        <label>Torque limit source (P03.08)</label>
+        <div class="row">
+          <select id="sel-source">
+            <option value="false">Internal (0)</option>
+            <option value="true">External (1)</option>
+          </select>
+          <button class="btn btn-secondary" id="apply-source" disabled>Apply</button>
+        </div>
+      </div>
+      <div class="ctrl-row" id="ctrl-mode">
+        <label>Control mode (P00.01) — likely locked while EtherCAT master is online</label>
+        <div class="row">
+          <select id="sel-mode">
+            <option value="0">0 — Position</option>
+            <option value="1">1 — Speed</option>
+            <option value="2">2 — Torque</option>
+            <option value="3">3 — Pos/Speed switchover</option>
+            <option value="4">4 — Pos/Torque switchover</option>
+            <option value="5">5 — Speed/Torque switchover</option>
+            <option value="7">7 — CANOpen / EtherCAT</option>
+          </select>
+          <button class="btn btn-secondary" id="apply-mode" disabled>Apply</button>
+        </div>
+      </div>
+    </div>
+  </details>
+
+</main>
+
+<!-- REP SUMMARY SLIDE-IN -->
+<div id="rep-summary">
+  <div class="rs-head">
+    <div class="rs-rep-no">Rep <span id="rs-num">—</span></div>
+    <div class="rs-peak">
+      <span id="rs-peak">—</span> m/s peak
+      <span class="avg">avg <span id="rs-avg-speed">—</span> m/s</span>
+    </div>
+    <button class="rs-close" id="rs-close" aria-label="close">×</button>
+  </div>
+  <div class="rs-grid">
+    <div><div class="label">Distance</div><div class="v tabular"><span id="rs-dist">—</span> m</div></div>
+    <div><div class="label">Time to peak</div><div class="v tabular"><span id="rs-ttp">—</span></div></div>
+    <div><div class="label">Step rate</div><div class="v tabular"><span id="rs-step-rate">—</span></div></div>
+    <div><div class="label">Stride</div><div class="v tabular"><span id="rs-stride">—</span></div></div>
+  </div>
+  <div class="rs-peakavg-row">
+    <div>
+      <div class="label">Peak decel</div>
+      <div class="v tabular"><span id="rs-peak-decel">—</span> m/s²<span class="avg">avg <span id="rs-avg-decel">—</span></span></div>
+    </div>
+    <div>
+      <div class="label">Peak torque</div>
+      <div class="v tabular"><span id="rs-peak-torque">—</span> %<span class="avg">avg <span id="rs-avg-torque">—</span></span></div>
+    </div>
+  </div>
+  <div class="rs-splits" id="rs-splits"></div>
+  <div class="phase-bar" id="rs-phase-bar"></div>
+  <div class="phase-legend">
+    <span><span class="swatch" style="background:rgba(90,168,106,0.55)"></span>Accel</span>
+    <span><span class="swatch" style="background:var(--accent)"></span>Max-V</span>
+    <span><span class="swatch" style="background:rgba(232,90,90,0.55)"></span>Decel</span>
+  </div>
+</div>
+
+<!-- ACTIVITY LOG SLIDE-IN -->
+<aside class="log-panel" id="log-panel">
+  <div class="head"><h3>Activity</h3>
+    <button class="icon-btn" id="log-close" aria-label="close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>
+      </svg>
+    </button>
+  </div>
+  <div class="log-list" id="log-list"></div>
+</aside>
+
+<!-- SESSIONS MODAL -->
+<div class="modal-back" id="sessions-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Recent sessions</h2>
+      <button class="icon-btn" id="sessions-close" aria-label="close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>
+        </svg>
+      </button>
+    </div>
+    <div id="sessions-list"><div class="muted tcenter" style="padding:30px">loading…</div></div>
+  </div>
+</div>
+
+<!-- SESSION DETAIL MODAL -->
+<div class="modal-back" id="session-detail-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="sd-title">Session</h2>
+      <button class="icon-btn" id="sd-close" aria-label="close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>
+        </svg>
+      </button>
+    </div>
+    <div id="sd-body"><div class="muted tcenter" style="padding:30px">loading…</div></div>
+  </div>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+// =========================================================================
+// PPA dashboard JS — vanilla, no deps. Phone-first single column UI.
+// =========================================================================
+
+const $ = id => document.getElementById(id);
+
+// ----- calibration (loaded from /api/info) -----
+let CAL = { counts_per_metre: 1, calibrated: false };
+
+// ----- session state held in JS -----
+let currentSessionId = null;
+let currentAthleteId = null;
+let sessionStartT = null;       // wall-clock seconds
+let lastStatus = null;
+let lastPosCounts = null;
+let repCount = 0;
+
+// rep-in-progress state
+let inRep = false;
+let repIdLocal = 0;             // counter for display only
+let repStartT = null;
+let repStartPos = null;
+let repPeakSpeedMps = 0;
+
+// last-known DB rep id of an open rep we should fetch analytics for
+// when a 2->1 transition fires
+let pendingRepDbId = null;
+
+// ----- WebSocket -----
+let ws = null;
+let reconnectDelay = 1000;
+let havePill = "connecting";
+
+const wsUrl = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/api/stream";
+
+function connectWS() {
+  ws = new WebSocket(wsUrl);
+  ws.onopen = () => { reconnectDelay = 1000; log("WebSocket connected", "ok"); };
+  ws.onmessage = e => { try { handleState(JSON.parse(e.data)); } catch (err) { log("bad WS msg: " + err, "err"); } };
+  ws.onclose = () => {
+    setConnPill(currentInfo?.connected ? "connected" : "nodrive");
+    log("WebSocket closed; retrying in " + reconnectDelay + " ms", "warn");
+    setTimeout(connectWS, reconnectDelay);
+    reconnectDelay = Math.min(8000, reconnectDelay * 1.5);
+  };
+  ws.onerror = () => log("WS error", "err");
+}
+
+// ----- connection pill -----
+function setConnPill(state) {
+  const p = $("conn-pill");
+  const lbl = $("conn-pill-label");
+  havePill = state;
+  p.classList.remove("connected", "connecting", "nodrive", "armed");
+  p.classList.add(state);
+  if (state === "connected") lbl.textContent = "Connected";
+  else if (state === "connecting") lbl.textContent = "Connecting…";
+  else if (state === "nodrive") lbl.textContent = "No drive";
+  else if (state === "armed") lbl.textContent = "ARMED";
+}
+
+let currentInfo = null;
+
+// ----- ARM state -----
+let armed = false;
+function setArmed(a) {
+  armed = a;
+  $("arm-state-label").textContent = a
+    ? "ARMED. Writes are sent to the drive — disarm when not actively configuring."
+    : "DISARMED. Write endpoints inactive.";
+  $("arm-state-label").className = a ? "danger" : "muted";
+  $("arm-btn").textContent = a ? "DISARM" : "ARM";
+  $("arm-btn").className = "btn right " + (a ? "btn-secondary" : "btn-warn");
+  for (const id of ["apply-fwd","apply-rev","apply-source","apply-mode"]) {
+    const el = $(id);
+    if (el) el.disabled = !a;
+  }
+  // header pill if armed and connected
+  if (a && havePill === "connected") setConnPill("armed");
+  else if (!a && havePill === "armed") setConnPill("connected");
+}
+
+// ----- live state handling -----
+// /api/info gives us encoder_counts_per_rev + counts_per_metre. From those:
+//   metres_per_rev = encoder_counts_per_rev / counts_per_metre
+//   speed_mps      = rpm / 60 * metres_per_rev
+function mpsFromRpm(rpm) {
+  if (!CAL.encoder_counts_per_rev || !CAL.counts_per_metre) return rpm * 0.0026;  // rough fallback
+  const metres_per_rev = CAL.encoder_counts_per_rev / CAL.counts_per_metre;
+  return rpm / 60 * metres_per_rev;
+}
+
+function handleState(s) {
+  // connection pill
+  if (s.error) {
+    setConnPill("nodrive");
+  } else if (s.connected) {
+    setConnPill(armed ? "armed" : "connected");
+  } else {
+    setConnPill("nodrive");
+  }
+
+  // live big card
+  const speedMps = (s.speed_rpm != null) ? mpsFromRpm(s.speed_rpm) : null;
+  setText("v-speed-mps", speedMps != null ? speedMps.toFixed(2) : "—");
+  setText("v-speed-rpm", s.speed_rpm != null ? s.speed_rpm : "—");
+  setText("v-torque", s.torque_pct != null ? s.torque_pct.toFixed(1) : "—");
+  setText("v-pos-counts", s.pos_delta_counts != null ? s.pos_delta_counts : "—");
+  setText("v-pos-delta", s.pos_delta_counts != null
+    ? (s.pos_delta_counts / CAL.counts_per_metre).toFixed(2)
+    : "—");
+
+  // diagnostics
+  setText("diag-status", s.status === 1 ? "1 — ready" : s.status === 2 ? "2 — running" : (s.status ?? "—"));
+  setText("diag-mode", s.control_mode != null ? s.control_mode : "—");
+  setText("diag-fault", s.fault_code === 0 ? "0 — none" : (s.fault_code ?? "—"));
+  setText("diag-bus", s.bus_voltage_v != null ? s.bus_voltage_v.toFixed(1) + " V" : "— V");
+  setText("diag-temp", s.temp_c != null ? s.temp_c + " °C" : "— °C");
+  setText("diag-pos-abs", s.position_counts != null ? s.position_counts : "—");
+  setText("diag-tl-src", s.torque_limit_source === 0 ? "internal" : s.torque_limit_source === 1 ? "external" : "—");
+  const f = s.torque_limit_external_forward_pct, r = s.torque_limit_external_reverse_pct;
+  setText("diag-tl-fr", `${f != null ? f.toFixed(1) : "—"}% / ${r != null ? r.toFixed(1) : "—"}%`);
+
+  // rep transitions
+  if (currentSessionId !== null) {
+    const status = s.status;
+    if (lastStatus === 1 && status === 2) onRepStart(s);
+    else if (lastStatus === 2 && status === 1) onRepEnd(s);
+    else if (status === 2) onRepTick(s);
+    lastStatus = status;
+  }
+  lastPosCounts = s.position_counts;
+}
+
+function onRepStart(s) {
+  inRep = true;
+  repCount += 1;
+  repIdLocal = repCount;
+  repStartT = Date.now() / 1000;
+  repStartPos = s.position_counts ?? 0;
+  repPeakSpeedMps = 0;
+
+  setText("rep-counter", repCount);
+  $("rep-live").classList.add("visible");
+  setText("rep-live-num", repCount);
+  hideRepSummary();
+  log(`rep ${repCount} started`, "ok");
+}
+
+function onRepTick(s) {
+  if (!inRep) return;
+  const elapsed = Date.now() / 1000 - repStartT;
+  const speedMps = Math.abs(mpsFromRpm(s.speed_rpm || 0));
+  if (speedMps > repPeakSpeedMps) repPeakSpeedMps = speedMps;
+  const distM = (Math.abs((s.position_counts ?? repStartPos) - repStartPos)) / CAL.counts_per_metre;
+  setText("rep-live-speed", speedMps.toFixed(2));
+  setText("rep-live-dist", distM.toFixed(2));
+  setText("rep-live-elapsed", elapsed.toFixed(1));
+}
+
+async function onRepEnd(s) {
+  inRep = false;
+  $("rep-live").classList.remove("visible");
+  log(`rep ${repCount} ended`, "ok");
+
+  // Wait briefly for the backend to finish closing the rep, then fetch analytics.
+  setTimeout(() => fetchAndShowLastRepAnalytics(), 350);
+}
+
+async function fetchAndShowLastRepAnalytics() {
+  if (currentSessionId == null) return;
+  try {
+    const sess = await jget(`/api/sessions/${currentSessionId}`);
+    const reps = sess.reps || [];
+    if (!reps.length) return;
+    // Last rep with ended_t_offset_ms is the most recent completed rep
+    const completed = reps.filter(r => r.ended_t_offset_ms != null);
+    if (!completed.length) return;
+    const last = completed[completed.length - 1];
+    const m = await jget(`/api/sessions/${currentSessionId}/reps/${last.id}/analytics`);
+    showRepSummary(repCount, m);
+  } catch (e) { log("rep analytics fetch failed: " + e, "err"); }
+}
+
+// ----- rep summary slide-in -----
+let repSummaryHideTimer = null;
+function showRepSummary(repNo, m) {
+  const card = $("rep-summary");
+  setText("rs-num", repNo);
+  setText("rs-peak", m.peak_speed_mps != null ? m.peak_speed_mps.toFixed(2) : "—");
+  setText("rs-avg-speed", m.avg_speed_mps != null ? m.avg_speed_mps.toFixed(2) : "—");
+  setText("rs-dist", m.distance != null ? m.distance.toFixed(1) : "—");
+  setText("rs-ttp", m.time_to_peak_speed_ms != null ? (m.time_to_peak_speed_ms / 1000).toFixed(2) + " s" : "—");
+  setText("rs-step-rate", m.step_rate_hz != null ? m.step_rate_hz.toFixed(1) + " Hz" : "—");
+  setText("rs-stride", m.avg_step_length_m != null ? m.avg_step_length_m.toFixed(2) + " m" : "—");
+  setText("rs-peak-decel", m.peak_decel_mps2 != null ? m.peak_decel_mps2.toFixed(2) : "—");
+  setText("rs-avg-decel", m.avg_decel_mps2 != null ? m.avg_decel_mps2.toFixed(2) : "—");
+  setText("rs-peak-torque", m.peak_torque_pct != null ? m.peak_torque_pct.toFixed(1) : "—");
+  setText("rs-avg-torque", m.avg_torque_pct != null ? m.avg_torque_pct.toFixed(1) : "—");
+
+  const sp = $("rs-splits");
+  sp.innerHTML = "";
+  if (m.splits_ms) {
+    for (const d of [5, 10, 20, 30, 40]) {
+      const v = m.splits_ms[d];
+      const el = document.createElement("div");
+      el.className = "rs-split" + (v != null ? " hit" : "");
+      el.innerHTML = `<span class="d">${d}m</span>${v != null ? (v / 1000).toFixed(2) + "s" : "—"}`;
+      sp.appendChild(el);
+    }
+  }
+  // phase bar — `duration` is now seconds; convert back to ms for the segment ratios
+  const pb = $("rs-phase-bar");
+  pb.innerHTML = "";
+  const durMs = (m.duration || 0) * 1000 || 1;
+  const pw = m.phase_windows || {};
+  for (const k of ["accel", "maxv", "decel"]) {
+    const seg = pw[k];
+    if (!seg) continue;
+    const el = document.createElement("div");
+    el.className = "seg " + k;
+    const w = ((seg[1] - seg[0]) / durMs) * 100;
+    el.style.width = `${w}%`;
+    pb.appendChild(el);
+  }
+
+  card.classList.add("visible");
+  if (repSummaryHideTimer) clearTimeout(repSummaryHideTimer);
+  repSummaryHideTimer = setTimeout(hideRepSummary, 15000);
+}
+function hideRepSummary() {
+  $("rep-summary").classList.remove("visible");
+  if (repSummaryHideTimer) { clearTimeout(repSummaryHideTimer); repSummaryHideTimer = null; }
+}
+$("rs-close").addEventListener("click", hideRepSummary);
+
+// ----- session lifecycle -----
+function setSessionUi(open, sess = null) {
+  const card = $("session-card");
+  card.classList.toggle("empty", !open);
+  if (open && sess) {
+    setText("session-athlete-name", sess.athlete_name || "Athlete #" + sess.athlete_id);
+    const meta = [
+      sess.hmi_load_kg != null ? `${sess.hmi_load_kg} kg` : null,
+      `Session #${sess.id}`,
+      sess.notes ? sess.notes : null,
+    ].filter(x => x).join(" · ");
+    setText("session-meta", meta);
+    setText("rep-counter", repCount);
+  }
+}
+
+async function loadAthletes() {
+  try {
+    const list = await jget("/api/athletes");
+    const sel = $("athlete-select");
+    const prev = sel.value;
+    sel.innerHTML = list.length === 0
+      ? '<option value="">Add an athlete to get started</option>'
+      : '<option value="">Select athlete…</option>';
+    for (const a of list) {
+      const o = document.createElement("option");
+      o.value = a.id; o.textContent = a.name;
+      sel.appendChild(o);
+    }
+    sel.value = prev || "";
+    updateStartButton();
+    // Highlight + new if there are no athletes
+    $("new-athlete-btn").classList.toggle("btn-primary", list.length === 0);
+    $("new-athlete-btn").classList.toggle("btn-secondary", list.length > 0);
+    if (list.length === 0) {
+      $("session-empty-msg").textContent = "Add an athlete to get started.";
+    } else {
+      $("session-empty-msg").textContent = "Pick an athlete and start a session to begin recording.";
+    }
+  } catch (e) { log("load athletes failed: " + e, "err"); }
+}
+
+function updateStartButton() {
+  $("start-session-btn").disabled = !$("athlete-select").value;
+}
+$("athlete-select").addEventListener("change", updateStartButton);
+
+async function syncFromServer() {
+  try {
+    const info = await jget("/api/info");
+    currentInfo = info;
+    if (info.calibration) {
+      CAL = info.calibration;
+    }
+    if (info.connected) setConnPill(armed ? "armed" : "connected");
+    else setConnPill("nodrive");
+    setArmed(!!info.armed);
+
+    if (info.current_session_id) {
+      currentSessionId = info.current_session_id;
+      const sess = await jget(`/api/sessions/${currentSessionId}`);
+      currentAthleteId = sess.athlete_id;
+      repCount = (sess.reps || []).length;
+      sessionStartT = Date.parse(sess.started_at) / 1000;
+      setSessionUi(true, sess);
+      $("athlete-select").value = sess.athlete_id;
+    } else {
+      currentSessionId = null;
+      repCount = 0;
+      setSessionUi(false);
+    }
+  } catch (e) { log("sync failed: " + e, "err"); }
+}
+
+$("new-athlete-btn").addEventListener("click", async () => {
+  const name = prompt("Athlete name:");
+  if (!name || !name.trim()) return;
+  try {
+    const r = await jpost("/api/athletes", { name: name.trim() });
+    log(`created athlete ${r.id}: ${r.name}`, "ok");
+    await loadAthletes();
+    $("athlete-select").value = r.id;
+    updateStartButton();
+  } catch (e) { log("create athlete failed: " + e, "err"); }
+});
+
+$("start-session-btn").addEventListener("click", async () => {
+  const aid = parseInt($("athlete-select").value, 10);
+  if (!aid) return;
+  const loadStr = $("hmi-load-input").value;
+  const body = { athlete_id: aid };
+  if (loadStr) body.hmi_load_kg = parseFloat(loadStr);
+  try {
+    const r = await jpost("/api/sessions/start", body);
+    log(`session ${r.session_id} started`, "ok");
+    repCount = 0;
+    sessionStartT = r.started_at_wallclock;
+    await syncFromServer();
+  } catch (e) { log("start session failed: " + e, "err"); }
+});
+
+$("end-session-btn").addEventListener("click", async () => {
+  if (!currentSessionId) return;
+  if (!confirm(`End session #${currentSessionId}?`)) return;
+  try {
+    const r = await fetch(`/api/sessions/${currentSessionId}/end`, {method: "POST"});
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    log(`session ${j.session_id} ended — ${j.rep_count} reps in ${j.duration_seconds.toFixed(1)} s`, "ok");
+    currentSessionId = null;
+    repCount = 0;
+    inRep = false;
+    $("rep-live").classList.remove("visible");
+    hideRepSummary();
+    setSessionUi(false);
+  } catch (e) { log("end session failed: " + e, "err"); }
+});
+
+// ----- arm/disarm -----
+$("arm-btn").addEventListener("click", async () => {
+  if (!armed) {
+    const typed = prompt("Type ARM (uppercase) to enable writes:");
+    if (typed !== "ARM") { log("arm cancelled"); return; }
+    try { await jpost("/api/arm", {confirm: "ARM"}); log("ARMED — writes permitted", "warn"); setArmed(true); }
+    catch (e) { log("arm failed: " + e, "err"); }
+  } else {
+    try { await jpost("/api/arm", {confirm: "DISARM"}); log("disarmed", "ok"); setArmed(false); }
+    catch (e) { log("disarm failed: " + e, "err"); }
+  }
+});
+
+// ----- control writes -----
+function bindSliderNumber(rId, nId) {
+  const r = $(rId), n = $(nId);
+  r.addEventListener("input", () => n.value = r.value);
+  n.addEventListener("input", () => r.value = n.value);
+}
+bindSliderNumber("r-fwd", "n-fwd"); bindSliderNumber("r-rev", "n-rev");
+
+async function ctrlWrite(label, url, body) {
+  if (!armed) { log("not armed", "err"); return; }
+  if (!confirm(`Write ${label}?\n${JSON.stringify(body)}`)) return;
+  try { await jpost(url, body); log(`wrote ${label}`, "warn"); }
+  catch (e) { log(`write ${label} failed: ` + e, "err"); }
+}
+$("apply-fwd").addEventListener("click", () =>
+  ctrlWrite(`P03.11 = ${$("n-fwd").value}%`, "/api/control/torque_limit",
+            {forward_pct: parseFloat($("n-fwd").value), external: true}));
+$("apply-rev").addEventListener("click", () =>
+  ctrlWrite(`P03.12 = ${$("n-rev").value}%`, "/api/control/torque_limit",
+            {reverse_pct: parseFloat($("n-rev").value), external: true}));
+$("apply-source").addEventListener("click", () =>
+  ctrlWrite(`P03.08 = ${$("sel-source").value === "true" ? 1 : 0}`, "/api/control/torque_limit_source",
+            {external: $("sel-source").value === "true"}));
+$("apply-mode").addEventListener("click", () =>
+  ctrlWrite(`P00.01 = ${$("sel-mode").value}`, "/api/control/control_mode",
+            {mode: parseInt($("sel-mode").value, 10)}));
+
+// ----- sessions modal -----
+async function openSessions() {
+  $("sessions-modal").classList.add("open");
+  const list = $("sessions-list");
+  list.innerHTML = '<div class="muted tcenter" style="padding:30px">loading…</div>';
+  try {
+    const sessions = await jget("/api/sessions?limit=10");
+    if (!sessions.length) {
+      list.innerHTML = '<div class="muted tcenter" style="padding:30px">No sessions yet.</div>';
+      return;
+    }
+    list.innerHTML = "";
+    for (const s of sessions) {
+      const row = document.createElement("div");
+      row.className = "session-row";
+      const recovered = s.recovered_at ? '<span class="recovered-tag">recovered</span>' : '';
+      row.innerHTML = `
+        <div>
+          <div class="athlete">${escapeHtml(s.athlete_name)}${recovered}</div>
+          <div class="when">${fmtTime(s.started_at)}${s.hmi_load_kg != null ? ` · ${s.hmi_load_kg} kg` : ""}</div>
+        </div>
+        <div class="duration">${fmtDuration(s.duration_seconds)}</div>
+        <div class="reps">${s.rep_count}<span class="label">reps</span></div>`;
+      row.addEventListener("click", () => {
+        $("sessions-modal").classList.remove("open");
+        openSessionDetail(s.id);
+      });
+      list.appendChild(row);
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="danger tcenter" style="padding:30px">load failed: ${escapeHtml(String(e))}</div>`;
+  }
+}
+$("sessions-list-btn").addEventListener("click", openSessions);
+$("sessions-close").addEventListener("click", () => $("sessions-modal").classList.remove("open"));
+
+async function openSessionDetail(sid) {
+  $("session-detail-modal").classList.add("open");
+  setText("sd-title", `Session #${sid}`);
+  $("sd-body").innerHTML = '<div class="muted tcenter" style="padding:30px">loading…</div>';
+  try {
+    const s = await jget(`/api/sessions/${sid}`);
+    const reps = s.reps || [];
+    const completedReps = reps.filter(r => r.ended_t_offset_ms != null);
+    // Headline stats
+    const peakSpeed = reps.reduce((m, r) => Math.max(m, r.peak_speed_rpm || 0), 0);
+    const peakSpeedMps = mpsFromRpm(peakSpeed);
+    const totalDistCounts = reps.reduce((m, r) => m + (r.total_distance_counts || 0), 0);
+    const totalDistM = totalDistCounts / CAL.counts_per_metre;
+
+    const recoveredNote = s.recovered_at
+      ? `<div class="recovered-note">Recovered session — end timestamp reconstructed from samples (${fmtTime(s.recovered_at)})</div>`
+      : '';
+
+    let body = `
+      ${recoveredNote}
+      <div class="detail-headline">
+        <div class="stat"><div class="v tabular">${peakSpeedMps.toFixed(2)}<span class="unit">m/s</span></div><div class="k">Best peak</div></div>
+        <div class="stat"><div class="v tabular">${reps.length}</div><div class="k">Reps</div></div>
+        <div class="stat"><div class="v tabular">${totalDistM.toFixed(0)}<span class="unit">m</span></div><div class="k">Total distance</div></div>
+      </div>
+      <div class="detail-meta">
+        <div><b>Athlete:</b> ${escapeHtml(s.athlete_name)}</div>
+        <div><b>Started:</b> ${fmtTime(s.started_at)}</div>
+        <div><b>Ended:</b> ${fmtTime(s.ended_at)}</div>
+        <div><b>Duration:</b> ${fmtDuration(s.duration_seconds)}</div>
+        ${s.hmi_load_kg != null ? `<div><b>HMI load:</b> ${s.hmi_load_kg} kg</div>` : ""}
+        ${s.notes ? `<div><b>Notes:</b> ${escapeHtml(s.notes)}</div>` : ""}
+      </div>`;
+
+    if (completedReps.length === 0) {
+      body += `<div class="muted">No completed reps in this session.</div>`;
+    } else {
+      body += `<div class="card-h2-like" style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:var(--fg-muted);margin:8px 0">Reps</div>`;
+      // Fetch analytics per rep in parallel.
+      const analyticsList = await Promise.all(
+        completedReps.map(r => jget(`/api/sessions/${sid}/reps/${r.id}/analytics`).catch(() => null))
+      );
+      analyticsList.forEach((m, i) => {
+        const r = completedReps[i];
+        const peakSpd = m && m.peak_speed_mps != null ? m.peak_speed_mps.toFixed(2) : "—";
+        const avgSpd = m && m.avg_speed_mps != null ? m.avg_speed_mps.toFixed(2) : "—";
+        const dist = m && m.distance != null ? m.distance.toFixed(1) : "—";
+        const stepRate = m && m.step_rate_hz != null ? m.step_rate_hz.toFixed(1) + " Hz" : "—";
+        const peakDcl = m && m.peak_decel_mps2 != null ? m.peak_decel_mps2.toFixed(2) : "—";
+        const avgDcl = m && m.avg_decel_mps2 != null ? m.avg_decel_mps2.toFixed(2) : "—";
+        const peakTq = m && m.peak_torque_pct != null ? m.peak_torque_pct.toFixed(1) : "—";
+        const avgTq = m && m.avg_torque_pct != null ? m.avg_torque_pct.toFixed(1) : "—";
+        const splits = m && m.splits_ms ? [5, 10, 20, 30, 40].map(d => {
+          const v = m.splits_ms[d];
+          return `<div class="rs-split${v != null ? " hit" : ""}"><span class="d">${d}m</span>${v != null ? (v / 1000).toFixed(2) + "s" : "—"}</div>`;
+        }).join("") : "";
+        const durSec = (r.ended_t_offset_ms - r.started_t_offset_ms) / 1000;
+        body += `
+          <div class="rep-card">
+            <div class="head">
+              <div class="num">Rep ${i + 1}</div>
+              <div class="peak">${peakSpd} m/s peak <span class="muted" style="margin-left:6px">avg ${avgSpd}</span></div>
+              <div class="meta">${dist} m · ${stepRate} · ${durSec.toFixed(1)} s</div>
+            </div>
+            <div class="muted" style="font-size:12px;margin:4px 0">
+              peak decel ${peakDcl} m/s² <span style="opacity:0.7">(avg ${avgDcl})</span>
+              · peak torque ${peakTq}% <span style="opacity:0.7">(avg ${avgTq})</span>
+            </div>
+            <div class="splits">${splits}</div>
+          </div>`;
+      });
+    }
+
+    $("sd-body").innerHTML = body;
+  } catch (e) {
+    $("sd-body").innerHTML = `<div class="danger tcenter" style="padding:30px">load failed: ${escapeHtml(String(e))}</div>`;
+  }
+}
+$("sd-close").addEventListener("click", () => $("session-detail-modal").classList.remove("open"));
+
+// ----- activity log (slide-in, rate-limited) -----
+const logEntries = [];   // {ts, msg, cls, count}
+const LOG_MAX = 200;
+function log(msg, cls = "row") {
+  const now = new Date();
+  const ts = now.toLocaleTimeString();
+  const last = logEntries[0];
+  if (last && last.msg === msg && last.cls === cls) {
+    last.count += 1;
+    last.ts = ts;
+  } else {
+    logEntries.unshift({ ts, msg, cls, count: 1 });
+    while (logEntries.length > LOG_MAX) logEntries.pop();
+  }
+  renderLog();
+}
+function renderLog() {
+  const list = $("log-list");
+  list.innerHTML = logEntries.map(e =>
+    `<div class="log-row ${e.cls === "row" ? "" : e.cls}"><span class="ts">${e.ts}</span>${escapeHtml(e.msg)}${e.count > 1 ? `<span class="count">(×${e.count})</span>` : ""}</div>`
+  ).join("");
+}
+$("log-toggle").addEventListener("click", () => {
+  $("log-panel").classList.toggle("open");
+  $("log-toggle").classList.remove("has-badge");
+});
+$("log-close").addEventListener("click", () => $("log-panel").classList.remove("open"));
+
+// ----- helpers -----
+function setText(id, v) { const el = $(id); if (el) el.textContent = v; }
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[c]); }
+function fmtTime(iso) { return iso ? new Date(iso).toLocaleString([], {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"}) : "—"; }
+function fmtDuration(sec) {
+  if (sec == null) return "—";
+  if (sec < 60) return `${sec.toFixed(1)} s`;
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return `${m}m ${s}s`;
+}
+async function jget(url) { const r = await fetch(url); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); }
+async function jpost(url, body) {
+  const r = await fetch(url, {method: "POST", headers: {"content-type": "application/json"}, body: JSON.stringify(body)});
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+
+// ----- boot -----
+log("dashboard loaded");
+syncFromServer();
+loadAthletes();
+connectWS();
+setInterval(syncFromServer, 8000);  // reconcile session/connection state
+})();
+</script>
+</body>
+</html>

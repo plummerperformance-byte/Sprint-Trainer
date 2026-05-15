@@ -1,0 +1,19 @@
+{
+  "name": "PPA Sprint Trainer",
+  "short_name": "PPA",
+  "description": "Plummer Performance Academy sprint trainer",
+  "start_url": "/coach",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0a0c",
+  "theme_color": "#d4823a",
+  "icons": [
+    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Coach view", "url": "/coach", "icons": [{ "src": "/static/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Athlete view", "url": "/athlete", "icons": [{ "src": "/static/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
