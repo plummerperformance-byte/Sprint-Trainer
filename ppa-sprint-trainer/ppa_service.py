@@ -1230,6 +1230,11 @@ PHASE_C_HTML = """<!doctype html>
   .drill-tile .dt-label{font-size:13px;font-weight:700;letter-spacing:0.02em}
   .drill-tile .dt-desc{font-size:11px;font-weight:400;color:var(--muted);
                        line-height:1.3;text-transform:none;letter-spacing:0}
+  /* Gym direction toggle */
+  .dir-toggle{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .dir-btn{flex:1;padding:10px;font-size:13px;font-weight:600;background:#0a0a0c;
+           color:var(--muted);border:0;cursor:pointer;min-height:44px}
+  .dir-btn.active{background:var(--accent);color:#0a0a0c}
   .card{background:var(--card);border:1px solid var(--line);
         border-radius:14px;padding:18px;margin-bottom:14px}
   .meta{color:var(--muted);font-size:11px;letter-spacing:0.12em;text-transform:uppercase}
@@ -1818,19 +1823,22 @@ PHASE_C_HTML = """<!doctype html>
     <input type="number" id="cfg-vcap" value="0" step="0.5" min="0" max="15">
   </div>
   <div class="field" data-modes="gym">
-    <label>Chain rate (kg/m) — gym, 0 = off</label>
+    <label>Direction</label>
+    <div class="dir-toggle" id="dir-toggle">
+      <button type="button" class="dir-btn active" data-dir="extend">Cable OUT</button>
+      <button type="button" class="dir-btn" data-dir="retract">Cable IN</button>
+    </div>
+    <input type="hidden" id="cfg-condir" value="extend">
+    <div class="meta" style="font-size:10px;margin-top:4px">Which way the cable moves on the concentric (lifting) phase.</div>
+  </div>
+  <div class="field" data-modes="gym">
+    <label>Eccentric weight (kg)</label>
+    <input type="number" id="cfg-ecc-kg" value="5" step="0.5" min="0.5" max="20">
+    <div class="meta" id="ecc-overload-note" style="font-size:10px;margin-top:4px"></div>
+  </div>
+  <div class="field" data-modes="gym">
+    <label>Chains (kg/m) — 0 = off</label>
     <input type="number" id="cfg-chain" value="0" step="0.5" min="0" max="10">
-  </div>
-  <div class="field" data-modes="gym">
-    <label>Eccentric overload (%) — gym, 0 = off</label>
-    <input type="number" id="cfg-ecc" value="0" step="5" min="0" max="100">
-  </div>
-  <div class="field" data-modes="gym">
-    <label>Concentric direction — gym</label>
-    <select id="cfg-condir">
-      <option value="extend" selected>Cable extending</option>
-      <option value="retract">Cable retracting</option>
-    </select>
   </div>
 
   <div style="height:1px;background:var(--line);margin:6px 0"></div>
@@ -1865,6 +1873,15 @@ let lastCorridor=0;     // current Recovery distance from athletic config (for c
 let drillStartedAt=null; // ms timestamp when athletic_mode flipped True (for session timer)
 let currentMode='resisted'; // active training-mode pill (resisted|assisted|cod|gym)
 
+// Gym shows concentric + eccentric as plain kg inputs; the backend wants an
+// overload percentage, so convert here: pct = (ecc-conc)/conc, clamped 0-100.
+function eccOverloadPct(){
+  const concKg = parseFloat(document.getElementById('cfg-resist').value)||0;
+  const eccEl = document.getElementById('cfg-ecc-kg');
+  const eccKg = eccEl ? (parseFloat(eccEl.value)||0) : 0;
+  if(concKg <= 0) return 0;
+  return Math.max(0, Math.min(100, ((eccKg-concKg)/concKg)*100));
+}
 function buildAthleticCfg(){
   // Live-screen fields only. Recovery / slew / rest / countdown are managed
   // on /setup and pushed straight to the backend config, so they're omitted
@@ -1875,7 +1892,7 @@ function buildAthleticCfg(){
     resist_distance_m:parseFloat(document.getElementById('cfg-resist-dist').value),
     velocity_cap_mps:parseFloat(document.getElementById('cfg-vcap').value)||0,
     chain_kg_per_m:parseFloat(document.getElementById('cfg-chain').value)||0,
-    eccentric_overload_pct:parseFloat(document.getElementById('cfg-ecc').value)||0,
+    eccentric_overload_pct:eccOverloadPct(),
     concentric_dir:document.getElementById('cfg-condir').value,
     drill:document.getElementById('cfg-drill').value,
   };
@@ -2965,9 +2982,12 @@ function applyMode(mode, opts){
   });
   const rl = document.getElementById('cfg-resist-l');
   const dl = document.getElementById('cfg-resist-dist-l');
-  if(rl) rl.textContent = (mode === 'assisted') ? 'Assistance (kg)' : 'Working resistance (kg)';
+  if(rl) rl.textContent = (mode === 'assisted') ? 'Assistance (kg)'
+                        : (mode === 'gym') ? 'Concentric weight (kg)'
+                        : 'Working resistance (kg)';
   if(dl) dl.textContent = (mode === 'assisted') ? 'Tow distance (m)' : 'Resist distance (m)';
   renderDrillGrid(mode);
+  if(typeof updateEccNote === 'function') updateEccNote();
   if(opts.push !== false){
     fetch('/api/c/athletic/config',{method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -2978,6 +2998,38 @@ document.querySelectorAll('.mode-pill').forEach(p=>{
   p.addEventListener('click', ()=> applyMode(p.getAttribute('data-mode')));
 });
 applyMode('resisted', {push:false});
+
+// Gym direction toggle — writes the hidden #cfg-condir input
+(function(){
+  const tog=document.getElementById('dir-toggle');
+  if(!tog) return;
+  const hidden=document.getElementById('cfg-condir');
+  tog.querySelectorAll('.dir-btn').forEach(b=>{
+    b.addEventListener('click',()=>{
+      if(hidden) hidden.value=b.getAttribute('data-dir');
+      tog.querySelectorAll('.dir-btn').forEach(x=>x.classList.toggle('active',x===b));
+    });
+  });
+})();
+// Eccentric-weight note — shows the implied overload % under the input
+function updateEccNote(){
+  const note=document.getElementById('ecc-overload-note');
+  if(!note) return;
+  const concKg=parseFloat(document.getElementById('cfg-resist').value)||0;
+  const eccEl=document.getElementById('cfg-ecc-kg');
+  const eccKg=eccEl?(parseFloat(eccEl.value)||0):0;
+  if(concKg<=0||eccKg<=0){ note.textContent=''; return; }
+  const pct=((eccKg-concKg)/concKg)*100;
+  note.textContent = pct>0.5 ? ('+'+pct.toFixed(0)+'% eccentric overload')
+                   : pct<-0.5 ? (Math.abs(pct).toFixed(0)+'% eccentric under-load')
+                   : 'Matched concentric / eccentric';
+}
+(function(){
+  const e=document.getElementById('cfg-ecc-kg'), r=document.getElementById('cfg-resist');
+  if(e) e.addEventListener('input',updateEccNote);
+  if(r) r.addEventListener('input',updateEccNote);
+  updateEccNote();
+})();
 
 // ============== BT HID INPUT LAYER (§2.6) ==============
 // Abstraction so a coach could pair a presenter remote / footswitch and have
