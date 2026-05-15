@@ -3807,6 +3807,547 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.s
 """
 
 
+# ============================================================================
+# SETUP_HTML — deep configuration screen (served at /setup). Holds the things
+# a coach changes before/between sessions, not during: athlete admin, template
+# manager, resistance-curve editor, session-default numbers, units, audio.
+# The live /coach screen stays slim and links here via its header cog.
+# ============================================================================
+SETUP_HTML = """<!doctype html>
+<html><head>
+<meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PPA · Setup</title>
+<link rel="icon" type="image/png" href="/static/icon-192.png">
+<style>
+  :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
+          --accent-soft:rgba(212,130,58,0.14);
+          --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
+          --card:#16161a; --line:#2c2c34; }
+  *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  body{margin:0;background:var(--bg);color:var(--fg);font-size:16px}
+  .wrap{max-width:1200px;margin:0 auto;padding:18px;padding-bottom:48px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;
+          margin-bottom:18px;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
+  h1 .accent{color:var(--accent)}
+  h1 .sub{color:var(--muted);font-weight:600;font-size:14px;letter-spacing:0.12em;
+          text-transform:uppercase;margin-left:8px}
+  a.livelink{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+             background:var(--accent);color:#0a0a0c;font-weight:700;font-size:14px;
+             padding:10px 16px;border-radius:9px;min-height:44px}
+  button{appearance:none;padding:11px 16px;font-size:14px;background:var(--accent);
+         color:#0a0a0c;border:0;border-radius:9px;font-weight:600;cursor:pointer;min-height:44px}
+  button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+  button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
+  input[type=number],input[type=text],select{padding:9px;font-size:14px;background:#0a0a0c;
+         color:var(--fg);border:1px solid var(--line);border-radius:6px}
+  label{display:block;color:var(--muted);font-size:11px;letter-spacing:0.12em;
+        text-transform:uppercase;margin:0 0 4px}
+  .setup-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  @media (max-width:860px){ .setup-grid{grid-template-columns:1fr} }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        padding:18px;margin-bottom:14px}
+  .card h2{margin:0 0 14px;font-size:16px;font-weight:600}
+  .meta{color:var(--muted);font-size:11px;letter-spacing:0.06em}
+  .field{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+  .field input,.field select{width:100%}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .divider{height:1px;background:var(--line);margin:14px 0}
+  .ath-section-h{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;
+                 color:var(--accent);margin:14px 0 8px;font-weight:600}
+  .num-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .checkrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .checkrow label{display:flex;align-items:center;gap:6px;font-size:13px;
+                  text-transform:none;letter-spacing:0;color:var(--fg);margin:0}
+  .curve-axis-btn{flex:1;padding:8px;border:none;border-radius:5px;font-size:11px;
+                  cursor:pointer;min-height:36px}
+  .hist-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .hist-list{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto}
+  .hist-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+            padding:10px 12px;background:#0a0a0c;border:1px solid var(--line);
+            border-radius:6px;font-size:13px;cursor:pointer}
+  .hist-row:hover{border-color:var(--accent)}
+  .hist-date{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+  .hist-summary{color:var(--fg);font-variant-numeric:tabular-nums}
+  .hist-summary .sep{color:#3a3a44;margin:0 6px}
+  .hist-reps{color:var(--accent);font-weight:600;font-size:11px}
+  .hist-empty{color:var(--muted);text-align:center;padding:18px;font-size:13px}
+  .estop-btn{position:fixed;top:14px;right:14px;width:56px;height:56px;border-radius:50%;
+             background:var(--bad);color:#fff;border:3px solid #ff8a8a;font-size:13px;
+             font-weight:800;cursor:pointer;z-index:100}
+</style>
+</head><body>
+
+<button id="estop-btn" class="estop-btn" title="Emergency stop" aria-label="Emergency stop">STOP</button>
+
+<div class="wrap">
+  <div class="topbar">
+    <h1>PPA <span class="accent">·</span> Sprint Trainer<span class="sub">Setup</span></h1>
+    <a class="livelink" href="/coach">&larr; Live session</a>
+  </div>
+
+  <div class="setup-grid">
+    <div>
+      <div class="card">
+        <h2>Athletes</h2>
+        <div class="field">
+          <label>Add athlete</label>
+          <div class="row">
+            <input type="text" id="new-athlete-name" placeholder="Name" style="flex:1">
+            <button id="new-athlete-btn" class="secondary">+ add</button>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <label>View / edit athlete</label>
+          <select id="setup-athlete-select"><option value="">— Pick an athlete —</option></select>
+        </div>
+        <div id="ath-editor" style="display:none">
+          <div class="ath-section-h">Edit details</div>
+          <div class="hist-editor-grid">
+            <div class="field"><label>Name</label><input type="text" id="edit-name"></div>
+            <div class="field"><label>Body mass (kg)</label><input type="number" id="edit-mass" step="0.1" min="20" max="200"></div>
+            <div class="field"><label>Position</label>
+              <select id="edit-position">
+                <option value="">—</option><option value="back">Back</option>
+                <option value="forward">Forward</option><option value="outside_back">Outside back</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="field"><label>Sport</label>
+              <select id="edit-sport">
+                <option value="">—</option><option value="rugby_union">Rugby Union</option>
+                <option value="rugby_league">Rugby League</option><option value="rugby_sevens">Rugby Sevens</option>
+                <option value="afl">AFL</option><option value="soccer">Soccer</option>
+                <option value="basketball">Basketball</option><option value="track">Track</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="field"><label>Level</label>
+              <select id="edit-level">
+                <option value="">—</option><option value="developmental">Developmental</option>
+                <option value="club">Club</option><option value="semi_pro">Semi-pro</option>
+                <option value="pro">Pro</option><option value="international">International</option>
+              </select>
+            </div>
+          </div>
+          <button class="secondary" id="edit-save">Save athlete</button>
+
+          <div class="ath-section-h">Progression</div>
+          <div class="row" style="gap:8px">
+            <select id="hist-metric" style="flex:1">
+              <option value="peak_speed_mps">Peak speed (m/s)</option>
+              <option value="peak_power_w">Peak power (W)</option>
+              <option value="pmax_rel_wkg">Pmax / kg (W/kg)</option>
+              <option value="f0_rel_nkg">F0 / kg (N/kg)</option>
+              <option value="v0_mps">V0 (m/s)</option>
+              <option value="time_to_max_v_s">Time to peak v (s)</option>
+              <option value="step_freq_hz">Stride freq (Hz)</option>
+            </select>
+            <select id="hist-agg" style="flex:1">
+              <option value="MAX" selected>Best of session</option>
+              <option value="AVG">Session avg</option>
+              <option value="MIN">Worst of session</option>
+            </select>
+          </div>
+          <svg id="hist-chart" viewBox="0 0 380 140" preserveAspectRatio="none" height="140"
+               style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:8px"></svg>
+          <div class="meta" id="hist-trend" style="margin-top:6px"></div>
+
+          <div class="ath-section-h">Sessions</div>
+          <div class="hist-list" id="hist-sessions"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Templates</h2>
+        <div class="field">
+          <label>Saved templates</label>
+          <div class="row" style="gap:6px">
+            <select id="tpl-select" style="flex:1"><option value="">— Pick a template —</option></select>
+            <button class="ghost" id="tpl-load">Load</button>
+            <button class="ghost" id="tpl-delete" title="Delete selected" style="color:var(--bad)">×</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Save current rig config as template</label>
+          <div class="row" style="gap:6px">
+            <input type="text" id="tpl-new-name" placeholder="Template name" style="flex:1">
+            <button class="secondary" id="tpl-save">Save</button>
+          </div>
+        </div>
+        <div class="meta">Templates store the rig's current mode, drill, resistance and curve.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>Resistance curve</h2>
+        <div class="row" style="gap:6px;margin-bottom:6px">
+          <button type="button" class="curve-axis-btn" data-axis="off">Off</button>
+          <button type="button" class="curve-axis-btn" data-axis="distance">By distance</button>
+          <button type="button" class="curve-axis-btn" data-axis="velocity">By velocity</button>
+        </div>
+        <svg id="curve-svg" width="100%" viewBox="0 0 300 160"
+             style="display:block;border:1px solid var(--line);border-radius:6px;touch-action:none"></svg>
+        <div class="meta" id="curve-meta" style="margin-top:4px">Off — flat working resistance is used.</div>
+      </div>
+
+      <div class="card">
+        <h2>Session defaults</h2>
+        <div class="num-grid">
+          <div class="field"><label>Gear / pulley</label>
+            <select id="cfg-gear">
+              <option value="1" selected>Gear 1 — no pulley</option>
+              <option value="2">Gear 2 — pulley (2×)</option>
+            </select>
+          </div>
+          <div class="field"><label>Recovery resistance (kg)</label>
+            <input type="number" id="cfg-return" value="1" step="0.1" min="0" max="5"></div>
+          <div class="field"><label>Recovery distance (m)</label>
+            <input type="number" id="cfg-dist" value="0.5" step="0.1" min="0.1" max="5"></div>
+          <div class="field"><label>Ease-in speed (kg/s)</label>
+            <input type="number" id="cfg-slew" value="12" step="1" min="1" max="60"></div>
+          <div class="field"><label>Rest interval (s)</label>
+            <input type="number" id="cfg-rest" value="180" step="15" min="0" max="600"></div>
+          <div class="field"><label>Pre-drill countdown (s)</label>
+            <input type="number" id="cfg-countdown" value="5" step="1" min="0" max="10"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Display &amp; audio</h2>
+        <div class="field">
+          <label>Display units</label>
+          <select id="cfg-units">
+            <option value="metric" selected>Metric (m, kg, m/s)</option>
+            <option value="imperial">Imperial (ft, lb, mph)</option>
+          </select>
+          <div class="meta" style="margin-top:4px">Per-display only — exports stay metric</div>
+        </div>
+        <div class="field">
+          <label>Audio</label>
+          <div class="checkrow">
+            <label><input type="checkbox" id="audio-master" checked> Sound enabled</label>
+            <label><input type="checkbox" id="audio-rep" checked> Rep tones</label>
+            <label><input type="checkbox" id="audio-rest" checked> Rest cues</label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ---- E-stop (every screen) ----
+document.getElementById('estop-btn').onclick=async()=>{
+  try{ await fetch('/api/c/estop',{method:'POST'}); }catch(e){}
+};
+
+function postConfig(body){
+  return fetch('/api/c/athletic/config',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(()=>{});
+}
+
+// ---- Athletes ----
+async function loadAthletes(){
+  try{
+    const r=await fetch('/api/athletes');
+    if(!r.ok) return;
+    const list=await r.json();
+    const sel=document.getElementById('setup-athlete-select');
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Pick an athlete —</option>'+
+      list.map(a=>'<option value="'+a.id+'"'+(String(a.id)===cur?' selected':'')+'>'+a.name+'</option>').join('');
+  }catch(e){}
+}
+document.getElementById('new-athlete-btn').onclick=async()=>{
+  const name=document.getElementById('new-athlete-name').value.trim();
+  if(!name){ alert('Type a name first'); return; }
+  const r=await fetch('/api/athletes',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+  if(r.ok){
+    document.getElementById('new-athlete-name').value='';
+    const j=await r.json();
+    await loadAthletes();
+    document.getElementById('setup-athlete-select').value=String(j.id);
+    loadAthleteHistory();
+  }else{ alert("Couldn't add athlete ("+r.status+")"); }
+};
+document.getElementById('setup-athlete-select').onchange=loadAthleteHistory;
+
+let _currentAthlete=null;
+async function loadAthleteHistory(){
+  const aid=document.getElementById('setup-athlete-select').value;
+  const editor=document.getElementById('ath-editor');
+  if(!aid){ editor.style.display='none'; return; }
+  let h;
+  try{ h=await(await fetch('/api/athletes/'+aid+'/history')).json(); }
+  catch(e){ return; }
+  if(!h.athlete) return;
+  _currentAthlete=h.athlete;
+  editor.style.display='block';
+  document.getElementById('edit-name').value=h.athlete.name||'';
+  document.getElementById('edit-mass').value=h.athlete.body_mass_kg??'';
+  document.getElementById('edit-position').value=h.athlete.position_group||'';
+  document.getElementById('edit-sport').value=h.athlete.sport||'';
+  document.getElementById('edit-level').value=h.athlete.level||'';
+  const list=document.getElementById('hist-sessions');
+  if(!h.sessions.length){
+    list.innerHTML='<div class="hist-empty">No sessions yet</div>';
+  }else{
+    list.innerHTML=h.sessions.map(s=>{
+      const date=(s.started_at||'').split('T')[0];
+      const drill=s.drill||'?';
+      const peakV=s.best_speed_mps!=null?s.best_speed_mps.toFixed(2)+' m/s':'–';
+      const peakP=s.best_power_w!=null?s.best_power_w.toFixed(0)+' W':'–';
+      return '<div class="hist-row"><div class="hist-date">'+date+'</div>'+
+        '<div class="hist-summary">'+peakV+'<span class="sep">·</span>'+peakP+
+        '<span class="sep">·</span>'+drill+'</div>'+
+        '<div class="hist-reps">'+s.rep_count+' rep'+(s.rep_count===1?'':'s')+'</div></div>';
+    }).join('');
+  }
+  loadProgressionChart(aid);
+}
+async function saveAthleteEdit(){
+  if(!_currentAthlete) return;
+  const body={
+    name:document.getElementById('edit-name').value.trim(),
+    body_mass_kg:parseFloat(document.getElementById('edit-mass').value)||null,
+    position_group:document.getElementById('edit-position').value||null,
+    sport:document.getElementById('edit-sport').value||null,
+    level:document.getElementById('edit-level').value||null,
+  };
+  Object.keys(body).forEach(k=>{ if(body[k]==null||body[k]==='') delete body[k]; });
+  try{
+    const r=await fetch('/api/athletes/'+_currentAthlete.id,{method:'PUT',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ alert("Couldn't save"); return; }
+    await loadAthletes();
+    await loadAthleteHistory();
+  }catch(e){ alert('Save failed'); }
+}
+document.getElementById('edit-save').onclick=saveAthleteEdit;
+
+async function loadProgressionChart(aid){
+  const metric=document.getElementById('hist-metric').value;
+  const agg=document.getElementById('hist-agg').value;
+  let p;
+  try{ p=await(await fetch('/api/athletes/'+aid+'/progression?metric='+metric+'&agg='+agg)).json(); }
+  catch(e){ return; }
+  const points=p.points||[];
+  const svg=document.getElementById('hist-chart');
+  const trend=document.getElementById('hist-trend');
+  if(points.length<2){
+    svg.innerHTML='<text x="190" y="70" fill="#5a5a64" text-anchor="middle" font-size="12">Need &#8805;2 sessions for a trend line</text>';
+    trend.textContent=points.length===1?('Latest: '+(points[0].value!=null?points[0].value.toFixed(2):'–')):'';
+    return;
+  }
+  const W=380,H=140,PADL=36,PADR=12,PADT=14,PADB=22;
+  const vals=points.map(pt=>pt.value);
+  const vMin=Math.min(...vals),vMax=Math.max(...vals);
+  const range=Math.max(vMax-vMin,vMax*0.05,0.01);
+  const yMin=vMin-range*0.15,yMax=vMax+range*0.15;
+  const xs=i=>PADL+(i/(points.length-1))*(W-PADL-PADR);
+  const ys=v=>H-PADB-((v-yMin)/(yMax-yMin))*(H-PADT-PADB);
+  let grid='';
+  for(let i=0;i<=3;i++){
+    const y=PADT+i*(H-PADT-PADB)/3;
+    const v=yMax-(yMax-yMin)*(i/3);
+    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26"/>';
+    grid+='<text x="'+(PADL-4)+'" y="'+(y+3)+'" fill="#5a5a64" font-size="9" text-anchor="end">'+v.toFixed(2)+'</text>';
+  }
+  const path=points.map((pt,i)=>(i?'L':'M')+xs(i).toFixed(1)+','+ys(pt.value).toFixed(1)).join(' ');
+  const dots=points.map((pt,i)=>'<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(pt.value).toFixed(1)+'" r="3" fill="#d4823a"/>').join('');
+  svg.innerHTML=grid+'<path d="'+path+'" stroke="#d4823a" stroke-width="2" fill="none"/>'+dots;
+  const first=points[0].value,last=points[points.length-1].value;
+  const delta=last-first;
+  const pct=first!==0?(delta/Math.abs(first)*100):0;
+  const dir=delta>0?'↑':(delta<0?'↓':'→');
+  trend.textContent=first.toFixed(2)+' → '+last.toFixed(2)+' ('+dir+' '+Math.abs(delta).toFixed(2)+
+    ', '+pct.toFixed(1)+'%) over '+points.length+' sessions';
+}
+document.getElementById('hist-metric').onchange=()=>{
+  const aid=document.getElementById('setup-athlete-select').value;
+  if(aid) loadProgressionChart(aid);
+};
+document.getElementById('hist-agg').onchange=()=>{
+  const aid=document.getElementById('setup-athlete-select').value;
+  if(aid) loadProgressionChart(aid);
+};
+
+// ---- Templates ----
+async function loadTemplateList(){
+  const sel=document.getElementById('tpl-select');
+  try{
+    const list=await(await fetch('/api/templates')).json();
+    const cur=sel.value;
+    sel.innerHTML='<option value="">— Pick a template —</option>'+
+      list.map(t=>'<option value="'+t.id+'">'+t.name+'</option>').join('');
+    if(cur) sel.value=cur;
+    window._templates=list;
+  }catch(e){}
+}
+document.getElementById('tpl-save').onclick=async()=>{
+  const name=(document.getElementById('tpl-new-name').value||'').trim();
+  if(!name){ alert('Type a template name first'); return; }
+  let cfg={};
+  try{ cfg=(await(await fetch('/api/c/state')).json()).config||{}; }catch(e){}
+  try{
+    const r=await fetch('/api/templates',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({name,config:cfg})});
+    if(!r.ok){ alert("Couldn't save template ("+r.status+')'); return; }
+    document.getElementById('tpl-new-name').value='';
+    await loadTemplateList();
+  }catch(e){ alert('Network error'); }
+};
+document.getElementById('tpl-load').onclick=async()=>{
+  const id=parseInt(document.getElementById('tpl-select').value,10);
+  if(!id) return;
+  try{
+    const r=await fetch('/api/templates/'+id+'/load',{method:'POST'});
+    if(!r.ok){ alert('Load failed'); return; }
+    alert('Template loaded into the rig config.');
+  }catch(e){ alert('Load failed'); }
+};
+document.getElementById('tpl-delete').onclick=async()=>{
+  const id=parseInt(document.getElementById('tpl-select').value,10);
+  if(!id) return;
+  const name=(window._templates||[]).find(t=>t.id===id)?.name||'this template';
+  if(!confirm('Delete template "'+name+'"?')) return;
+  try{ await fetch('/api/templates/'+id,{method:'DELETE'}); await loadTemplateList(); }
+  catch(e){ alert('Delete failed'); }
+};
+
+// ---- Session-default numbers → push to athletic config on change ----
+[['cfg-return','return_kg'],['cfg-dist','return_distance_m'],['cfg-slew','slew_kg_per_s'],
+ ['cfg-rest','rest_interval_s'],['cfg-countdown','countdown_s']].forEach(([id,key])=>{
+  const el=document.getElementById(id);
+  el.addEventListener('change',()=>{
+    const v=parseFloat(el.value);
+    if(!isNaN(v)) postConfig({[key]:v});
+  });
+});
+document.getElementById('cfg-gear').addEventListener('change',e=>
+  postConfig({gear:parseInt(e.target.value,10)}));
+
+// ---- Units + audio (localStorage, shared with /coach) ----
+(()=>{
+  const u=document.getElementById('cfg-units');
+  u.value=localStorage.getItem('ppa.units')||'metric';
+  u.onchange=()=>localStorage.setItem('ppa.units',u.value);
+  const wire=(id,key)=>{
+    const el=document.getElementById(id);
+    el.checked=localStorage.getItem(key)!=='0';
+    el.onchange=()=>localStorage.setItem(key,el.checked?'1':'0');
+  };
+  wire('audio-master','ppa.audio.master');
+  wire('audio-rep','ppa.audio.rep');
+  wire('audio-rest','ppa.audio.rest');
+})();
+
+// ---- Resistance curve editor (draggable 6-point graph) ----
+(function(){
+  var svg=document.getElementById('curve-svg');
+  if(!svg) return;
+  var meta=document.getElementById('curve-meta');
+  var N=6,VW=300,VH=160,PL=34,PR=12,PT=12,PB=24;
+  var PW=VW-PL-PR,PH=VH-PT-PB,KGMAX=10;
+  var axis='off';
+  var kg=[5,5,5,5,5,5];
+  function ptx(i){ return PL+(i/(N-1))*PW; }
+  function pty(v){ return PT+(1-v/KGMAX)*PH; }
+  function y2kg(y){ var v=(1-(y-PT)/PH)*KGMAX; return Math.max(0,Math.min(KGMAX,v)); }
+  function render(){
+    var s='';
+    s+='<rect x="'+PL+'" y="'+PT+'" width="'+PW+'" height="'+PH+'" fill="none" stroke="#2c2c34"/>';
+    for(var k=0;k<=KGMAX;k+=5){
+      var gy=pty(k);
+      s+='<line x1="'+PL+'" y1="'+gy+'" x2="'+(PL+PW)+'" y2="'+gy+'" stroke="#22222a"/>';
+      s+='<text x="'+(PL-5)+'" y="'+(gy+3)+'" fill="#8a8a96" font-size="9" text-anchor="end">'+k+'</text>';
+    }
+    var xl=(axis==='velocity')?'cable speed (m/s)':(axis==='distance')?'distance (m)':'';
+    s+='<text x="'+(PL+PW/2)+'" y="'+(VH-7)+'" fill="#8a8a96" font-size="9" text-anchor="middle">'+xl+'</text>';
+    var poly='';
+    for(var i=0;i<N;i++){ poly+=ptx(i)+','+pty(kg[i])+' '; }
+    s+='<polyline points="'+poly+'" fill="none" stroke="#d4823a" stroke-width="2"/>';
+    for(var j=0;j<N;j++){
+      s+='<circle cx="'+ptx(j)+'" cy="'+pty(kg[j])+'" r="7" fill="#d4823a" stroke="#0a0a0c" stroke-width="1.5"/>';
+      s+='<text x="'+ptx(j)+'" y="'+(pty(kg[j])-10)+'" fill="#f0f0f3" font-size="9" text-anchor="middle">'+kg[j].toFixed(1)+'</text>';
+    }
+    svg.innerHTML=s;
+    svg.style.opacity=(axis==='off')?0.4:1;
+  }
+  function postCurve(){
+    fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({curve_axis:axis,curve_kg:kg})}).catch(function(){});
+  }
+  function svgPt(e){
+    var r=svg.getBoundingClientRect();
+    return {x:(e.clientX-r.left)/r.width*VW,y:(e.clientY-r.top)/r.height*VH};
+  }
+  var drag=-1;
+  svg.addEventListener('pointerdown',function(e){
+    if(axis==='off') return;
+    var p=svgPt(e),best=-1,bd=1e9;
+    for(var i=0;i<N;i++){ var d=Math.abs(ptx(i)-p.x); if(d<bd){bd=d;best=i;} }
+    if(best>=0&&bd<26){ drag=best; try{svg.setPointerCapture(e.pointerId);}catch(_){} }
+  });
+  svg.addEventListener('pointermove',function(e){
+    if(drag<0) return;
+    kg[drag]=Math.round(y2kg(svgPt(e).y)*2)/2;
+    render();
+  });
+  function endDrag(){ if(drag>=0){ drag=-1; postCurve(); } }
+  svg.addEventListener('pointerup',endDrag);
+  svg.addEventListener('pointercancel',endDrag);
+  function setBtns(){
+    var bs=document.querySelectorAll('.curve-axis-btn');
+    for(var i=0;i<bs.length;i++){
+      var on=bs[i].getAttribute('data-axis')===axis;
+      bs[i].style.background=on?'#d4823a':'#16161a';
+      bs[i].style.color=on?'#fff':'#8a8a96';
+    }
+    if(meta){
+      meta.textContent=(axis==='distance')?'Resistance shaped over distance (0 to resist distance). Drag the points.'
+        :(axis==='velocity')?'Resistance shaped over cable speed (0 to 8 m/s). Drag the points.'
+        :'Off — flat working resistance is used.';
+    }
+  }
+  var abs=document.querySelectorAll('.curve-axis-btn');
+  for(var bi=0;bi<abs.length;bi++){
+    abs[bi].onclick=function(){ axis=this.getAttribute('data-axis'); setBtns(); render(); postCurve(); };
+  }
+  fetch('/api/c/state').then(function(r){return r.json();}).then(function(j){
+    var cfg=j.config||{};
+    if(cfg.curve_axis) axis=cfg.curve_axis;
+    if(cfg.curve_kg&&cfg.curve_kg.length===N) kg=cfg.curve_kg.slice();
+    setBtns(); render();
+  }).catch(function(){ setBtns(); render(); });
+})();
+
+// ---- Seed session-default numbers from current rig config ----
+(async()=>{
+  try{
+    const cfg=(await(await fetch('/api/c/state')).json()).config||{};
+    const set=(id,v)=>{ const el=document.getElementById(id); if(el&&v!=null) el.value=v; };
+    set('cfg-return',cfg.return_kg);
+    set('cfg-dist',cfg.return_distance_m);
+    set('cfg-slew',cfg.slew_kg_per_s);
+    set('cfg-rest',cfg.rest_interval_s);
+    set('cfg-countdown',cfg.countdown_s);
+    if(cfg.gear!=null) document.getElementById('cfg-gear').value=String(cfg.gear);
+  }catch(e){}
+})();
+
+loadAthletes();
+loadTemplateList();
+</script>
+</body></html>
+"""
+
+
 def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
     if port == "auto":
         port = detect_drive_port()
@@ -4676,6 +5217,11 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
     async def coach_page():
         from fastapi.responses import HTMLResponse
         return HTMLResponse(PHASE_C_HTML)
+
+    @app.get("/setup", response_class=None)
+    async def setup_page():
+        from fastapi.responses import HTMLResponse
+        return HTMLResponse(SETUP_HTML)
 
     @app.get("/athlete", response_class=None)
     async def athlete_page():
