@@ -1468,11 +1468,6 @@ PHASE_C_HTML = """<!doctype html>
   .sheet-close{position:absolute;top:14px;right:14px;background:transparent;color:var(--muted);
                border:0;font-size:22px;cursor:pointer}
 
-  /* Manual slider area inside sheet */
-  input[type=range]{width:100%;margin:8px 0;-webkit-appearance:none;background:transparent}
-  input[type=range]::-webkit-slider-runnable-track{background:#25252c;height:8px;border-radius:4px}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;background:var(--accent);width:24px;height:24px;border-radius:50%;margin-top:-8px}
-
   /* Reports (collapsible) */
   details.report{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
   details.report > summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none}
@@ -1948,15 +1943,6 @@ PHASE_C_HTML = """<!doctype html>
   <div style="height:1px;background:var(--line);margin:6px 0"></div>
 
   <div class="field">
-    <label>Set resistance — manual</label>
-    <input type="range" id="kg-slider" min="0" max="10" step="0.5" value="0" disabled>
-    <div class="row" style="justify-content:space-between"><span id="kg-display" style="font-weight:600">0.0 kg</span><span class="muted" id="pct-display">0.0%</span></div>
-    <div class="meta">Start session to enable · Max 10 kg</div>
-  </div>
-
-  <div style="height:1px;background:var(--line);margin:6px 0"></div>
-
-  <div class="field">
     <label>Add athlete</label>
     <div class="row">
       <input type="text" id="new-athlete-name" placeholder="Name" style="flex:1">
@@ -1970,9 +1956,6 @@ PHASE_C_HTML = """<!doctype html>
 </aside>
 
 <script>
-const slider=document.getElementById('kg-slider');
-const kgDisp=document.getElementById('kg-display');
-const pctDisp=document.getElementById('pct-display');
 const stateTag=document.getElementById('state-tag');
 const motorBtn=document.getElementById('motor-btn');
 const phasePill=document.getElementById('phase-pill');
@@ -1990,16 +1973,11 @@ const repsList=document.getElementById('reps-list');
 const liveChart=document.getElementById('live-chart');
 const chartEmpty=document.getElementById('chart-empty');
 
-let lastSent=0,pending=null;
 let prevPhase='off';
 let cachedSamples=[];   // last full curve to keep showing during 'recover'
 let lastCorridor=0;     // current Recovery distance from athletic config (for chart threshold + corridor highlight)
 let drillStartedAt=null; // ms timestamp when athletic_mode flipped True (for session timer)
 let currentMode='resisted'; // active training-mode pill (resisted|assisted|cod|gym)
-
-slider.addEventListener('input',()=>{const k=parseFloat(slider.value);kgDisp.textContent=k.toFixed(1)+' kg';pctDisp.textContent=(k*5.64).toFixed(1)+'%';pending=k;});
-async function flushSP(){if(pending===null||pending===lastSent)return;const k=pending;pending=null;try{const r=await fetch('/api/c/setkg?kg='+k,{method:'POST'});if(r.ok)lastSent=k;}catch(e){}}
-setInterval(flushSP,250);
 
 function buildAthleticCfg(){
   return {
@@ -3358,14 +3336,12 @@ async function refresh(){
   stateTag.innerHTML=stateLabels[c.phase_c]||c.phase_c;
 
   const armed=c.phase_c==='armed';
-  slider.disabled=!armed||c.athletic_mode;
   motorBtn.textContent=armed?'Motor ON':'Motor OFF';
   motorBtn.classList.toggle('on',armed);
   const repActive=c.athletic_phase==='resist'||c.athletic_phase==='return';
   repBtn.disabled=!(armed && c.athletic_mode);
   repBtn.textContent=repActive?'Stop rep':'Start rep';
   repBtn.classList.toggle('on',repActive);
-  if(!armed){slider.value=0;kgDisp.textContent='0.0 kg';pctDisp.textContent='0.0%';lastSent=0;pending=null;}
 
   // Phase pill (fixed top-right of viewport)
   const ph=c.athletic_mode?c.athletic_phase:'off';
