@@ -1253,11 +1253,19 @@ PHASE_C_HTML = """<!doctype html>
   .stat-line{display:flex;justify-content:space-between;align-items:baseline}
   .stat-line .l{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)}
   .stat-line .v{display:inline-flex;align-items:baseline;gap:4px;justify-content:flex-end}
-  .stat-line .v.primary{font-size:48px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+  .stat-line .v.primary{font-size:72px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
   .stat-line .v.secondary{font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
   .stat-line .v .unit{color:var(--muted);font-weight:600}
-  .stat-line .v.primary .unit{font-size:18px}
+  .stat-line .v.primary .unit{font-size:20px}
   .stat-line .v.secondary .unit{font-size:14px}
+  @media (max-width:767px){ .stat-line .v.primary{font-size:56px} }
+  /* Current / Peak / Avg toggle above the headline Speed metric */
+  .speed-toggle{display:inline-flex;align-self:flex-start;gap:2px;padding:3px;
+                background:#0a0a0c;border:1px solid var(--line);border-radius:8px}
+  .sp-tog{padding:5px 12px;font-size:11px;font-weight:600;letter-spacing:0.06em;
+          text-transform:uppercase;background:transparent;color:var(--muted);
+          border:0;border-radius:6px;cursor:pointer;min-height:30px}
+  .sp-tog.active{background:var(--accent);color:#0a0a0c}
   .stats-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
   .session-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
   .session-stats > div{text-align:center}
@@ -1534,6 +1542,11 @@ PHASE_C_HTML = """<!doctype html>
     </div>
 
     <div class="stats-card">
+      <div class="speed-toggle" id="speed-toggle" role="group" aria-label="Speed metric">
+        <button class="sp-tog active" data-idx="0" aria-pressed="true">Current</button>
+        <button class="sp-tog" data-idx="1" aria-pressed="false">Peak</button>
+        <button class="sp-tog" data-idx="2" aria-pressed="false">Avg</button>
+      </div>
       <div class="stat-line tappable" data-tile="speed" title="Tap to cycle metric"><span class="l" id="stat-speed-l">Speed</span><span class="v primary" id="stat-speed"><span class="num">0.00</span><span class="unit">m/s</span></span></div>
       <div class="stat-line tappable" data-tile="force" title="Tap to cycle metric"><span class="l" id="stat-force-l">Force</span><span class="v secondary" id="stat-force"><span class="num">0</span><span class="unit">N</span></span></div>
       <div class="stat-line tappable" data-tile="power" title="Tap to cycle metric"><span class="l" id="stat-power-l">Power</span><span class="v secondary" id="stat-power"><span class="num">0</span><span class="unit">W</span></span></div>
@@ -2304,6 +2317,7 @@ document.querySelectorAll('.stat-line.tappable').forEach(el => {
     const m = currentTileMetric(tile);
     const lbl = document.getElementById('stat-'+tile+'-l');
     if(lbl) lbl.textContent = m.label;
+    if(tile === 'speed') syncSpeedToggle();
   });
 });
 // Initialise labels from stored prefs
@@ -2311,6 +2325,28 @@ document.querySelectorAll('.stat-line.tappable').forEach(el => {
   const lbl = document.getElementById('stat-'+t+'-l');
   if(lbl) lbl.textContent = currentTileMetric(t).label;
 });
+
+// Speed metric Current/Peak/Avg toggle — drives the same per-tile index as
+// the tap-cycle so both controls stay in sync. Auto-switches to Peak when a
+// rep ends and back to Current when the next rep starts (see refresh loop).
+function syncSpeedToggle(){
+  const idx = tileIdx('speed') % TILE_METRICS.speed.length;
+  document.querySelectorAll('#speed-toggle .sp-tog').forEach(b=>{
+    const on = parseInt(b.getAttribute('data-idx'),10) === idx;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+function setSpeedMetric(idx){
+  setTileIdx('speed', idx);
+  syncSpeedToggle();
+  const lbl = document.getElementById('stat-speed-l');
+  if(lbl) lbl.textContent = currentTileMetric('speed').label;
+}
+document.querySelectorAll('#speed-toggle .sp-tog').forEach(b=>{
+  b.addEventListener('click', ()=> setSpeedMetric(parseInt(b.getAttribute('data-idx'),10)));
+});
+syncSpeedToggle();
 
 // Pre-drill confirmation card state
 let preRepSkip = false;          // session-scoped opt-out (§7: always shows on first rep)
@@ -3597,9 +3633,12 @@ async function refresh(){
   if(prevPhase !== ph){
     if(ph === 'resist' && (prevPhase === 'ready' || prevPhase === 'return')){
       SOUNDS.rep_start();
+      setSpeedMetric(0);   // headline Speed shows live value during a rep
     }
     if(prevPhase === 'resist' && ph === 'return'){
       SOUNDS.rep_end();
+      setSpeedMetric(1);   // rep done — headline Speed jumps to the peak
+
       // Kick off the rest timer if a rest interval is configured
       const restS = (c.config && c.config.rest_interval_s) || 0;
       if(restS > 0) startRestTimer(restS);
