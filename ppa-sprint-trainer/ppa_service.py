@@ -1041,6 +1041,9 @@ ATHLETE_HTML = """<!doctype html>
 <meta name="apple-mobile-web-app-title" content="PPA">
 <link rel="apple-touch-icon" sizes="192x192" href="/static/icon-192.png">
 <link rel="icon" type="image/png" href="/static/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
           --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
@@ -1179,12 +1182,15 @@ PHASE_C_HTML = """<!doctype html>
 <meta name="apple-mobile-web-app-title" content="PPA Coach">
 <link rel="apple-touch-icon" sizes="192x192" href="/static/icon-192.png">
 <link rel="icon" type="image/png" href="/static/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
           --accent-soft:rgba(212,130,58,0.14);
           --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
           --card:#16161a; --line:#2c2c34; }
-  *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;
        min-height:100vh;display:flex;flex-direction:column}
   .wrap{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:18px}
@@ -1195,10 +1201,36 @@ PHASE_C_HTML = """<!doctype html>
     body:not(.sheet-open) .topbar,
     body:not(.sheet-open) .mode-bar{padding-right:90px}
   }
-  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
   h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
   h1 .accent{color:var(--accent)}
   .state-tag{font-size:13px;color:var(--muted)}
+  .topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .gear-toggle{padding:8px 12px;font-size:12px;font-weight:700;background:var(--card);
+               color:var(--fg);border:1px solid var(--line);border-radius:8px;cursor:pointer;min-height:40px}
+  .gear-toggle.g2{border-color:var(--warn);color:var(--warn)}
+  .gear-warn-chip{font-size:10px;color:var(--warn);font-weight:600}
+  .athlete-chip{position:relative}
+  #athlete-chip-btn{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;
+                    background:var(--card);border:1px solid var(--line);border-radius:999px;
+                    cursor:pointer;color:var(--fg);min-height:40px}
+  .ath-avatar{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#0a0a0c;
+              display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex:0 0 auto}
+  .ath-chip-text{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
+  #ath-chip-name{font-size:13px;font-weight:600}
+  #ath-chip-mass{font-size:10px;color:var(--muted)}
+  .athlete-menu{position:absolute;top:46px;right:0;background:var(--card);border:1px solid var(--line);
+                border-radius:10px;padding:6px;min-width:210px;z-index:80;
+                box-shadow:0 8px 24px rgba(0,0,0,0.5);max-height:340px;overflow-y:auto}
+  .athlete-menu[hidden]{display:none}
+  .am-item{display:block;width:100%;text-align:left;padding:10px;background:transparent;border:0;
+           color:var(--fg);font-size:13px;cursor:pointer;border-radius:6px;min-height:40px}
+  .am-item:hover{background:var(--accent-soft)}
+  .am-item.active{color:var(--accent);font-weight:700}
+  .am-add{display:block;padding:10px;margin-top:4px;border-top:1px solid var(--line);
+          color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
+  .header-setup{text-decoration:none;color:var(--fg);border:1px solid var(--line);border-radius:8px;
+                width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px}
 
   /* Mode pill bar — four top-level training modes, above the chart grid */
   .mode-bar{display:flex;gap:8px;margin-bottom:14px}
@@ -1489,25 +1521,17 @@ PHASE_C_HTML = """<!doctype html>
   .bottombar{position:sticky;bottom:0;background:rgba(10,10,12,0.96);
              border-top:1px solid var(--line);padding:12px 18px;z-index:40;
              backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-  .bottombar-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .bottombar select{flex:1;min-width:140px}
-  .bottombar .add-input{width:120px}
-  .bottombar button{min-height:44px}
-  .bottombar .gear{width:44px;height:44px;padding:0;background:transparent;color:var(--fg);
-                   border:1px solid var(--line);border-radius:9px;font-size:20px;cursor:pointer}
-  /* Phone: a single phase-aware primary action fills the thumb zone, the
-     motor toggle becomes an icon, and the athlete picker moves to the header. */
-  #primary-action{display:none}
-  @media (max-width:767px){
-    .bottombar-inner{flex-wrap:nowrap}
-    #rep-btn{display:none}
-    #gear{order:1}
-    #primary-action{display:block;order:2;flex:1;min-height:56px;font-size:17px;font-weight:700}
-    #motor-btn{order:3;width:56px;height:56px;min-height:56px;padding:0;flex:0 0 auto}
-    #motor-btn .mb-label{display:none}
-    #motor-btn::before{content:"\23FB";font-size:22px}
-  }
-  #athlete-header-slot select{max-width:150px;font-size:12px;padding:6px 8px}
+  /* Bottombar: Adjust · single phase-aware primary action · motor icon */
+  .bottombar-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:10px}
+  #adjust-btn{flex:0 0 auto;min-height:56px;padding:0 16px;font-size:13px;font-weight:700;
+              background:transparent;color:var(--fg);border:1px solid var(--line);
+              border-radius:10px;cursor:pointer}
+  #primary-action{flex:1;min-height:56px;font-size:17px;font-weight:700}
+  #primary-action.danger{background:var(--bad);color:#fff;min-height:64px}
+  #primary-action.warn{background:var(--warn);color:#0a0a0c}
+  #motor-btn{flex:0 0 auto;width:56px;height:56px;min-height:56px;padding:0}
+  #motor-btn .mb-label{display:none}
+  #motor-btn::before{content:"\23FB";font-size:22px}
 
   /* Settings sheet (slides in from right on coach) */
   .sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,0.5);opacity:0;pointer-events:none;
@@ -1559,10 +1583,23 @@ PHASE_C_HTML = """<!doctype html>
 
   <div class="topbar">
     <h1>PPA <span class="accent">·</span> Sprint Trainer</h1>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end">
+    <div class="topbar-right">
       <select id="rig-select" title="Active rig" style="padding:6px 10px;font-size:12px"></select>
-      <span id="athlete-header-slot"></span>
+      <button type="button" id="gear-toggle" class="gear-toggle">Gear 1</button>
+      <span id="gear-warn-chip" class="gear-warn-chip" style="display:none">Pulley attached?</span>
+      <div class="athlete-chip" id="athlete-chip">
+        <button type="button" id="athlete-chip-btn">
+          <span class="ath-avatar" id="ath-avatar">–</span>
+          <span class="ath-chip-text">
+            <span id="ath-chip-name">No athlete</span>
+            <span id="ath-chip-mass"></span>
+          </span>
+        </button>
+        <div class="athlete-menu" id="athlete-menu" hidden></div>
+        <select id="athlete-select" hidden><option value="">— Athlete —</option></select>
+      </div>
       <div class="state-tag" id="state-tag">Connecting…</div>
+      <a class="header-setup" href="/setup" title="Setup" aria-label="Setup">⚙</a>
     </div>
   </div>
 
@@ -1791,11 +1828,9 @@ PHASE_C_HTML = """<!doctype html>
 <!-- Sticky bottom bar -->
 <div class="bottombar">
   <div class="bottombar-inner" id="bottombar-inner">
-    <button id="motor-btn"><span class="mb-label">Motor OFF</span></button>
-    <button id="rep-btn" disabled>Start rep</button>
-    <select id="athlete-select"><option value="">— Athlete —</option></select>
-    <button id="gear" class="gear" title="Settings">⚙</button>
+    <button type="button" id="adjust-btn" title="Adjust drill settings">Adjust</button>
     <button id="primary-action">Arm rig</button>
+    <button id="motor-btn" title="Motor on/off" aria-label="Motor on/off"><span class="mb-label">Motor</span></button>
   </div>
 </div>
 
@@ -1853,7 +1888,6 @@ PHASE_C_HTML = """<!doctype html>
 const stateTag=document.getElementById('state-tag');
 const motorBtn=document.getElementById('motor-btn');
 const phasePill=document.getElementById('phase-pill');
-const repBtn=document.getElementById('rep-btn');
 const statSpeed=document.getElementById('stat-speed');
 const statForce=document.getElementById('stat-force');
 const statPower=document.getElementById('stat-power');
@@ -1922,27 +1956,69 @@ motorBtn.onclick=async()=>{
   }catch(e){}
   motorBtn.disabled=false;
 };
-// Phone primary action — one phase-aware button: Arm rig → Start/Next rep → Stop.
+// Single phase-aware primary action: Arm rig → Start/Next rep → Stop → Reset.
 const primaryBtn=document.getElementById('primary-action');
 primaryBtn.onclick=async()=>{
   primaryBtn.disabled=true;
   try{
     const c=await(await fetch('/api/c/state')).json();
-    if(c.phase_c!=='armed') await armRig(); else await repAction();
+    if(c.phase_c==='error'){ await fetch('/api/c/disarm',{method:'POST'}); await armRig(); }
+    else if(c.phase_c!=='armed'){ await armRig(); }
+    else{ await repAction(); }
   }catch(e){}
   primaryBtn.disabled=false;
 };
-// Athlete picker lives in the header on phone, in the bottombar on desktop.
+
+// ---- Athlete chip (header) ----
 const athleteSel=document.getElementById('athlete-select');
-function placeAthlete(){
-  if(window.innerWidth < 768){
-    document.getElementById('athlete-header-slot').appendChild(athleteSel);
-  }else{
-    document.getElementById('bottombar-inner').insertBefore(athleteSel, document.getElementById('gear'));
-  }
+window._athleteMass={};
+function renderAthleteChip(){
+  const opt=athleteSel.options[athleteSel.selectedIndex];
+  const name=(athleteSel.value&&opt)?opt.textContent:'No athlete';
+  document.getElementById('ath-chip-name').textContent=name;
+  document.getElementById('ath-avatar').textContent=
+    (athleteSel.value&&name)?name.trim().charAt(0).toUpperCase():'–';
+  const m=athleteSel.value?window._athleteMass[athleteSel.value]:null;
+  document.getElementById('ath-chip-mass').textContent=m?(m+' kg'):'';
 }
-placeAthlete();
-window.addEventListener('resize', placeAthlete);
+document.getElementById('athlete-chip-btn').onclick=(e)=>{
+  e.stopPropagation();
+  const menu=document.getElementById('athlete-menu');
+  if(!menu.hidden){ menu.hidden=true; return; }
+  let h='';
+  for(const o of athleteSel.options){
+    if(!o.value) continue;
+    h+='<button type="button" class="am-item'+(o.value===athleteSel.value?' active':'')+
+       '" data-aid="'+o.value+'">'+o.textContent+'</button>';
+  }
+  h+='<a class="am-add" href="/setup">+ Add athlete</a>';
+  menu.innerHTML=h;
+  menu.querySelectorAll('.am-item').forEach(b=>b.onclick=()=>{
+    athleteSel.value=b.getAttribute('data-aid');
+    renderAthleteChip(); menu.hidden=true;
+  });
+  menu.hidden=false;
+};
+document.addEventListener('click',(e)=>{
+  const chip=document.getElementById('athlete-chip');
+  if(chip&&!chip.contains(e.target)) document.getElementById('athlete-menu').hidden=true;
+});
+
+// ---- Gear toggle (header) ----
+let currentGear=1;
+const gearToggle=document.getElementById('gear-toggle');
+function setGear(g){
+  currentGear=(g===2||g==='2')?2:1;
+  gearToggle.textContent='Gear '+currentGear;
+  gearToggle.classList.toggle('g2',currentGear===2);
+  document.getElementById('gear-warn-chip').style.display=currentGear===2?'inline':'none';
+}
+gearToggle.onclick=()=>{
+  setGear(currentGear===1?2:1);
+  fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({gear:currentGear})}).catch(()=>{});
+};
+setGear(1);
 
 // ============== UNITS TOGGLE (§15.2) ==============
 // Pure-client preference. Conversions applied at render time only — exports
@@ -2206,12 +2282,6 @@ function showPreRepCard(cfg, athleteName, onGo){
   };
 }
 
-repBtn.onclick=async()=>{
-  repBtn.disabled=true;
-  try{ await repAction(); }catch(e){}
-  repBtn.disabled=false;
-};
-
 // Universal E-stop (§2.5) — fires immediately, no confirmation
 const estopBtn = document.getElementById('estop-btn');
 if(estopBtn){
@@ -2247,7 +2317,7 @@ function toggleSheet(){ applySheet(!sheet.classList.contains('show')); }
   applySheet(open);
   requestAnimationFrame(()=>{ sheet.style.transition=''; });
 })();
-document.getElementById('gear').onclick=toggleSheet;
+document.getElementById('adjust-btn').onclick=toggleSheet;
 document.getElementById('sheet-close').onclick=closeSheet;
 document.getElementById('sheet-done').onclick=closeSheet;
 sheetMask.onclick=closeSheet;
@@ -2262,6 +2332,9 @@ async function loadAthletes(){
     const cur=sel.value;
     sel.innerHTML='<option value="">— Athlete —</option>'+
       list.map(a=>'<option value="'+a.id+'"'+(String(a.id)===cur?' selected':'')+'>'+a.name+'</option>').join('');
+    window._athleteMass={};
+    list.forEach(a=>{ if(a.body_mass_kg!=null) window._athleteMass[String(a.id)]=a.body_mass_kg; });
+    if(typeof renderAthleteChip==='function') renderAthleteChip();
   }catch(e){}
 }
 // Adding athletes is done on /setup (Athletes tab).
@@ -2881,8 +2954,7 @@ loadAthletes();
     if(cfg.drill){ const sel = document.getElementById('cfg-drill'); if(sel) sel.value = cfg.drill; }
     if(cfg.mode) applyMode(cfg.mode, {push:false});
     if(cfg.cod_prefix){ const sel = document.getElementById('cfg-cod-prefix'); if(sel) sel.value = cfg.cod_prefix; }
-    if(cfg.gear != null){ const sel = document.getElementById('cfg-gear'); if(sel) sel.value = String(cfg.gear); }
-    if(typeof checkGearCapacity === 'function') checkGearCapacity();
+    if(cfg.gear != null && typeof setGear === 'function') setGear(cfg.gear);
   }catch(e){}
 })();
 
@@ -3049,10 +3121,10 @@ window.addEventListener('keydown', (ev)=>{
     document.getElementById('estop-btn')?.click();
   } else if(k === 'PageDown' || k === 'ArrowRight' || k === 'g' || k === 'G' || k === ' '){
     ev.preventDefault();
-    if(!repBtn.disabled) repBtn.click();
+    if(!primaryBtn.disabled) primaryBtn.click();
   } else if(k === 'PageUp' || k === 'ArrowLeft' || k === 's' || k === 'S'){
     ev.preventDefault();
-    if(!repBtn.disabled) repBtn.click();
+    if(!primaryBtn.disabled) primaryBtn.click();
   }
 });
 
@@ -3068,7 +3140,7 @@ function pollGamepads(){
       const isPressed = btn.pressed;
       if(isPressed && !wasPressed){
         // First button on most remotes/presenters
-        if(i === 0 && !repBtn.disabled) repBtn.click();
+        if(i === 0 && !primaryBtn.disabled) primaryBtn.click();
         else if(i === 1) motorBtn.click();
         else if(i === 9 || i === 8) document.getElementById('estop-btn')?.click();
       }
@@ -3113,23 +3185,23 @@ async function refresh(){
   if(mbLabel) mbLabel.textContent=armed?'Motor ON':'Motor OFF';
   motorBtn.classList.toggle('on',armed);
   const repActive=c.athletic_phase==='resist'||c.athletic_phase==='return';
-  repBtn.disabled=!(armed && c.athletic_mode);
-  repBtn.textContent=repActive?'Stop rep':'Start rep';
-  repBtn.classList.toggle('on',repActive);
 
-  // Phone primary action — phase-aware label/colour
+  // Single phase-aware primary action — Arm rig → Start/Next rep → Stop → Reset
   if(primaryBtn){
-    if(!armed){
+    primaryBtn.classList.remove('danger','warn');
+    if(c.phase_c==='error'){
+      primaryBtn.textContent='Reset';
+      primaryBtn.classList.add('warn');
+      primaryBtn.disabled=false;
+    }else if(!armed){
       primaryBtn.textContent='Arm rig';
-      primaryBtn.classList.remove('disarm');
       primaryBtn.disabled=false;
     }else if(repActive){
       primaryBtn.textContent='Stop';
-      primaryBtn.classList.add('disarm');
+      primaryBtn.classList.add('danger');
       primaryBtn.disabled=false;
     }else{
       primaryBtn.textContent=((window._lastReps||[]).length>0)?'Next rep':'Start rep';
-      primaryBtn.classList.remove('disarm');
       primaryBtn.disabled=!(armed && c.athletic_mode);
     }
   }
@@ -3401,12 +3473,15 @@ SETUP_HTML = """<!doctype html>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PPA · Setup</title>
 <link rel="icon" type="image/png" href="/static/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
           --accent-soft:rgba(212,130,58,0.14);
           --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
           --card:#16161a; --line:#2c2c34; }
-  *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
+  *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px}
   .wrap{max-width:1200px;margin:0 auto;padding:18px;padding-bottom:48px}
   .topbar{display:flex;align-items:center;justify-content:space-between;
