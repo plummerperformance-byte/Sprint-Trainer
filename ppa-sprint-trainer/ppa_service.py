@@ -1186,6 +1186,9 @@ PHASE_C_HTML = """<!doctype html>
   *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;padding-bottom:120px}
   .wrap{max-width:1200px;margin:0 auto;padding:18px}
+  /* Keep topbar content clear of the fixed phase-pill / e-stop stack on
+     viewports narrow enough for them to overlap the right edge. */
+  @media (max-width:1099px){ .wrap{padding-right:100px} }
   .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
   h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
   h1 .accent{color:var(--accent)}
@@ -1223,8 +1226,12 @@ PHASE_C_HTML = """<!doctype html>
               display:flex;flex-direction:column;gap:14px}
   .stat-line{display:flex;justify-content:space-between;align-items:baseline}
   .stat-line .l{font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)}
+  .stat-line .v{display:inline-flex;align-items:baseline;gap:4px;justify-content:flex-end}
   .stat-line .v.primary{font-size:48px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
   .stat-line .v.secondary{font-size:32px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+  .stat-line .v .unit{color:var(--muted);font-weight:600}
+  .stat-line .v.primary .unit{font-size:18px}
+  .stat-line .v.secondary .unit{font-size:14px}
   .stats-foot{margin-top:auto;padding-top:14px;border-top:1px solid var(--line)}
   .session-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
   .session-stats > div{text-align:center}
@@ -1265,7 +1272,7 @@ PHASE_C_HTML = """<!doctype html>
 
   /* Universal Emergency Stop (§2.5) — every screen, every depth, one tap, no
      confirmation. Sized for sweaty thumb on a phone. Sits below phase pill. */
-  .estop-btn{position:fixed;top:60px;right:18px;width:64px;height:64px;
+  .estop-btn{position:fixed;top:80px;right:18px;width:64px;height:64px;
              border-radius:50%;background:var(--bad);color:#fff;border:3px solid #ff8a8a;
              font-size:14px;font-weight:800;letter-spacing:0.08em;cursor:pointer;z-index:60;
              box-shadow:0 6px 18px rgba(232,90,90,0.4);
@@ -1306,7 +1313,7 @@ PHASE_C_HTML = """<!doctype html>
   .rep-row .v-toggle.invalid{color:var(--bad)}
 
   /* Phase pill (always visible top right of viewport) */
-  .phase-pill-fixed{position:fixed;top:18px;right:18px;padding:6px 14px;border-radius:999px;
+  .phase-pill-fixed{position:fixed;top:14px;right:18px;padding:6px 14px;border-radius:999px;
                     font-size:13px;font-weight:600;letter-spacing:0.08em;z-index:50}
   .phase-pill-fixed.ready{background:rgba(212,161,58,0.18);color:var(--warn);border:1px solid rgba(212,161,58,0.35)}
   .phase-pill-fixed.resist{background:rgba(232,90,90,0.18);color:var(--bad);border:1px solid rgba(232,90,90,0.35)}
@@ -1486,10 +1493,10 @@ PHASE_C_HTML = """<!doctype html>
     </div>
 
     <div class="stats-card">
-      <div class="stat-line tappable" data-tile="speed" title="Tap to cycle metric"><span class="l" id="stat-speed-l">Speed</span><span class="v primary" id="stat-speed">0.00 <span style="font-size:18px;color:var(--muted)">m/s</span></span></div>
-      <div class="stat-line tappable" data-tile="force" title="Tap to cycle metric"><span class="l" id="stat-force-l">Force</span><span class="v secondary" id="stat-force">0 <span style="font-size:14px;color:var(--muted)">N</span></span></div>
-      <div class="stat-line tappable" data-tile="power" title="Tap to cycle metric"><span class="l" id="stat-power-l">Power</span><span class="v secondary" id="stat-power">0 <span style="font-size:14px;color:var(--muted)">W</span></span></div>
-      <div class="stat-line tappable" data-tile="ext" title="Tap to cycle metric"><span class="l" id="stat-ext-l">Cable out</span><span class="v secondary" id="stat-ext">0.00 <span style="font-size:14px;color:var(--muted)">m</span></span></div>
+      <div class="stat-line tappable" data-tile="speed" title="Tap to cycle metric"><span class="l" id="stat-speed-l">Speed</span><span class="v primary" id="stat-speed"><span class="num">0.00</span><span class="unit">m/s</span></span></div>
+      <div class="stat-line tappable" data-tile="force" title="Tap to cycle metric"><span class="l" id="stat-force-l">Force</span><span class="v secondary" id="stat-force"><span class="num">0</span><span class="unit">N</span></span></div>
+      <div class="stat-line tappable" data-tile="power" title="Tap to cycle metric"><span class="l" id="stat-power-l">Power</span><span class="v secondary" id="stat-power"><span class="num">0</span><span class="unit">W</span></span></div>
+      <div class="stat-line tappable" data-tile="ext" title="Tap to cycle metric"><span class="l" id="stat-ext-l">Cable out</span><span class="v secondary" id="stat-ext"><span class="num">0.00</span><span class="unit">m</span></span></div>
       <div class="stats-foot">
         <div class="session-stats" id="session-stats">
           <div><div class="ss-l">REPS</div><div class="ss-v" id="ss-reps">0</div></div>
@@ -3380,9 +3387,8 @@ async function refresh(){
   for(const tile of ['speed','force','power','ext']){
     const [rawVal, dec, rawUnit, cls] = tileValue(tile);
     const [val, unit] = convertUnit(rawVal, rawUnit);
-    const fontSize = cls === 'primary' ? '18px' : '14px';
     document.getElementById('stat-'+tile).innerHTML =
-      (val||0).toFixed(dec)+' <span style="font-size:'+fontSize+';color:var(--muted)">'+unit+'</span>';
+      '<span class="num">'+(val||0).toFixed(dec)+'</span><span class="unit">'+unit+'</span>';
   }
   // (Cable-out tile is now driven by the tap-cycle metric system above.)
 
