@@ -278,7 +278,7 @@ class ServiceState:
             # ApproachJump, HighKnee, FastLeg, Acceleration, Sprint, StraightLegRun
             "rest_interval_s": 180,   # §12 inter-rep rest timer (3 min default)
             "countdown_s": 5,         # §9 solo-start countdown (5 s default)
-            "mode": "resisted",       # resisted | assisted | gym
+            "mode": "resisted",       # resisted | assisted | cod | gym
             "chain_kg_per_m": 0.0,          # gym: extra kg per metre of extension
             "eccentric_overload_pct": 0.0,  # gym: % boost on the eccentric phase
             "concentric_dir": "extend",     # gym: which cable direction is concentric
@@ -1193,6 +1193,19 @@ PHASE_C_HTML = """<!doctype html>
   h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
   h1 .accent{color:var(--accent)}
   .state-tag{font-size:13px;color:var(--muted)}
+
+  /* Mode pill bar — four top-level training modes, above the chart grid */
+  .mode-bar{display:flex;gap:8px;margin-bottom:14px}
+  .mode-pill{flex:1;min-height:48px;padding:12px 8px;border-radius:12px;
+             background:var(--card);color:var(--muted);border:1px solid var(--line);
+             font-size:14px;font-weight:700;letter-spacing:0.03em;cursor:pointer;
+             text-align:center;transition:background 120ms,color 120ms,border-color 120ms}
+  .mode-pill:hover{color:var(--fg);border-color:var(--accent)}
+  .mode-pill.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
+  @media (max-width:414px){
+    .mode-bar{flex-wrap:wrap}
+    .mode-pill{flex:1 1 calc(50% - 4px);font-size:13px}
+  }
   .card{background:var(--card);border:1px solid var(--line);
         border-radius:14px;padding:18px;margin-bottom:14px}
   .meta{color:var(--muted);font-size:11px;letter-spacing:0.12em;text-transform:uppercase}
@@ -1484,6 +1497,13 @@ PHASE_C_HTML = """<!doctype html>
       <select id="rig-select" title="Active rig" style="padding:6px 10px;font-size:12px"></select>
       <div class="state-tag" id="state-tag">Connecting…</div>
     </div>
+  </div>
+
+  <div class="mode-bar" id="mode-bar" role="tablist" aria-label="Training mode">
+    <button class="mode-pill active" data-mode="resisted" role="tab" aria-selected="true">Resisted</button>
+    <button class="mode-pill" data-mode="assisted" role="tab" aria-selected="false">Assisted</button>
+    <button class="mode-pill" data-mode="cod" role="tab" aria-selected="false">Change of direction</button>
+    <button class="mode-pill" data-mode="gym" role="tab" aria-selected="false">Gym</button>
   </div>
 
   <div class="top-grid">
@@ -1803,21 +1823,7 @@ PHASE_C_HTML = """<!doctype html>
 
   <div style="height:1px;background:var(--line);margin:6px 0"></div>
 
-  <div class="field">
-    <label>Training mode</label>
-    <select id="cfg-mode">
-      <option value="resisted" selected>Resisted Sprint</option>
-      <option value="assisted">Assisted Sprint</option>
-      <option value="gym">Gym</option>
-    </select>
-    <div class="meta" style="margin-top:4px;font-size:10px">
-      Resisted: athlete sprints away from the rig. Assisted: walk the cable out,
-      then Start rep — the motor tows them back toward the rig. Gym: direction-
-      dependent resistance (chain + eccentric overload); reps auto-count.
-    </div>
-  </div>
-
-  <div class="field" id="cfg-cod-row" style="display:none">
+  <div class="field" id="cfg-cod-row" data-modes="cod" style="display:none">
     <label>COD entry sub-mode</label>
     <select id="cfg-cod-prefix">
       <option value="auto" selected>Auto (start = stop)</option>
@@ -1852,14 +1858,14 @@ PHASE_C_HTML = """<!doctype html>
     <button id="history-btn" class="ghost" style="width:100%">Athlete history</button>
   </div>
   <div class="field">
-    <label>Working resistance (kg)</label>
+    <label id="cfg-resist-l">Working resistance (kg)</label>
     <input type="number" id="cfg-resist" value="5" step="0.5" min="0.5" max="10">
   </div>
-  <div class="field">
-    <label>Resist distance (m)</label>
+  <div class="field" data-modes="resisted assisted cod">
+    <label id="cfg-resist-dist-l">Resist distance (m)</label>
     <input type="number" id="cfg-resist-dist" value="15" step="1" min="1" max="50">
   </div>
-  <div class="field">
+  <div class="field" data-modes="resisted assisted">
     <label>Velocity cap (m/s) — 0 = off</label>
     <input type="number" id="cfg-vcap" value="0" step="0.5" min="0" max="15">
   </div>
@@ -1873,15 +1879,15 @@ PHASE_C_HTML = """<!doctype html>
     <svg id="curve-svg" width="100%" viewBox="0 0 300 160" style="display:block;border:1px solid var(--line);border-radius:6px;touch-action:none"></svg>
     <div class="meta" id="curve-meta" style="font-size:10px;margin-top:2px">Off — flat working resistance is used.</div>
   </div>
-  <div class="field">
+  <div class="field" data-modes="gym">
     <label>Chain rate (kg/m) — gym, 0 = off</label>
     <input type="number" id="cfg-chain" value="0" step="0.5" min="0" max="10">
   </div>
-  <div class="field">
+  <div class="field" data-modes="gym">
     <label>Eccentric overload (%) — gym, 0 = off</label>
     <input type="number" id="cfg-ecc" value="0" step="5" min="0" max="100">
   </div>
-  <div class="field">
+  <div class="field" data-modes="gym">
     <label>Concentric direction — gym</label>
     <select id="cfg-condir">
       <option value="extend" selected>Cable extending</option>
@@ -1989,6 +1995,7 @@ let prevPhase='off';
 let cachedSamples=[];   // last full curve to keep showing during 'recover'
 let lastCorridor=0;     // current Recovery distance from athletic config (for chart threshold + corridor highlight)
 let drillStartedAt=null; // ms timestamp when athletic_mode flipped True (for session timer)
+let currentMode='resisted'; // active training-mode pill (resisted|assisted|cod|gym)
 
 slider.addEventListener('input',()=>{const k=parseFloat(slider.value);kgDisp.textContent=k.toFixed(1)+' kg';pctDisp.textContent=(k*5.64).toFixed(1)+'%';pending=k;});
 async function flushSP(){if(pending===null||pending===lastSent)return;const k=pending;pending=null;try{const r=await fetch('/api/c/setkg?kg='+k,{method:'POST'});if(r.ok)lastSent=k;}catch(e){}}
@@ -1996,7 +2003,7 @@ setInterval(flushSP,250);
 
 function buildAthleticCfg(){
   return {
-    mode:document.getElementById('cfg-mode').value,
+    mode:currentMode,
     resist_kg:parseFloat(document.getElementById('cfg-resist').value),
     resist_distance_m:parseFloat(document.getElementById('cfg-resist-dist').value),
     velocity_cap_mps:parseFloat(document.getElementById('cfg-vcap').value)||0,
@@ -2069,7 +2076,10 @@ async function loadTemplateList(){
 async function saveCurrentAsTemplate(){
   const name = (document.getElementById('tpl-new-name').value || '').trim();
   if(!name){ alert('Type a template name first'); return; }
+  const codSel = document.getElementById('cfg-cod-prefix');
   const config = {
+    mode:                currentMode,
+    cod_prefix:          codSel ? codSel.value : 'auto',
     resist_kg:           parseFloat(document.getElementById('cfg-resist').value),
     resist_distance_m:   parseFloat(document.getElementById('cfg-resist-dist').value),
     velocity_cap_mps:    parseFloat(document.getElementById('cfg-vcap').value)||0,
@@ -2115,12 +2125,7 @@ async function loadSelectedTemplate(){
     set('cfg-rest',        cfg.rest_interval_s);
     set('cfg-countdown',   cfg.countdown_s);
     if(cfg.drill){ const sel = document.getElementById('cfg-drill'); if(sel) sel.value = cfg.drill; }
-    if(cfg.mode){
-      const sel = document.getElementById('cfg-mode');
-      const codRow = document.getElementById('cfg-cod-row');
-      if(sel) sel.value = cfg.mode;
-      if(codRow) codRow.style.display = (cfg.mode === 'cod') ? 'block' : 'none';
-    }
+    if(cfg.mode) applyMode(cfg.mode, {push:false});
     if(cfg.cod_prefix){ const sel = document.getElementById('cfg-cod-prefix'); if(sel) sel.value = cfg.cod_prefix; }
     if(cfg.gear != null){ const sel = document.getElementById('cfg-gear'); if(sel) sel.value = String(cfg.gear); }
     if(typeof checkGearCapacity === 'function') checkGearCapacity();
@@ -3173,12 +3178,7 @@ loadAthletes();
     set('cfg-rest',        cfg.rest_interval_s);
     set('cfg-countdown',   cfg.countdown_s);
     if(cfg.drill){ const sel = document.getElementById('cfg-drill'); if(sel) sel.value = cfg.drill; }
-    if(cfg.mode){
-      const sel = document.getElementById('cfg-mode');
-      const codRow = document.getElementById('cfg-cod-row');
-      if(sel) sel.value = cfg.mode;
-      if(codRow) codRow.style.display = (cfg.mode === 'cod') ? 'block' : 'none';
-    }
+    if(cfg.mode) applyMode(cfg.mode, {push:false});
     if(cfg.cod_prefix){ const sel = document.getElementById('cfg-cod-prefix'); if(sel) sel.value = cfg.cod_prefix; }
     if(cfg.gear != null){ const sel = document.getElementById('cfg-gear'); if(sel) sel.value = String(cfg.gear); }
     if(typeof checkGearCapacity === 'function') checkGearCapacity();
@@ -3217,9 +3217,7 @@ async function loadRigs(){
 loadRigs();
 
 // ============== MODE / COD / GEAR (§§16.1 / 16.5 / 16.6) ==============
-const cfgMode = document.getElementById('cfg-mode');
 const cfgCod = document.getElementById('cfg-cod-prefix');
-const cfgCodRow = document.getElementById('cfg-cod-row');
 const cfgGear = document.getElementById('cfg-gear');
 const cfgResistEl = document.getElementById('cfg-resist');
 const gearWarn = document.getElementById('gear-warn');
@@ -3232,14 +3230,37 @@ function checkGearCapacity(){
   gearWarn.style.display = overGear1 ? 'inline' : 'none';
 }
 
-if(cfgMode){
-  cfgMode.addEventListener('change', ()=>{
-    cfgCodRow.style.display = (cfgMode.value === 'cod') ? 'block' : 'none';
+// Mode pill bar is the single source of truth for `mode`. Selecting a pill
+// shows/hides the settings-sheet fields that apply to that mode and pushes
+// the new mode to the backend athletic config.
+function applyMode(mode, opts){
+  opts = opts || {};
+  if(['resisted','assisted','cod','gym'].indexOf(mode) < 0) mode = 'resisted';
+  currentMode = mode;
+  document.querySelectorAll('.mode-pill').forEach(p=>{
+    const on = p.getAttribute('data-mode') === mode;
+    p.classList.toggle('active', on);
+    p.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.sheet .field[data-modes]').forEach(f=>{
+    const modes = (f.getAttribute('data-modes') || '').split(/\s+/);
+    f.style.display = modes.indexOf(mode) >= 0 ? '' : 'none';
+  });
+  const rl = document.getElementById('cfg-resist-l');
+  const dl = document.getElementById('cfg-resist-dist-l');
+  if(rl) rl.textContent = (mode === 'assisted') ? 'Assistance (kg)' : 'Working resistance (kg)';
+  if(dl) dl.textContent = (mode === 'assisted') ? 'Tow distance (m)' : 'Resist distance (m)';
+  if(opts.push !== false){
     fetch('/api/c/athletic/config',{method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({mode: cfgMode.value})}).catch(()=>{});
-  });
+      body:JSON.stringify({mode: mode})}).catch(()=>{});
+  }
 }
+document.querySelectorAll('.mode-pill').forEach(p=>{
+  p.addEventListener('click', ()=> applyMode(p.getAttribute('data-mode')));
+});
+applyMode('resisted', {push:false});
+
 if(cfgCod){
   cfgCod.addEventListener('change', ()=>{
     fetch('/api/c/athletic/config',{method:'POST',
@@ -4441,7 +4462,7 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                 raise HTTPException(400, "countdown_s out of range [0, 10]")
             c["countdown_s"] = req.countdown_s
         if req.mode is not None:
-            valid_modes = {"resisted", "assisted", "gym"}
+            valid_modes = {"resisted", "assisted", "cod", "gym"}
             if req.mode not in valid_modes:
                 raise HTTPException(400, f"mode must be one of {sorted(valid_modes)}")
             c["mode"] = req.mode
