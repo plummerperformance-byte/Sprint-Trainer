@@ -1227,7 +1227,8 @@ PHASE_C_HTML = """<!doctype html>
     body:not(.sheet-open) .topbar,
     body:not(.sheet-open) .mode-bar{padding-right:90px}
   }
-  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;
+          gap:10px;flex-wrap:wrap}
   h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
   h1 .accent{color:var(--accent)}
   .state-tag{font-size:13px;color:var(--muted)}
