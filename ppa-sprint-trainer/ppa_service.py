@@ -226,6 +226,9 @@ class AthleticConfigRequest(BaseModel):
     cod_prefix: Optional[str] = None         # §16.5 COD entry sub-mode
     gear: Optional[int] = None               # §16.6 1 = no pulley, 2 = pulley engaged
     rig_id: Optional[int] = None             # §15.3 active rig
+    auto_stop_enabled: Optional[bool] = None            # §11 Full Auto rep detection
+    auto_stop_velocity_threshold: Optional[float] = None
+    auto_stop_dwell_s: Optional[float] = None
 
 
 class ServiceState:
@@ -285,6 +288,10 @@ class ServiceState:
             "cod_prefix": "auto",     # §16.5 — auto | resisted | assisted (only used when mode=cod)
             "gear": 1,                # §16.6 — 1 (no pulley) | 2 (pulley engaged, 2× capacity)
             "rig_id": 1,              # §15.3 — which rig produced this data
+            # §11 Full Auto rep detection — end a rep when the cable goes still
+            "auto_stop_enabled": True,
+            "auto_stop_velocity_threshold": 0.2,  # m/s — below this counts as "still"
+            "auto_stop_dwell_s": 1.0,             # s of stillness before the rep ends
         }
         self.athletic_athlete_id: Optional[int] = None
         self.athletic_session_id: Optional[int] = None  # DB session row id
@@ -765,6 +772,7 @@ async def _athletic_loop(state: "ServiceState"):
     PERIOD = 1.0 / LOOP_HZ
     POSITION_TOLERANCE_COUNTS = 5000  # ~13mm of slop near start (used for return→ready)
     PHANTOM_DURATION_S = 0.5          # reps shorter than this are dropped
+    AUTO_STOP_MIN_S = 2.0             # §11 — min rep age before auto-stop can fire
     try:
         while not state.stop_event.is_set():
             await asyncio.sleep(PERIOD)
@@ -793,6 +801,22 @@ async def _athletic_loop(state: "ServiceState"):
                 home_pos = current_pos
             rep_ext_counts = abs(current_pos - home_pos)
             rep_ext_m = rep_ext_counts / COUNTS_PER_M
+
+            # §11 Full Auto rep detection — once a rep has run a minimum time and
+            # the athlete has left the start, end it when the cable stays slower
+            # than the threshold for the dwell period. Sprint modes only; gym
+            # reps are short out-and-back cycles that pause legitimately.
+            auto_stop_now = False
+            if (cfg.get("auto_stop_enabled", True) and cfg.get("mode") != "gym"
+                    and rip is not None and rip.get("_left_start")
+                    and (time.time() - rip["started_at"]) >= AUTO_STOP_MIN_S):
+                if speed_mps < cfg.get("auto_stop_velocity_threshold", 0.2):
+                    if rip.get("_low_v_since") is None:
+                        rip["_low_v_since"] = time.time()
+                    elif (time.time() - rip["_low_v_since"]) >= cfg.get("auto_stop_dwell_s", 1.0):
+                        auto_stop_now = True
+                else:
+                    rip["_low_v_since"] = None
 
             new_phase = state.athletic_phase
             target_kg = 0.0
@@ -856,10 +880,11 @@ async def _athletic_loop(state: "ServiceState"):
                     else:
                         target_kg = cfg["return_kg"]
                     new_phase = "resist" if in_resist_band else "return"
-                    if state.athletic_rep_stop_requested or (
+                    if state.athletic_rep_stop_requested or auto_stop_now or (
                             rip is not None and rip.get("_left_start")
                             and rep_ext_counts <= POSITION_TOLERANCE_COUNTS):
-                        # Coach ended it, or the cable retracted to the start.
+                        # Coach ended it, the cable retracted to start, or
+                        # Full Auto detected the athlete has stopped.
                         new_phase = "ready"
             else:  # off or unexpected
                 target_kg = 0.0
@@ -905,6 +930,7 @@ async def _athletic_loop(state: "ServiceState"):
                         # set True once the athlete extends past the start corridor;
                         # gates the "retracted to start" rep-end test.
                         "_left_start": False,
+                        "_low_v_since": None,   # §11 auto-stop dwell tracker
                         "is_eccentric": False,
                         "samples": [],   # {t_ms, v_mps, F_N, P_W, pos_m, a_mps2}
                     }
@@ -1231,6 +1257,9 @@ PHASE_C_HTML = """<!doctype html>
           color:var(--accent);text-decoration:none;font-size:13px;font-weight:600}
   .header-setup{text-decoration:none;color:var(--fg);border:1px solid var(--line);border-radius:8px;
                 width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .auto-indicator{display:none;font-size:10px;font-weight:700;color:var(--good);
+                  letter-spacing:0.08em;border:1px solid var(--good);border-radius:6px;padding:3px 7px}
+  .auto-indicator::before{content:"● "}
 
   /* Mode pill bar — four top-level training modes, above the chart grid */
   .mode-bar{display:flex;gap:8px;margin-bottom:14px}
@@ -1617,6 +1646,7 @@ PHASE_C_HTML = """<!doctype html>
         <div class="athlete-menu" id="athlete-menu" hidden></div>
         <select id="athlete-select" hidden><option value="">— Athlete —</option></select>
       </div>
+      <span class="auto-indicator" id="auto-indicator" title="Full Auto rep detection on">AUTO</span>
       <div class="state-tag" id="state-tag">Connecting…</div>
       <a class="header-setup" href="/setup" title="Setup" aria-label="Setup">⚙</a>
     </div>
@@ -3280,6 +3310,8 @@ async function refresh(){
     error:'<span class="err">Fault — tap to reset</span>',
   };
   stateTag.innerHTML=stateLabels[c.phase_c]||c.phase_c;
+  const autoInd=document.getElementById('auto-indicator');
+  if(autoInd) autoInd.style.display=(c.config&&c.config.auto_stop_enabled)?'inline-block':'none';
 
   const armed=c.phase_c==='armed';
   const mbLabel=motorBtn.querySelector('.mb-label');
@@ -3805,6 +3837,11 @@ SETUP_HTML = """<!doctype html>
           <div class="field"><label>Pre-drill countdown (s)</label>
             <input type="number" id="cfg-countdown" value="5" step="1" min="0" max="10"></div>
         </div>
+        <div class="divider"></div>
+        <div class="checkrow">
+          <label><input type="checkbox" id="cfg-auto-stop" checked> Full Auto rep detection</label>
+        </div>
+        <div class="meta" style="margin-top:6px">Rep auto-ends ~1s after the athlete stops (cable below 0.2 m/s). Turn off for flying sprints with a long coast-down.</div>
       </div>
 
       <div class="card">
@@ -4021,6 +4058,8 @@ document.getElementById('tpl-delete').onclick=async()=>{
 });
 document.getElementById('cfg-gear').addEventListener('change',e=>
   postConfig({gear:parseInt(e.target.value,10)}));
+document.getElementById('cfg-auto-stop').addEventListener('change',e=>
+  postConfig({auto_stop_enabled:e.target.checked}));
 
 // ---- Units + audio (localStorage, shared with /coach) ----
 (()=>{
@@ -4128,6 +4167,8 @@ document.getElementById('cfg-gear').addEventListener('change',e=>
     set('cfg-rest',cfg.rest_interval_s);
     set('cfg-countdown',cfg.countdown_s);
     if(cfg.gear!=null) document.getElementById('cfg-gear').value=String(cfg.gear);
+    if(cfg.auto_stop_enabled!=null)
+      document.getElementById('cfg-auto-stop').checked=!!cfg.auto_stop_enabled;
   }catch(e){}
 })();
 
@@ -5009,6 +5050,16 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             c["gear"] = req.gear
         if req.rig_id is not None:
             c["rig_id"] = req.rig_id
+        if req.auto_stop_enabled is not None:
+            c["auto_stop_enabled"] = bool(req.auto_stop_enabled)
+        if req.auto_stop_velocity_threshold is not None:
+            if not 0.0 <= req.auto_stop_velocity_threshold <= 3.0:
+                raise HTTPException(400, "auto_stop_velocity_threshold out of range [0, 3]")
+            c["auto_stop_velocity_threshold"] = req.auto_stop_velocity_threshold
+        if req.auto_stop_dwell_s is not None:
+            if not 0.2 <= req.auto_stop_dwell_s <= 10.0:
+                raise HTTPException(400, "auto_stop_dwell_s out of range [0.2, 10]")
+            c["auto_stop_dwell_s"] = req.auto_stop_dwell_s
         return c
 
     # ---- Coach (laptop) + Athlete (phone) UI pages ----
