@@ -297,6 +297,7 @@ class ServiceState:
         self.athletic_session_id: Optional[int] = None  # DB session row id
         self.athletic_start_pos: Optional[int] = None
         self.athletic_peak_rpm: int = 0
+        self.athletic_current_set: int = 1   # reps are grouped into sets
         self.athletic_task: Optional[asyncio.Task] = None
         self.athletic_current_kg: float = 0.0  # current commanded kg (slew-limited)
         # Rep tracking inside athletic mode: a "rep" is one resist phase
@@ -721,6 +722,11 @@ def _finalise_in_progress_rep(rip: Optional[dict], period: float) -> Optional[di
                 decel_start_ms = s["t_ms"]
         rip["accel_end_ms"] = accel_end_ms
         rip["decel_start_ms"] = decel_start_ms
+        # 1080 AccelDecelStats parity: where top speed was reached, and how
+        # long from top speed to the end of the rep (deceleration time).
+        rip["dist_to_max_v_m"] = round(samples[peak_v_idx]["pos_m"], 2)
+        rip["decel_time_s"] = round(
+            (samples[-1]["t_ms"] - samples[peak_v_idx]["t_ms"]) / 1000.0, 2)
         splits = {}
         for marker in (5, 10, 20):
             for s in samples:
@@ -730,7 +736,8 @@ def _finalise_in_progress_rep(rip: Optional[dict], period: float) -> Optional[di
         rip["splits_s"] = splits
         rip["split_report"] = _build_split_report(samples, SPLIT_LENGTH_M)
     for k in ("_sum_speed", "_sum_force", "_sum_power", "_sum_acc",
-              "_sum_work", "_sample_count", "_prev_v_mps", "_left_start"):
+              "_sum_work", "_sample_count", "_prev_v_mps", "_left_start",
+              "_low_v_since"):
         rip.pop(k, None)
     return rip
 
@@ -904,11 +911,13 @@ async def _athletic_loop(state: "ServiceState"):
                             t_offset_ms = int((time.time() - state.session_start_t) * 1000)
                             rep_db_id = await asyncio.to_thread(
                                 lambda: persistence.start_rep(
-                                    state.db, state.athletic_session_id, t_offset_ms))
+                                    state.db, state.athletic_session_id, t_offset_ms,
+                                    state.athletic_current_set))
                         except Exception as e:
                             log.warning("athletic start_rep persist failed: %s", e)
                     state._rep_in_progress = {
                         "rep_idx": len(state.athletic_reps) + 1,
+                        "set_idx": state.athletic_current_set,
                         "rep_db_id": rep_db_id,
                         "started_at": time.time(),
                         "start_pos_counts": current_pos,
@@ -1580,6 +1589,23 @@ PHASE_C_HTML = """<!doctype html>
   .rep-row .chev{color:var(--muted);font-size:20px;line-height:1}
   .rep-row:hover .chev,.rep-row.active .chev{color:var(--accent)}
   .reps-empty{color:var(--muted);text-align:center;padding:14px;font-size:14px}
+  /* Per-rep annotation controls + set grouping */
+  .rep-color,.rep-note{background:transparent;border:0;cursor:pointer;padding:0 3px;
+                       line-height:1;color:var(--muted);font-size:13px}
+  .rep-note.has{color:var(--accent)}
+  .rep-color:hover,.rep-note:hover{color:var(--fg)}
+  .rep-comment{font-size:11px;color:var(--muted);font-style:italic;margin-top:3px;
+               font-variant-numeric:normal}
+  .set-head{display:flex;justify-content:space-between;align-items:baseline;
+            font-size:10px;letter-spacing:0.12em;text-transform:uppercase;
+            color:var(--accent);font-weight:700;margin-top:8px;padding-top:8px;
+            border-top:1px solid var(--line)}
+  .set-head:first-child{margin-top:0;padding-top:0;border-top:0}
+  .set-sum{color:var(--muted);font-weight:600;letter-spacing:0.04em;text-transform:none}
+  .reps-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  #new-set-btn{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:0.04em;
+               background:transparent;color:var(--accent);border:1px solid var(--accent);
+               border-radius:7px;cursor:pointer;min-height:32px}
 
   /* Bottom bar (sticky — scrolls with content, rests at the viewport bottom) */
   .bottombar{position:sticky;bottom:0;background:rgba(10,10,12,0.96);
@@ -1744,6 +1770,7 @@ PHASE_C_HTML = """<!doctype html>
           <div class="rd-row"><span class="rd-l">Time to 90% v</span><span class="rd-v" id="rd-t90">–</span></div>
           <div class="rd-row"><span class="rd-l">Distance to 90% v</span><span class="rd-v" id="rd-d90">–</span></div>
           <div class="rd-row"><span class="rd-l">V dropoff</span><span class="rd-v" id="rd-drop">–</span></div>
+          <div class="rd-row"><span class="rd-l">Decel time</span><span class="rd-v" id="rd-decelt">–</span></div>
         </div>
         <div class="rd-section">
           <div class="rd-h">Cadence</div>
@@ -1850,7 +1877,10 @@ PHASE_C_HTML = """<!doctype html>
   </div>
 
   <div class="card">
-    <div class="meta" style="margin-bottom:10px">Recent reps</div>
+    <div class="reps-head">
+      <span class="meta">Recent reps</span>
+      <button type="button" id="new-set-btn" title="Group following reps into a new set">+ New set</button>
+    </div>
     <div class="preset-target" id="preset-target" hidden></div>
     <div class="reps-list" id="reps-list"></div>
   </div>
@@ -2056,6 +2086,7 @@ primaryBtn.onclick=async()=>{
 // ---- Athlete chip (header) ----
 const athleteSel=document.getElementById('athlete-select');
 window._athleteMass={};
+window._athleteGroup={};
 function renderAthleteChip(){
   const opt=athleteSel.options[athleteSel.selectedIndex];
   const name=(athleteSel.value&&opt)?opt.textContent:'No athlete';
@@ -2063,7 +2094,9 @@ function renderAthleteChip(){
   document.getElementById('ath-avatar').textContent=
     (athleteSel.value&&name)?name.trim().charAt(0).toUpperCase():'–';
   const m=athleteSel.value?window._athleteMass[athleteSel.value]:null;
-  document.getElementById('ath-chip-mass').textContent=m?(m+' kg'):'';
+  const g=athleteSel.value?window._athleteGroup[athleteSel.value]:null;
+  document.getElementById('ath-chip-mass').textContent=
+    [m?(m+' kg'):null, g||null].filter(Boolean).join(' · ');
 }
 document.getElementById('athlete-chip-btn').onclick=(e)=>{
   e.stopPropagation();
@@ -2416,8 +2449,11 @@ async function loadAthletes(){
     const cur=sel.value;
     sel.innerHTML='<option value="">— Athlete —</option>'+
       list.map(a=>'<option value="'+a.id+'"'+(String(a.id)===cur?' selected':'')+'>'+a.name+'</option>').join('');
-    window._athleteMass={};
-    list.forEach(a=>{ if(a.body_mass_kg!=null) window._athleteMass[String(a.id)]=a.body_mass_kg; });
+    window._athleteMass={}; window._athleteGroup={};
+    list.forEach(a=>{
+      if(a.body_mass_kg!=null) window._athleteMass[String(a.id)]=a.body_mass_kg;
+      if(a.squad_group) window._athleteGroup[String(a.id)]=a.squad_group;
+    });
     if(typeof renderAthleteChip==='function') renderAthleteChip();
   }catch(e){}
 }
@@ -2583,6 +2619,7 @@ function renderRunDetail(rep){
   document.getElementById('rd-t90').textContent=fmtSec(rep.time_to_90pct_v_s);
   document.getElementById('rd-d90').textContent=fmtM(rep.dist_to_90pct_v_m);
   document.getElementById('rd-drop').textContent=(rep.v_dropoff_pct!=null?rep.v_dropoff_pct.toFixed(1)+' %':'–');
+  document.getElementById('rd-decelt').textContent=fmtSec(rep.decel_time_s);
   // Cadence
   document.getElementById('rd-strides').textContent=(rep.total_steps!=null?rep.total_steps:'–');
   document.getElementById('rd-sf').textContent=(rep.step_freq_hz!=null?rep.step_freq_hz.toFixed(2)+' Hz':'–');
@@ -2882,6 +2919,7 @@ function renderFVRepTab(rep){
 
   // Per-stride mean points (more interpretable than full cloud) — only if step_events present
   let strideDots='';
+  const strideFV=[];
   if(rep && rep.step_events && rep.step_events.length>1){
     // Approximate per-stride mean by averaging samples in each stride window.
     // Each stride spans from t_strike[i-1] to t_strike[i].
@@ -2892,6 +2930,7 @@ function renderFVRepTab(rep){
       if(inWin.length<2) continue;
       const mv=inWin.reduce((a,b)=>a+b.v_mps,0)/inWin.length;
       const mf=inWin.reduce((a,b)=>a+b.F_N,0)/inWin.length;
+      strideFV.push({v:mv,f:mf});
       strideDots+='<circle cx="'+xs(mv).toFixed(1)+'" cy="'+ys(mf).toFixed(1)+'" r="5" fill="#f0f0f3" stroke="#0a0a0c" stroke-width="1.5"/>';
     }
   }
@@ -2927,7 +2966,23 @@ function renderFVRepTab(rep){
       '<line x1="3" y1="40" x2="17" y2="40" stroke="#5aa86a" stroke-width="2" stroke-dasharray="3,2"/><text x="22" y="43" fill="#8a8a96" font-size="10">Morin F-V line</text>' : '')+
     '</g>';
 
-  svg.innerHTML=grid+dots+strideDots+morin+legend;
+  // F-V fit confidence (R²) — per-stride points vs the Morin line.
+  // 1080 guidance: values below 0.98 are starting to become questionable.
+  let r2txt='';
+  if(f0 && v0 && strideFV.length>=2){
+    const meanF=strideFV.reduce((a,p)=>a+p.f,0)/strideFV.length;
+    let ssRes=0, ssTot=0;
+    for(const p of strideFV){
+      const pred=f0*(1-p.v/v0);
+      ssRes+=(p.f-pred)*(p.f-pred);
+      ssTot+=(p.f-meanF)*(p.f-meanF);
+    }
+    const r2=ssTot>0?Math.max(0,1-ssRes/ssTot):0;
+    const col=r2>=0.98?'#5aa86a':'#d4a13a';
+    r2txt='<text x="'+(PADL+6)+'" y="'+(PADT+14)+'" fill="'+col+'" font-size="11" '+
+          'font-weight="700">R² '+r2.toFixed(3)+(r2<0.98?' — questionable fit':'')+'</text>';
+  }
+  svg.innerHTML=grid+dots+strideDots+morin+r2txt+legend;
 }
 
 // Tab switching
@@ -2942,14 +2997,47 @@ document.querySelectorAll('.rd-tab').forEach(btn=>{
   });
 });
 
+const REP_COLORS=['', '#d4823a', '#5aa86a', '#e85a5a', '#4a90d4'];
+function repEsc(s){ return String(s).replace(/[&<>"]/g,
+  c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function patchRepAnnotation(idx, body){
+  try{
+    const r=await fetch('/api/c/athletic/rep/'+idx+'/annotation',
+      {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ alert("Couldn't update rep"); return false; }
+    return true;
+  }catch(e){ alert('Network error'); return false; }
+}
 function renderRepsList(reps){
-  if(!reps.length){repsList.innerHTML='<div class="reps-empty">No reps yet — start a drill to log reps here.</div>';return;}
-  const recent=reps.slice().reverse().slice(0,5);
-  repsList.innerHTML=recent.map(r=>{
+  if(!reps.length){
+    repsList.innerHTML='<div class="reps-empty">No reps yet — start a drill to log reps here.</div>';
+    if(typeof renderPresetTarget==='function') renderPresetTarget();
+    return;
+  }
+  // Per-set summary across all reps (not just the visible slice)
+  const setStats={};
+  reps.forEach(r=>{
+    const s=r.set_idx||1;
+    if(!setStats[s]) setStats[s]={count:0,best:0};
+    setStats[s].count++;
+    if((r.peak_speed_mps||0)>setStats[s].best) setStats[s].best=r.peak_speed_mps||0;
+  });
+  const recent=reps.slice().reverse().slice(0,8);
+  let html='', lastSet=null;
+  recent.forEach(r=>{
+    const setN=r.set_idx||1;
+    if(setN!==lastSet){
+      const st=setStats[setN]||{count:0,best:0};
+      html+='<div class="set-head">Set '+setN+
+            '<span class="set-sum">'+st.count+' rep'+(st.count===1?'':'s')+
+            ' · best '+st.best.toFixed(2)+' m/s</span></div>';
+      lastSet=setN;
+    }
     const isInvalid = r.valid === false;
     const isActive = repsList.getAttribute('data-active-rep') === String(r.rep_idx);
-    return '<div class="rep-row'+(isInvalid?' invalid':'')+(isActive?' active':'')+'" '+
-        'role="button" tabindex="0" data-rep="'+r.rep_idx+'" '+
+    const colorStyle = r.color ? (' style="border-left-color:'+r.color+'"') : '';
+    html+='<div class="rep-row'+(isInvalid?' invalid':'')+(isActive?' active':'')+'"'+colorStyle+
+        ' role="button" tabindex="0" data-rep="'+r.rep_idx+'" '+
         'aria-label="Show detail for rep '+r.rep_idx+'">'+
       '<div class="num">Rep '+r.rep_idx+(isInvalid?'<span class="invalid-tag">invalid</span>':'')+'</div>'+
       '<div class="stats">'+
@@ -2960,15 +3048,21 @@ function renderRepsList(reps){
         (r.peak_power_w||0).toFixed(0)+' W'+
         '<span class="sep">·</span>'+
         (r.duration_s||0).toFixed(2)+' s'+
+        (r.comment?('<div class="rep-comment">'+repEsc(r.comment)+'</div>'):'')+
       '</div>'+
-      '<div style="display:flex;gap:6px;align-items:center">'+
+      '<div style="display:flex;gap:5px;align-items:center">'+
+        '<button class="rep-color" data-rep="'+r.rep_idx+'" title="Colour tag" '+
+          'style="color:'+(r.color||'var(--line)')+'">●</button>'+
+        '<button class="rep-note'+(r.comment?' has':'')+'" data-rep="'+r.rep_idx+'" '+
+          'title="Comment">✎</button>'+
         '<button class="v-toggle'+(isInvalid?' invalid':'')+'" data-rep="'+r.rep_idx+'" '+
           'title="'+(isInvalid?'Mark valid':'Mark invalid (false start, slip, etc.)')+'">'+
           (isInvalid?'↺':'✗')+'</button>'+
         '<span class="chev" aria-hidden="true">›</span>'+
       '</div>'+
     '</div>';
-  }).join('');
+  });
+  repsList.innerHTML=html;
   repsList.querySelectorAll('.v-toggle').forEach(b=>{
     b.onclick=async(e)=>{
       e.stopPropagation();
@@ -2989,6 +3083,32 @@ function renderRepsList(reps){
         if(cur){ cur.valid = body.valid; cur.invalid_reason = body.reason; }
         renderRepsList(window._lastReps || []);
       }catch(e){ alert('Network error'); }
+    };
+  });
+  repsList.querySelectorAll('.rep-color').forEach(b=>{
+    b.onclick=async(e)=>{
+      e.stopPropagation();
+      const idx=parseInt(b.getAttribute('data-rep'),10);
+      const cur=(window._lastReps||[]).find(r=>r.rep_idx===idx);
+      const ci=REP_COLORS.indexOf((cur&&cur.color)||'');
+      const next=REP_COLORS[(ci+1)%REP_COLORS.length];
+      if(await patchRepAnnotation(idx,{color:next})){
+        if(cur) cur.color=next||null;
+        renderRepsList(window._lastReps||[]);
+      }
+    };
+  });
+  repsList.querySelectorAll('.rep-note').forEach(b=>{
+    b.onclick=async(e)=>{
+      e.stopPropagation();
+      const idx=parseInt(b.getAttribute('data-rep'),10);
+      const cur=(window._lastReps||[]).find(r=>r.rep_idx===idx);
+      const note=prompt('Rep comment:', (cur&&cur.comment)||'');
+      if(note===null) return;
+      if(await patchRepAnnotation(idx,{comment:note})){
+        if(cur) cur.comment=note||null;
+        renderRepsList(window._lastReps||[]);
+      }
     };
   });
   repsList.querySelectorAll('.rep-row').forEach(row=>{
@@ -3016,6 +3136,11 @@ function renderRepsList(reps){
 }
 
 loadAthletes();
+
+// New-set button — groups subsequent reps under a new set index
+document.getElementById('new-set-btn').onclick=async()=>{
+  try{ await fetch('/api/c/athletic/new_set',{method:'POST'}); }catch(e){}
+};
 
 // Pull current athletic config to seed the Settings sheet inputs on first paint
 (async ()=>{
@@ -3860,6 +3985,8 @@ SETUP_HTML = """<!doctype html>
                 <option value="pro">Pro</option><option value="international">International</option>
               </select>
             </div>
+            <div class="field"><label>Group / squad</label><input type="text" id="edit-group" placeholder="e.g. 1st XV"></div>
+            <div class="field"><label>Tags (comma-separated)</label><input type="text" id="edit-tags" placeholder="e.g. winger, return-to-play"></div>
           </div>
           <button class="secondary" id="edit-save">Save athlete</button>
 
@@ -4046,6 +4173,8 @@ async function loadAthleteHistory(){
   document.getElementById('edit-position').value=h.athlete.position_group||'';
   document.getElementById('edit-sport').value=h.athlete.sport||'';
   document.getElementById('edit-level').value=h.athlete.level||'';
+  document.getElementById('edit-group').value=h.athlete.squad_group||'';
+  document.getElementById('edit-tags').value=h.athlete.tags||'';
   const list=document.getElementById('hist-sessions');
   if(!h.sessions.length){
     list.innerHTML='<div class="hist-empty">No sessions yet</div>';
@@ -4071,6 +4200,8 @@ async function saveAthleteEdit(){
     position_group:document.getElementById('edit-position').value||null,
     sport:document.getElementById('edit-sport').value||null,
     level:document.getElementById('edit-level').value||null,
+    squad_group:document.getElementById('edit-group').value.trim()||null,
+    tags:document.getElementById('edit-tags').value.trim()||null,
   };
   Object.keys(body).forEach(k=>{ if(body[k]==null||body[k]==='') delete body[k]; });
   try{
@@ -4576,6 +4707,7 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         if state.latest and state.latest.position_counts is not None:
             state.athletic_start_pos = state.latest.position_counts
         state.athletic_peak_rpm = 0
+        state.athletic_current_set = 1
         state.athletic_reps = []
         state._rep_in_progress = None
         # Optionally open a DB session for this athletic block so reps persist
@@ -4611,6 +4743,14 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             raise HTTPException(409, f"a rep is already in progress (phase={state.athletic_phase})")
         state.athletic_rep_start_requested = True
         return {"ok": True}
+
+    @app.post("/api/c/athletic/new_set")
+    async def phase_c_athletic_new_set():
+        """Begin a new set. Subsequent reps are grouped under the new set index."""
+        if not state.athletic_mode:
+            raise HTTPException(409, "athletic mode is not active — start the drill first")
+        state.athletic_current_set += 1
+        return {"ok": True, "set_idx": state.athletic_current_set}
 
     @app.post("/api/c/athletic/stop_rep")
     async def phase_c_athletic_stop_rep():
@@ -4962,6 +5102,28 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                 log.warning("set_rep_validity failed: %s", e)
         return {"rep_idx": idx, "valid": valid, "reason": reason, "note": note}
 
+    @app.patch("/api/c/athletic/rep/{idx}/annotation")
+    async def phase_c_athletic_rep_annotation(idx: int, req: dict):
+        """Set a coach annotation on a rep. Body: {color?, comment?}.
+        Updates the in-memory rep and the DB row (1080 MotionGroup parity)."""
+        rep = _find_rep(idx)
+        if rep is None:
+            raise HTTPException(404, f"rep {idx} not found")
+        color = req.get("color")
+        comment = req.get("comment")
+        if color is not None:
+            rep["color"] = color or None
+        if comment is not None:
+            rep["comment"] = comment or None
+        rep_db_id = rep.get("rep_db_id") or (rep.get("_meta") or {}).get("rep_db_id")
+        if rep_db_id is not None and state.db is not None:
+            try:
+                await state.db_call(persistence.annotate_rep,
+                                     int(rep_db_id), color, comment)
+            except Exception as e:
+                log.warning("annotate_rep failed: %s", e)
+        return {"rep_idx": idx, "color": rep.get("color"), "comment": rep.get("comment")}
+
     @app.get("/api/c/athletic/rep/{idx}/insights")
     async def phase_c_athletic_rep_insights(idx: int, position: str = "back",
                                             planned_modality: Optional[str] = None):
@@ -5044,7 +5206,7 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             raise HTTPException(503, "database not available")
         # Whitelist + light type coercion
         allowed = {"name", "body_mass_kg", "position_group", "sport", "level",
-                   "dob", "external_id"}
+                   "dob", "external_id", "squad_group", "tags"}
         clean = {k: v for k, v in req.items() if k in allowed}
         if "body_mass_kg" in clean and clean["body_mass_kg"] is not None:
             try: clean["body_mass_kg"] = float(clean["body_mass_kg"])

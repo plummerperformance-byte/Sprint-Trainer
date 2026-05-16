@@ -162,6 +162,13 @@ def init_schema(conn: sqlite3.Connection) -> None:
         ("valid", "valid INTEGER NOT NULL DEFAULT 1"),
         ("invalid_reason", "invalid_reason TEXT"),
         ("invalid_note", "invalid_note TEXT"),
+        # Deceleration time (top speed -> zero) — 1080 AccelDecelStats parity.
+        ("decel_time_s", "decel_time_s REAL"),
+        # Per-rep coach annotation — 1080 MotionGroup.color / .comment parity.
+        ("color", "color TEXT"),
+        ("comment", "comment TEXT"),
+        # Set grouping — reps belong to a set within the session (default 1).
+        ("set_idx", "set_idx INTEGER NOT NULL DEFAULT 1"),
     ]:
         _ensure_column(conn, "reps", col, ddl)
     # Athlete metadata extensions
@@ -170,6 +177,9 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "athletes", "sport", "sport TEXT")
     _ensure_column(conn, "athletes", "level", "level TEXT")
     _ensure_column(conn, "athletes", "dob", "dob TEXT")
+    # Squad organisation — 1080 Client.group / .tags parity.
+    _ensure_column(conn, "athletes", "squad_group", "squad_group TEXT")
+    _ensure_column(conn, "athletes", "tags", "tags TEXT")
     # Multi-rig support (§15.3 v1 addendum) — rig_id on sessions, defaulting
     # to 1 so existing rows back-fill cleanly. Seed a default "PPA-1" rig if
     # the table is empty.
@@ -360,7 +370,8 @@ def create_athlete(conn: sqlite3.Connection, name: str) -> int:
 
 def list_athletes(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, name, created_at FROM athletes ORDER BY name COLLATE NOCASE"
+        "SELECT id, name, body_mass_kg, squad_group, tags, created_at "
+        "FROM athletes ORDER BY name COLLATE NOCASE"
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -499,13 +510,14 @@ def get_open_session(conn: sqlite3.Connection) -> Optional[dict]:
 
 # --- reps ---
 
-def start_rep(conn: sqlite3.Connection, session_id: int, t_offset_ms: int) -> int:
+def start_rep(conn: sqlite3.Connection, session_id: int, t_offset_ms: int,
+              set_idx: int = 1) -> int:
     started_at = _now_iso()
     with conn:
         cur = conn.execute(
-            "INSERT INTO reps(session_id, started_at, started_t_offset_ms) "
-            "VALUES (?, ?, ?)",
-            (session_id, started_at, t_offset_ms),
+            "INSERT INTO reps(session_id, started_at, started_t_offset_ms, set_idx) "
+            "VALUES (?, ?, ?, ?)",
+            (session_id, started_at, t_offset_ms, set_idx),
         )
     return cur.lastrowid
 
@@ -560,7 +572,8 @@ def end_rep_with_aggregates(
                   ttpf_ms = ?, ttps_ms = ?,
                   accel_end_ms = ?, decel_start_ms = ?,
                   max_extension_m = ?, drill = ?, splits_s_json = ?,
-                  is_eccentric = ?, samples_json = ?, source = ?
+                  is_eccentric = ?, samples_json = ?, source = ?,
+                  dist_to_max_v_m = ?, decel_time_s = ?
                WHERE id = ?""",
             (
                 ended_at, t_offset_ms,
@@ -577,6 +590,7 @@ def end_rep_with_aggregates(
                 agg.get("max_extension_m"), drill, splits_json,
                 1 if agg.get("is_eccentric") else 0,
                 samples_json, "live",
+                agg.get("dist_to_max_v_m"), agg.get("decel_time_s"),
                 rep_id,
             ),
         )
@@ -609,6 +623,25 @@ def set_rep_validity(conn: sqlite3.Connection, rep_id: int, valid: bool,
         (rep_id,),
     ).fetchone()
     return dict(row) if row else {"id": rep_id, "valid": 1}
+
+
+def annotate_rep(conn: sqlite3.Connection, rep_id: int,
+                 color: Optional[str] = None,
+                 comment: Optional[str] = None) -> dict:
+    """Set a coach annotation on a rep — a colour tag and/or a free-text
+    comment (1080 MotionGroup.color / .comment parity). Pass None to leave a
+    field unchanged; pass "" to clear it."""
+    with conn:
+        if color is not None:
+            conn.execute("UPDATE reps SET color = ? WHERE id = ?",
+                         (color or None, rep_id))
+        if comment is not None:
+            conn.execute("UPDATE reps SET comment = ? WHERE id = ?",
+                         (comment or None, rep_id))
+    row = conn.execute(
+        "SELECT id, color, comment FROM reps WHERE id = ?", (rep_id,),
+    ).fetchone()
+    return dict(row) if row else {"id": rep_id}
 
 
 def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
@@ -957,7 +990,7 @@ def delete_template(conn: sqlite3.Connection, template_id: int) -> None:
 def update_athlete(conn: sqlite3.Connection, athlete_id: int, **fields) -> dict:
     """Partial update of an athlete row. Whitelisted fields only."""
     allowed = {"name", "body_mass_kg", "position_group", "sport", "level",
-               "dob", "external_id"}
+               "dob", "external_id", "squad_group", "tags"}
     sets = []
     vals: list = []
     for k, v in fields.items():
@@ -975,7 +1008,7 @@ def update_athlete(conn: sqlite3.Connection, athlete_id: int, **fields) -> dict:
 def get_athlete(conn: sqlite3.Connection, athlete_id: int) -> Optional[dict]:
     row = conn.execute(
         "SELECT id, name, body_mass_kg, position_group, sport, level, dob, "
-        "       external_id, created_at FROM athletes WHERE id = ?",
+        "       external_id, squad_group, tags, created_at FROM athletes WHERE id = ?",
         (athlete_id,),
     ).fetchone()
     return dict(row) if row else None
