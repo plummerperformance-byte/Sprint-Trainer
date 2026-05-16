@@ -4249,6 +4249,28 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   for(var bi=0;bi<abs.length;bi++){
     abs[bi].onclick=function(){ axis=this.getAttribute('data-axis'); setBtns(); render(); postCurve(); };
   }
+  // §13 Curve presets — replace the 6 points with a named shape, scaled off
+  // the current base load. "Custom" keeps whatever is drawn.
+  function clampPt(v){ return Math.max(0, Math.min(KGMAX, Math.round(v*2)/2)); }
+  var CURVE_PRESETS = {
+    flat:        function(b){ return [b,b,b,b,b,b]; },
+    sprint_accel:function(b){ return [1.5*b,1.5*b,1.3*b,b,0.7*b,0.6*b]; },
+    plateau_drop:function(b){ return [b,b,b,b,0.7*b,0.4*b]; },
+    pyramid:     function(b){ return [0.5*b,0.9*b,1.3*b,1.3*b,0.9*b,0.5*b]; },
+    block_start: function(b){ return [2*b,1.6*b,1.2*b,b,0.9*b,0.8*b]; },
+  };
+  var cpBtns=document.querySelectorAll('.curve-preset');
+  for(var ci=0;ci<cpBtns.length;ci++){
+    cpBtns[ci].onclick=function(){
+      var key=this.getAttribute('data-curve');
+      for(var x=0;x<cpBtns.length;x++) cpBtns[x].classList.toggle('active',cpBtns[x]===this);
+      if(key==='custom') return;   // keep the manually-drawn points
+      var base=Math.max.apply(null,kg)||5;
+      kg=CURVE_PRESETS[key](base).map(clampPt);
+      if(axis==='off' && key!=='flat') axis='distance';
+      setBtns(); render(); postCurve();
+    };
+  }
   fetch('/api/c/state').then(function(r){return r.json();}).then(function(j){
     var cfg=j.config||{};
     if(cfg.curve_axis) axis=cfg.curve_axis;
