@@ -8,3 +8,4 @@ Pillow>=10.0
 qrcode>=8.0
 pywebview>=6.0
 pystray>=0.19
+pytest>=8.0

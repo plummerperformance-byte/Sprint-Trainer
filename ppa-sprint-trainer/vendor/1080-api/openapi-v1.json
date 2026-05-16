@@ -1,0 +1,3397 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "1080 Motion Public API",
+    "description": "<p>To use the API you need to provide a valid 1080 API Key. The key can be created when logging in to the <a href=\"https://webapp.1080motion.com/Admin/ApiKeys/\">1080 Web App</a>.<br/>When you have a key, set the <tt>X-1080-API-Key</tt> HTTP header with the API key.</p>\n<p>To learn more, see the <a href='https://github.com/1080Motion/API/wiki'>wiki page</a>",
+    "contact": {
+      "name": "1080 API Support",
+      "email": "api@1080motion.com"
+    },
+    "version": "v1"
+  },
+  "servers": [
+    {
+      "url": "https://publicapi.1080motion.com/"
+    }
+  ],
+  "paths": {
+    "/Client": {
+      "get": {
+        "tags": [
+          "Client"
+        ],
+        "summary": "Get all clients",
+        "description": "Gets all the clients that belong to the current organization.",
+        "operationId": "GetClients",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicClient"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Client/{clientId}": {
+      "get": {
+        "tags": [
+          "Client"
+        ],
+        "summary": "Get specific client",
+        "description": "Gets the client with the specified ID.",
+        "operationId": "GetClient",
+        "parameters": [
+          {
+            "name": "clientId",
+            "in": "path",
+            "description": "Id (guid) of the client",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicClient"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing client id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified item does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ExerciseType": {
+      "get": {
+        "tags": [
+          "ExerciseType"
+        ],
+        "summary": "Get all exercises",
+        "description": "Gets the entire exercise library, including public and organization-private exercises.",
+        "parameters": [
+          {
+            "name": "includePublic",
+            "in": "query",
+            "description": "Set to false to not include public exercises. These exercises are created by 1080 Motion and are available to all users",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "includePrivate",
+            "in": "query",
+            "description": "Set to false to not include instructor private exercises. These are exercises created by the current instructor account and can only be used by that instructor.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of exercise types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicExerciseType"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ExerciseType/{id}": {
+      "get": {
+        "tags": [
+          "ExerciseType"
+        ],
+        "summary": "Get single exercise",
+        "description": "Gets the exercise type with the specified ID.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested exercise type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicExerciseType"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified item does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ForceVelocity/Session/{sessionId}": {
+      "get": {
+        "tags": [
+          "Force-Velocity (BETA)"
+        ],
+        "summary": "By session",
+        "description": "Gets a force velocity report for all the runs in the specified session.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "description": "Id (guid) of the session to get force velocity data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested force velocity report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForceVelocityReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing/invalid id, or session contains no linear sprint exercises",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified session does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ForceVelocity/Exercise/{exerciseId}": {
+      "get": {
+        "tags": [
+          "Force-Velocity (BETA)"
+        ],
+        "summary": "By exercise",
+        "description": "Gets a force velocity report for all the runs in the specified exercise.",
+        "parameters": [
+          {
+            "name": "exerciseId",
+            "in": "path",
+            "description": "Id (guid) of the exercise to get force velocity data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested force velocity report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForceVelocityReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified exercise does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ForceVelocity/Set/{setId}": {
+      "get": {
+        "tags": [
+          "Force-Velocity (BETA)"
+        ],
+        "summary": "By set",
+        "description": "Gets a force velocity report for all the runs in the specified set.",
+        "parameters": [
+          {
+            "name": "setId",
+            "in": "path",
+            "description": "Id (guid) of the set to get force velocity data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested force velocity report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForceVelocityReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified set does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ForceVelocity/Runs": {
+      "get": {
+        "tags": [
+          "Force-Velocity (BETA)"
+        ],
+        "summary": "By runs",
+        "description": "Gets force velocity reports for the specified runs (motion groups).",
+        "parameters": [
+          {
+            "name": "runIds",
+            "in": "query",
+            "description": "Id (guid) of the runs to get force velocity reports for",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested force velocity reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ForceVelocityReport"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified runs do not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ForceVelocity/Run/{runId}": {
+      "get": {
+        "tags": [
+          "Force-Velocity (BETA)"
+        ],
+        "summary": "By run",
+        "description": "Gets a force velocity report for the specified run (motion group).",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "description": "Id (guid) of the run to get a force velocity report for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested force velocity report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForceVelocityReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id or no data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/LoadVelocity/Session/{sessionId}": {
+      "get": {
+        "tags": [
+          "Load-Velocity"
+        ],
+        "summary": "By session",
+        "description": "Gets a load velocity report for all the runs in the specified session.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "description": "Id (guid) of the session to get training data for. All sets under all exercises will be used to calculate the report",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "includeLinearExercises",
+            "in": "query",
+            "description": "If true, include reports for linear sprint exercises",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeRepExercises",
+            "in": "query",
+            "description": "If true, include reports for repetition style exercises (single, synchro, synchro smith)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested load velocity reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LoadVelocityReportCollection"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing/invalid id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified session does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/LoadVelocity/Exercise/{exerciseId}": {
+      "get": {
+        "tags": [
+          "Load-Velocity"
+        ],
+        "summary": "By exercise",
+        "description": "Gets a load velocity report for all the runs in the specified exercise.\r\nNote: this is different from the exercise type. An exercise in this context is the parent container of a set.",
+        "parameters": [
+          {
+            "name": "exerciseId",
+            "in": "path",
+            "description": "Id (guid) of the exercise to get training data for. All sets under the exercise will be used to calculate the report",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested load velocity report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadVelocityReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified exercise does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/LoadVelocity/Set/{setId}": {
+      "get": {
+        "tags": [
+          "Load-Velocity"
+        ],
+        "summary": "By set",
+        "description": "Gets a load velocity report for all the runs in the specified set.",
+        "parameters": [
+          {
+            "name": "setId",
+            "in": "path",
+            "description": "Id (guid) of the set to get training data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested load velocity report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoadVelocityReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/LoadVelocity/Reps": {
+      "get": {
+        "tags": [
+          "Load-Velocity"
+        ],
+        "summary": "By reps",
+        "description": "Gets a load velocity report for the specified reps (motion groups).",
+        "parameters": [
+          {
+            "name": "repIds",
+            "in": "query",
+            "description": "Id (guid) of the reps to get split report for",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested load velocity reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LoadVelocityReport"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Session": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Get all sessions",
+        "description": "Gets all training sessions.\r\nObsolete: Use /Session/Search instead.",
+        "parameters": [
+          {
+            "name": "client",
+            "in": "query",
+            "description": "Optional client id. Only returns sessions for this client",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "maxAgeDays",
+            "in": "query",
+            "description": "Max number of days of sessions to return. Default 1 (one day/last 24 hours). Specify -1 to return all sessions ever recorded",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Session/Search": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Search for sessions",
+        "description": "Returns high level session info of all sessions matching the specified parameters.\r\nThe returned list is sorted by date, with the most recent session first.",
+        "parameters": [
+          {
+            "name": "client",
+            "in": "query",
+            "description": "Optional client id. Only returns sessions for this client",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "maxAgeDays",
+            "in": "query",
+            "description": "Max number of days of sessions to return. Default 1 (one day/last 24 hours). Specify -1 to return all sessions ever recorded",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": -1
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "Return sessions newer than this data (inclusive). Use ISO_8601 format for best result",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "Return sessions older than this data (inclusive). Use ISO_8601 format for best result",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "exerciseTypes",
+            "in": "query",
+            "description": "Optional list of exercise types to limit the search to only sessions that contain the specified exercise(s).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of exercise types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SessionInfo"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Session/{sessionId}": {
+      "get": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Get specific session",
+        "description": "Gets the session with the specified ID.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "description": "Id (guid) of the session to get",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No session id was specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified session does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Session/Many": {
+      "post": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Get multiple sessions",
+        "description": "Downloads multiple sessions in one request.",
+        "requestBody": {
+          "description": "",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "text/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Requested sessions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicSession"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No session id was specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Split/Session/{sessionId}": {
+      "get": {
+        "tags": [
+          "Split"
+        ],
+        "summary": "Get session splits",
+        "description": "Gets a split report for all the runs in the specified session.",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "description": "Id (guid) of the session to get training data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "splitLength",
+            "in": "query",
+            "description": "Length of each split (in meters or yards depending on the value of useYards)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double",
+              "default": 5
+            }
+          },
+          {
+            "name": "useYards",
+            "in": "query",
+            "description": "True if split length is in yards. All returned data will also be in yards",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeRawPeaksAndAverages",
+            "in": "query",
+            "description": "True include peak and average stats for each split.\r\n    This data comes from the raw samples and is not as reliable as the TopSpeed, MaxForce and MaxPower values\r\n    that instead are derived from the smooth filtered curve data. Provided for legacy purpose only",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested split reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Split/Exercise/{exerciseId}": {
+      "get": {
+        "tags": [
+          "Split"
+        ],
+        "summary": "Get exercise splits",
+        "description": "Gets a split report for all the runs in the specified exercise.",
+        "parameters": [
+          {
+            "name": "exerciseId",
+            "in": "path",
+            "description": "Id (guid) of the set to get training data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "splitLength",
+            "in": "query",
+            "description": "Length of each split (in meters or yards depending on the value of useYards)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double",
+              "default": 5
+            }
+          },
+          {
+            "name": "useYards",
+            "in": "query",
+            "description": "True if split length is in yards. All returned data will also be in yards",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeRawPeaksAndAverages",
+            "in": "query",
+            "description": "True include peak and average stats for each split.\r\n    This data comes from the raw samples and is not as reliable as the TopSpeed, MaxForce and MaxPower values\r\n    that instead are derived from the smooth filtered curve data. Provided for legacy purpose only",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested split reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Split/Set/{setId}": {
+      "get": {
+        "tags": [
+          "Split"
+        ],
+        "summary": "Get set splits",
+        "description": "Gets a split report for all the runs in the specified set.",
+        "parameters": [
+          {
+            "name": "setId",
+            "in": "path",
+            "description": "Id (guid) of the set to get training data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "splitLength",
+            "in": "query",
+            "description": "Length of each split (in meters or yards depending on the value of useYards)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double",
+              "default": 5
+            }
+          },
+          {
+            "name": "useYards",
+            "in": "query",
+            "description": "True if split length is in yards. All returned data will also be in yards",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeRawPeaksAndAverages",
+            "in": "query",
+            "description": "True include peak and average stats for each split.\r\n    This data comes from the raw samples and is not as reliable as the TopSpeed, MaxForce and MaxPower values\r\n    that instead are derived from the smooth filtered curve data. Provided for legacy purpose only",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested split reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitReportCollection"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Split/Runs": {
+      "get": {
+        "tags": [
+          "Split"
+        ],
+        "summary": "Get multiple run splits",
+        "description": "Gets a split report for the specified runs (motion groups).",
+        "operationId": "GetMultipleRuns",
+        "parameters": [
+          {
+            "name": "runIds",
+            "in": "query",
+            "description": "Id (guid) of the runs to get split report for",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "splitLength",
+            "in": "query",
+            "description": "Length of each split (in meters or yards depending on the value of useYards)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double",
+              "default": 5
+            }
+          },
+          {
+            "name": "useYards",
+            "in": "query",
+            "description": "True if split length is in yards. All returned data will also be in yards",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeRawPeaksAndAverages",
+            "in": "query",
+            "description": "True include peak and average stats for each split.\r\n    This data comes from the raw samples and is not as reliable as the TopSpeed, MaxForce and MaxPower values\r\n    that instead are derived from the smooth filtered curve data. Provided for legacy purpose only",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested split reports",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SplitReport"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/Split/Run/{runId}": {
+      "get": {
+        "tags": [
+          "Split"
+        ],
+        "summary": "Get single run split",
+        "description": "Gets a split report for the specified run (motion group).",
+        "operationId": "GetSingleRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "description": "Id (guid) of the run to get a split report for.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "splitLength",
+            "in": "query",
+            "description": "Length of each split (in meters or yards depending on the value of useYards)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double",
+              "default": 5
+            }
+          },
+          {
+            "name": "useYards",
+            "in": "query",
+            "description": "True if the split length is in yards. All returned data will also be in yards",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "includeRawPeaksAndAverages",
+            "in": "query",
+            "description": "True include peak and average stats for each split.\r\n    This data comes from the raw samples and is not as reliable as the TopSpeed, MaxForce and MaxPower values\r\n    that instead are derived from the smooth filtered curve data. Provided for legacy purpose only",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested split report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SplitReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing run id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified run does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/TrainingData/Set/{setId}": {
+      "get": {
+        "tags": [
+          "TrainingData"
+        ],
+        "summary": "Get single set",
+        "description": "Gets the training data for the specified set.\r\nThe samples are returned as a base64 encoded binary array.\r\nFor more info about filter mode, see https://docs.1080motion.com/docs/sample-filtering",
+        "operationId": "GetSingleSet",
+        "parameters": [
+          {
+            "name": "setId",
+            "in": "path",
+            "description": "Id (guid) of the set to get training data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "includeSamples",
+            "in": "query",
+            "description": "True to also include the list of samples.\r\nThis is only needed if you need to plot the curve or perform your own advanced analysis of the samples. Otherwise, use the aggregated values that are always returned.\r\nThe samples are returned as a base64 encoded binary array. See https://github.com/1080Motion/API/wiki/DataSamples-(web-api).",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "filterMode",
+            "in": "query",
+            "description": "Specifies which filter to apply to the returned samples. Note that filters are only applied to horizontal exercises (linear sprint and change of direction). Only used if includeSamples is true.\r\nFor more info about filter mode, see https://docs.1080motion.com/docs/sample-filtering",
+            "schema": {
+              "default": "None",
+              "$ref": "#/components/schemas/DataSampleFilter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested training data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicSetData"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing set id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified set does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/TrainingData/Exercise/{exerciseId}": {
+      "get": {
+        "tags": [
+          "TrainingData"
+        ],
+        "summary": "Get sets in exercise",
+        "description": "Gets the training data for all sets in the specified exercise.\r\nThe samples are returned as a base64 encoded binary array.",
+        "operationId": "GetSetsInExercise",
+        "parameters": [
+          {
+            "name": "exerciseId",
+            "in": "path",
+            "description": "Id (guid) of the exercise to get training data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "includeSamples",
+            "in": "query",
+            "description": "True to also include the list of samples.\r\nThis is only needed if you need to plot the curve or perform your own advanced analysis of the samples. Otherwise, use the aggregated values that are always returned.\r\nThe samples are returned as a base64 encoded binary array. See https://github.com/1080Motion/API/wiki/DataSamples-(web-api).",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "filterMode",
+            "in": "query",
+            "description": "[BETA] Specifies which filter to apply to the returned samples. Note that filters are only applied to horizontal exercises (linear sprint and change of direction). Only used if includeSamples is true",
+            "schema": {
+              "default": "None",
+              "$ref": "#/components/schemas/DataSampleFilter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested training data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicSetData"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing exercise id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified exercise does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/TrainingData/Session/{sessionId}": {
+      "get": {
+        "tags": [
+          "TrainingData"
+        ],
+        "summary": "Get sets in session",
+        "description": "Gets the training data for all sets in the specified session.\r\nThe samples are returned as a base64 encoded binary array.",
+        "operationId": "GetSetsInSession",
+        "parameters": [
+          {
+            "name": "sessionId",
+            "in": "path",
+            "description": "Id (guid) of the session to get training data for",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "includeSamples",
+            "in": "query",
+            "description": "True to also include the list of samples.\r\nThis is only needed if you need to plot the curve or perform your own advanced analysis of the samples. Otherwise, use the aggregated values that are always returned.\r\nThe samples are returned as a base64 encoded binary array. See https://github.com/1080Motion/API/wiki/DataSamples-(web-api).",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "filterMode",
+            "in": "query",
+            "description": "Specifies which filter to apply to the returned samples. Note that filters are only applied to horizontal exercises (linear sprint and change of direction). Only used if includeSamples is true.\r\nFor more info about filter mode, see https://docs.1080motion.com/docs/sample-filtering",
+            "schema": {
+              "default": "None",
+              "$ref": "#/components/schemas/DataSampleFilter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested training data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicSetData"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing session id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or no API key specified",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The API key does not grant access to the specified resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The specified session does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/TrainingData/Search": {
+      "get": {
+        "tags": [
+          "TrainingData"
+        ],
+        "summary": "Search training data",
+        "description": "Returns training data from all sessions matching the specified parameters.\r\nThe returned list is sorted by date, with the most recent session first.\r\nAt most 20 sessions are returned.",
+        "parameters": [
+          {
+            "name": "client",
+            "in": "query",
+            "description": "Optional client id. Only returns sessions for this client",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "maxAgeDays",
+            "in": "query",
+            "description": "Max number of days of sessions to return. Default 1 (one day/last 24 hours). Specify -1 to return all sessions ever recorded",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": -1
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "Return sessions newer than this data (inclusive). Use ISO_8601 format for best result",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "Return sessions older than this data (inclusive). Use ISO_8601 format for best result",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "exerciseTypes",
+            "in": "query",
+            "description": "Optional list of exercise types to limit the search to only sessions that contain the specified exercise(s).",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "format": "uuid"
+              }
+            }
+          },
+          {
+            "name": "includeSamples",
+            "in": "query",
+            "description": "True to also include the list of samples.\r\nThis is only needed if you need to plot the curve or perform your own advanced analysis of the samples. Otherwise, use the aggregated values that are always returned.\r\nThe samples are returned as a base64 encoded binary array. See https://github.com/1080Motion/API/wiki/DataSamples-(web-api).",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "filterMode",
+            "in": "query",
+            "description": "Specifies which filter to apply to the returned samples. Note that filters are only applied to horizontal exercises (linear sprint and change of direction). Only used if includeSamples is true.\r\nFor more info about filter mode, see https://docs.1080motion.com/docs/sample-filtering",
+            "schema": {
+              "default": "None",
+              "$ref": "#/components/schemas/DataSampleFilter"
+            }
+          },
+          {
+            "name": "maxResults",
+            "in": "query",
+            "description": "Max number of results (sets) to return (default 20, max with samples = 50, without samples = 200)",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32",
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of sets with their training data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicSetData"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccelDecelStats": {
+        "type": "object",
+        "properties": {
+          "accelerationMax": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Max acceleration, in m/s^2, over a 0.5 second window.",
+            "format": "double"
+          },
+          "decelerationMax": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Max deceleration, in m/s^2, over a 0.5 second window.",
+            "format": "double"
+          },
+          "decelerationTime": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Time from top speed to zero speed, in seconds.",
+            "format": "double"
+          },
+          "topSpeedPosition": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Position at which the top speed was reached, in meters from the start of the run.",
+            "format": "double"
+          }
+        },
+        "description": "Holds calculated acceleration and deceleration statistics for a motion. Only applicable for horizontal exercises (cod and linear sprint)"
+      },
+      "AggregatedValues": {
+        "type": "object",
+        "properties": {
+          "speed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Speed, in meters per second (m/s)",
+            "format": "double",
+            "example": 8.65
+          },
+          "force": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Force, in newtons (N).",
+            "format": "double",
+            "example": 123.4
+          },
+          "power": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Power, in watts (W)",
+            "format": "double",
+            "example": 809.2
+          },
+          "acceleration": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Acceleration, in meters per second per second (m/s2)",
+            "format": "double",
+            "example": 2.56
+          }
+        },
+        "description": "Holds calculated peak or average values for a motion"
+      },
+      "DataSampleFilter": {
+        "enum": [
+          "None",
+          "Smooth",
+          "Steps"
+        ],
+        "description": "Specifies which filter to apply"
+      },
+      "ExercisePresentationType": {
+        "enum": [
+          "Repetitions",
+          "Linear",
+          "ChangeOfDirection"
+        ],
+        "description": "The different ways training data can be presented in the 1080 software and web applications."
+      },
+      "FailedForceVelocityReport": {
+        "type": "object",
+        "properties": {
+          "motionGroupId": {
+            "type": "string",
+            "description": "The motion group (run) that the calculation failed for",
+            "format": "uuid"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Error details"
+          }
+        },
+        "description": "If a force-velocity calculation fails, this object will contain information about the failure"
+      },
+      "FailedLoadVelocityReport": {
+        "type": "object",
+        "properties": {
+          "trackedSide": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Tracked side for the reps that failed (if applicable)",
+                "$ref": "#/components/schemas/Side"
+              }
+            ]
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Error details"
+          }
+        },
+        "description": "If a load-velocity calculation fails, this object will contain information about the failure"
+      },
+      "ForceVelocityReport": {
+        "type": "object",
+        "properties": {
+          "motionGroupId": {
+            "type": "string",
+            "description": "The motion group (run) that this report is for",
+            "format": "uuid"
+          },
+          "runnerInfo": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Information about the runner that performed the run",
+                "$ref": "#/components/schemas/ForceVelocityRunnerInfo"
+              }
+            ]
+          },
+          "f0": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Theoretical max force",
+            "format": "double"
+          },
+          "v0": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Theoretical max velocity",
+            "format": "double"
+          },
+          "confidence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The R2 (Coefficient of determination) value. Between 0 and 1. Values below 0.98 are starting to become questionable",
+            "format": "double"
+          },
+          "pMax": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Theoretical max power that can be produced by the runner",
+            "format": "double"
+          },
+          "tau": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Acceleration time constant (time to 63% top speed)",
+            "format": "double"
+          },
+          "estimatedUnloadedMaxSpeed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Estimated top speed if the runner was running unloaded",
+            "format": "double"
+          },
+          "ratioOfForceMax": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Maximum ratio of force (difference between horizontal and vertical force output of the athlete). This is defined to happen at t=0.3s",
+            "format": "double"
+          },
+          "ratioOfForceDecrease": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "How the ratio of force output decreases between t=0.3 (i.e. at RFMax) and the time of top speed",
+            "format": "double"
+          }
+        },
+        "description": "Result of a force-velocity calculation for a single horizontal sprint run.\r\nDescribes the runner's speed and force abilities."
+      },
+      "ForceVelocityReportCollection": {
+        "type": "object",
+        "properties": {
+          "sourceEntityId": {
+            "type": "string",
+            "description": "The id of the entity (run/session/exercise/set) that the reports were created for",
+            "format": "uuid"
+          },
+          "sourceEntityType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The type of entity that Guid ForceVelocityReportCollection.SourceEntityId is of."
+          },
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForceVelocityReport"
+            },
+            "description": "List of reports, one for each run"
+          },
+          "failedReports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FailedForceVelocityReport"
+            },
+            "description": "Contains information about failed force-velocity calculations."
+          }
+        },
+        "description": "Contains a list of force velocity reports for multiple runs"
+      },
+      "ForceVelocityRunnerInfo": {
+        "required": [
+          "clientId",
+          "displayName",
+          "height",
+          "weight"
+        ],
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string",
+            "description": "The id of the client that this runner is for",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The name of the client."
+          },
+          "height": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Client height (meters) at the time of the run",
+            "format": "double"
+          },
+          "weight": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Client weight (kg) at the time of the run",
+            "format": "double"
+          }
+        },
+        "description": "Holds information about the client that performed the run that the force velocity report is calculated from"
+      },
+      "HeightAndWeightMeasurement": {
+        "type": "object",
+        "properties": {
+          "entryDate": {
+            "type": "string",
+            "description": "Date when the measurement was done",
+            "format": "date-time"
+          },
+          "height": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Height of the client, in cm. (1 centimeter = 0.01m)",
+            "format": "double",
+            "example": 182.3
+          },
+          "weight": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Weight of the client, in kg.",
+            "format": "double",
+            "example": 74.7
+          }
+        },
+        "description": "Represents a measurement of height and weight for a client at a specific date"
+      },
+      "LoadVelocityReport": {
+        "type": "object",
+        "properties": {
+          "speedType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The speed type that was used for the calculation. Linear sprints use \"TopSpeed\", while rep type exercises use both \"AverageSpeed\" and \"PeakSpeed\""
+          },
+          "trackedSide": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "For exercises which tracks sides (unilateral rep exercises, or linear which has \"Track sides\" set in their exercise type), this will be set to \"Left\" or \"Right\"",
+                "$ref": "#/components/schemas/Side"
+              }
+            ]
+          },
+          "maxLoad": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The (theoretical) maximum load that the client could move when the speed is zero. In kg",
+            "format": "double"
+          },
+          "maxSpeed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The (theoretical) maximum speed that the client could reach at zero load. In m/s",
+            "format": "double"
+          },
+          "slope": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The slope of the load-velocity curve. Will always be negative, since the l/v curve is always pointing downwards",
+            "format": "double"
+          },
+          "maxPower": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The maximum power value that can be reached (in W)",
+            "format": "double"
+          },
+          "confidence": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The R2 (Coefficient of determination) value. Between 0 and 1. Values below 0.98 are starting to become questionable",
+            "format": "double"
+          }
+        },
+        "description": "Result of a load-velocity calculation"
+      },
+      "LoadVelocityReportCollection": {
+        "type": "object",
+        "properties": {
+          "sourceEntityId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The id of the entity (run/session/exercise) that the split reports were created for",
+            "format": "uuid"
+          },
+          "sourceEntityIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The id of the entities (when there are more than one)"
+          },
+          "sourceEntityType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The type of entity that Guid? LoadVelocityReportCollection.SourceEntityId or IList&lt;Guid&gt;? LoadVelocityReportCollection.SourceEntityIds is of."
+          },
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LoadVelocityReport"
+            },
+            "description": "List of reports. Each report is a different speed type (TopSpeed, AverageSpeed, PeakSpeed) and/or side (Left, Right)"
+          },
+          "failedReports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FailedLoadVelocityReport"
+            },
+            "description": "Contains information about failed load-velocity calculations."
+          }
+        },
+        "description": "Contains a list of load velocity reports for a request"
+      },
+      "PhaseDisplayMode": {
+        "enum": [
+          "Concentric",
+          "Eccentric",
+          "Both"
+        ],
+        "description": "Which phase to show when viewing the bar chart of a rep style exercise."
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PublicClient": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id for this entity",
+            "format": "uuid"
+          },
+          "created": {
+            "type": "string",
+            "description": "Date and time when the entity was created",
+            "format": "date-time"
+          },
+          "edited": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last edited",
+            "format": "date-time"
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Name of the client.",
+            "example": "John Doe"
+          },
+          "height": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Height of the client, in cm. (1 centimeter = 0.01m)",
+            "format": "float",
+            "example": 185
+          },
+          "weight": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Current weight of the client, in kg.",
+            "format": "float",
+            "example": 78.3
+          },
+          "dateOfBirth": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional date of birth.",
+            "format": "date-time"
+          },
+          "group": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The group (if any) that this client is placed in"
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Get or sets the list of tags associated with this client"
+          },
+          "externalId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The external Id of the client, if any"
+          },
+          "historicalMeasurements": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/HeightAndWeightMeasurement"
+            },
+            "description": "Historical measurements of body weight and height for this client"
+          }
+        },
+        "description": "Represents a client in the database. All training data is logged on a client"
+      },
+      "PublicExercise": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id for this entity",
+            "format": "uuid"
+          },
+          "created": {
+            "type": "string",
+            "description": "Date and time when the entity was created",
+            "format": "date-time"
+          },
+          "edited": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last edited",
+            "format": "date-time"
+          },
+          "exerciseTypeId": {
+            "type": "string",
+            "description": "The type of exercise.",
+            "format": "uuid"
+          },
+          "exerciseTypeName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Name of the exercise type"
+          },
+          "sets": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PublicSet"
+            },
+            "description": "List of sets performed for this exercise in the current session"
+          }
+        },
+        "description": "An exercise is a grouping of reps of the same exercise type inside a session."
+      },
+      "PublicExerciseType": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id for this entity",
+            "format": "uuid"
+          },
+          "created": {
+            "type": "string",
+            "description": "Date and time when the entity was created",
+            "format": "date-time"
+          },
+          "edited": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last edited",
+            "format": "date-time"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Name given to this exercise type",
+            "example": "Running"
+          },
+          "instructions": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Optional instructions for this exercise",
+            "example": "Position runner at starting point..."
+          },
+          "isBilateral": {
+            "type": "boolean",
+            "description": "True if the exercise separates left from right"
+          },
+          "isPublic": {
+            "type": "boolean",
+            "description": "True if this is a public exercise type (accessible to all 1080 users) or if it is private to the current organization."
+          },
+          "archTypeName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Name of the arch type for this exercise.",
+            "example": "SingleRepetitions"
+          },
+          "archTypeDisplayName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Display name version of the string? PublicExerciseType.ArchTypeName. This is the name that gets displayed to the user",
+            "example": "Change of Direction"
+          },
+          "presentationType": {
+            "description": "How training data is presented in the user interface.",
+            "$ref": "#/components/schemas/ExercisePresentationType"
+          }
+        },
+        "description": "Represents an exercise type from the exercise library."
+      },
+      "PublicMotion": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "string",
+            "description": "Time the motion was created",
+            "format": "date-time"
+          },
+          "resistanceValues": {
+            "description": "Machine load and speed settings at the time of the rep",
+            "$ref": "#/components/schemas/Resistance"
+          },
+          "averageValues": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Calculated average values for this motion",
+                "$ref": "#/components/schemas/AggregatedValues"
+              }
+            ]
+          },
+          "peakValues": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Calculated peak values for this motion",
+                "$ref": "#/components/schemas/AggregatedValues"
+              }
+            ]
+          },
+          "accelDecelStats": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "For horizontal exercises (cod/linear sprinting), this contains the acceleration and deceleration statistics.",
+                "$ref": "#/components/schemas/AccelDecelStats"
+              }
+            ]
+          },
+          "totalDistance": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Total moved distance (in meters) for this motion",
+            "format": "double",
+            "example": 20
+          },
+          "totalTime": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Total time (in seconds) for this motion",
+            "format": "double",
+            "example": 10.3
+          },
+          "topSpeed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "description": "Calculated top speed, in m/s. Only set for linear and CoD exercises",
+            "format": "float",
+            "example": 9.34
+          },
+          "isEccentric": {
+            "type": "boolean",
+            "description": "True if the motion is eccentric (moving towards the machine), false otherwise"
+          },
+          "phaseName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "For Cod exercises, this is the phase name (e.g. \"1a\", \"1b\", \"2a\", etc.)"
+          },
+          "sampleData": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Stream of data samples that comprise this motion.",
+            "format": "byte",
+            "example": "base64 encoded sample array data"
+          }
+        },
+        "description": "The motion contains information about the actual work done. Both in term of aggregated Average/Peak values as well as\r\nthe list of data samples recorded from the machine."
+      },
+      "PublicMotionGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id for this entity",
+            "format": "uuid"
+          },
+          "created": {
+            "type": "string",
+            "description": "Date and time when the entity was created",
+            "format": "date-time"
+          },
+          "edited": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last edited",
+            "format": "date-time"
+          },
+          "color": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Color, in rgb hex format (for example FFC627 or 404040)",
+            "example": "FFC627"
+          },
+          "comment": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "User entered color for the rep",
+            "example": "User entered comment"
+          },
+          "side": {
+            "description": "The side (if applicable)",
+            "$ref": "#/components/schemas/Side"
+          },
+          "motions": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PublicMotion"
+            },
+            "description": "Motions for this rep"
+          }
+        },
+        "description": "Represents a single rep in a set (or run for sprint)"
+      },
+      "PublicSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id for this entity",
+            "format": "uuid"
+          },
+          "created": {
+            "type": "string",
+            "description": "Date and time when the entity was created",
+            "format": "date-time"
+          },
+          "edited": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last edited",
+            "format": "date-time"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Id of the client that performed the training session",
+            "format": "uuid"
+          },
+          "exercises": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PublicExercise"
+            },
+            "description": "List of exercises in the session"
+          }
+        },
+        "description": "Represents a training session"
+      },
+      "PublicSet": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id for this entity",
+            "format": "uuid"
+          },
+          "created": {
+            "type": "string",
+            "description": "Date and time when the entity was created",
+            "format": "date-time"
+          },
+          "edited": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Date and time when the entity was last edited",
+            "format": "date-time"
+          },
+          "viewSettings": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Controls how the data for this set is displayed. Things like unit,",
+                "$ref": "#/components/schemas/SetViewSettings"
+              }
+            ]
+          },
+          "externalLoad": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "Configured external load. Only applicable for synchro smith exercises",
+            "format": "int32"
+          }
+        },
+        "description": "A set is the container of the actual reps."
+      },
+      "PublicSetData": {
+        "type": "object",
+        "properties": {
+          "setId": {
+            "type": "string",
+            "description": "Id of the set that the data belongs to",
+            "format": "uuid"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Client that performed the set",
+            "format": "uuid"
+          },
+          "exerciseTypeId": {
+            "type": "string",
+            "description": "The ID of the exercise type from the exercise library",
+            "format": "uuid"
+          },
+          "exerciseName": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The name of the exercise that was performed."
+          },
+          "motionGroups": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/PublicMotionGroup"
+            },
+            "description": "List of reps for this set"
+          }
+        },
+        "description": "Holds the training data for a set (reps)"
+      },
+      "Resistance": {
+        "type": "object",
+        "properties": {
+          "concentricLoad": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Amount of concentric load set on the machine (in kg)",
+            "format": "float",
+            "example": 3
+          },
+          "eccentricLoad": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Amount of eccentric load set on the machine (in kg)",
+            "format": "float",
+            "example": 3
+          },
+          "mode": {
+            "type": "string",
+            "description": "The mode the machine was in. E.g. \"NFW\", \"Isotonic\"",
+            "example": "NFW"
+          },
+          "gear": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The gear. One of 1 or 2",
+            "format": "int32",
+            "example": 1
+          },
+          "concentricSpeedLimit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The concentric speed limit set on the machine (in m/s).",
+            "format": "float",
+            "example": 14
+          },
+          "eccentricSpeedLimit": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "The eccentric speed limit set on the machine (in m/s).",
+            "format": "float",
+            "example": 8
+          }
+        },
+        "description": "The machine settings at the time of training"
+      },
+      "SessionInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique id of the session",
+            "format": "uuid"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "Time when the session was created",
+            "format": "date-time"
+          },
+          "clientId": {
+            "type": "string",
+            "description": "Id of the client that the session is for",
+            "format": "uuid"
+          }
+        },
+        "description": "Basic information about a training session"
+      },
+      "SetViewSettings": {
+        "type": "object",
+        "properties": {
+          "phaseDisplayMode": {
+            "description": "Which phase of motion is shown (reps only).",
+            "$ref": "#/components/schemas/PhaseDisplayMode"
+          },
+          "unit": {
+            "description": "Which value that is shown",
+            "$ref": "#/components/schemas/UnitKind"
+          },
+          "xUnit": {
+            "description": "Unit used for the x axis when the motion is plotted on an x/y plot",
+            "$ref": "#/components/schemas/UnitKind"
+          }
+        },
+        "description": "Settings controlling how the data of a set is presented"
+      },
+      "Side": {
+        "enum": [
+          "Unknown",
+          "Left",
+          "Right",
+          null
+        ]
+      },
+      "SplitData": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Start position",
+            "format": "double"
+          },
+          "end": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "End position",
+            "format": "double"
+          },
+          "time": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Time for the split, in seconds",
+            "format": "double"
+          },
+          "topSpeed": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Top speed for the split, in meters per second. This value is taken from the smooth filtered speed curve and provides a better speed value than the average and peaks",
+            "format": "double"
+          },
+          "maxForce": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Max horizontal force (in newtons) for this split. This force value is taken from the smooth filtered force curve and provides a better value than the average and peaks",
+            "format": "double"
+          },
+          "maxPower": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Max horizontal power (in watts) for this split. This power value is taken from the smooth filtered force and speed curve and provides a better power value than the average and peaks",
+            "format": "double"
+          },
+          "averages": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Average values (speed, power, force, accel) for the split. Provided for legacy purpose only - use TopSpeed, MaxForce and MaxPower instead",
+                "$ref": "#/components/schemas/AggregatedValues"
+              }
+            ]
+          },
+          "peaks": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Peak values (speed, power, force, accel) for the split. Provided for legacy purpose only - use TopSpeed, MaxForce and MaxPower instead",
+                "$ref": "#/components/schemas/AggregatedValues"
+              }
+            ]
+          }
+        },
+        "description": "Data for a single split inside a split report"
+      },
+      "SplitReport": {
+        "type": "object",
+        "properties": {
+          "motionGroupId": {
+            "type": "string",
+            "description": "The motion group (run) that this split report is for",
+            "format": "uuid"
+          },
+          "splits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SplitData"
+            },
+            "description": "Split data"
+          },
+          "splitLength": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "description": "Configured split length, in meters",
+            "format": "double"
+          },
+          "isYards": {
+            "type": "boolean",
+            "description": "True if the lengths are in yards, false if in meters"
+          }
+        },
+        "description": "A split report for a single run"
+      },
+      "SplitReportCollection": {
+        "type": "object",
+        "properties": {
+          "sourceEntityId": {
+            "type": "string",
+            "description": "The id of the entity (run/session/exercise) that the split reports were created for",
+            "format": "uuid"
+          },
+          "sourceEntityType": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The type of entity that Guid SplitReportCollection.SourceEntityId is of."
+          },
+          "reports": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SplitReport"
+            },
+            "description": "List of reports, one for each run"
+          }
+        },
+        "description": "Contains a list of split reports for multiple runs"
+      },
+      "UnitKind": {
+        "enum": [
+          "Position",
+          "Speed",
+          "Acceleration",
+          "Force",
+          "Power",
+          "Time"
+        ],
+        "description": "The different units supported"
+      }
+    },
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "description": "1080 Motion Api Key",
+        "name": "X-1080-API-Key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "ApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Client"
+    },
+    {
+      "name": "ExerciseType"
+    },
+    {
+      "name": "Force-Velocity (BETA)"
+    },
+    {
+      "name": "Load-Velocity"
+    },
+    {
+      "name": "Session"
+    },
+    {
+      "name": "Split"
+    },
+    {
+      "name": "TrainingData"
+    }
+  ]
+}
