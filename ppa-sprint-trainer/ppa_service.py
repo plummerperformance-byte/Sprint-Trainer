@@ -1338,8 +1338,23 @@ PHASE_C_HTML = """<!doctype html>
 
   /* Chart card */
   .chart-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;
-              min-height:280px;display:flex;flex-direction:column;justify-content:center;align-items:stretch}
+              min-height:280px;display:flex;flex-direction:column;justify-content:center;
+              align-items:stretch;position:relative}
   .chart-card.hidden{display:none}
+  /* Per-mode intro card (§12) — first-time-per-mode overlay on the chart */
+  .mode-intro{position:absolute;inset:0;background:var(--card);border-radius:14px;z-index:6;
+              display:flex;flex-direction:column;justify-content:center;align-items:center;
+              text-align:center;padding:24px;gap:10px}
+  .mode-intro[hidden]{display:none}
+  .mi-title{font-size:15px;font-weight:700;color:var(--accent);letter-spacing:0.06em;text-transform:uppercase}
+  .mi-diagram svg{display:block}
+  .mi-text{font-size:13px;color:var(--fg);line-height:1.55;max-width:44ch}
+  .mi-actions{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+  .mi-got{padding:10px 18px;font-size:14px;font-weight:700;background:var(--accent);
+          color:#0a0a0c;border:0;border-radius:9px;cursor:pointer;min-height:44px}
+  .mi-never{padding:10px 16px;font-size:13px;background:transparent;color:var(--muted);
+            border:1px solid var(--line);border-radius:9px;cursor:pointer;min-height:44px}
+  .mi-never:hover{color:var(--fg)}
   .chart-empty{color:var(--muted);text-align:center;font-size:14px;padding:60px 0}
   #live-chart{width:100%;height:240px;background:#0a0a0c;border:1px solid var(--line);border-radius:6px}
 
@@ -1672,6 +1687,15 @@ PHASE_C_HTML = """<!doctype html>
     <div class="chart-card" id="chart-card">
       <div class="chart-empty" id="chart-empty">No rep yet — start a drill to see live data here.</div>
       <svg id="live-chart" viewBox="0 0 600 240" preserveAspectRatio="none" style="display:none"></svg>
+      <div class="mode-intro" id="mode-intro" hidden>
+        <div class="mi-title" id="mi-title"></div>
+        <div class="mi-diagram" id="mi-diagram"></div>
+        <div class="mi-text" id="mi-text"></div>
+        <div class="mi-actions">
+          <button type="button" class="mi-got" id="mi-got">Got it</button>
+          <button type="button" class="mi-never" id="mi-never">Don't show again</button>
+        </div>
+      </div>
     </div>
 
     <div class="stats-card">
@@ -3127,7 +3151,11 @@ function applyMode(mode, opts){
   }
 }
 document.querySelectorAll('.mode-pill').forEach(p=>{
-  p.addEventListener('click', ()=> applyMode(p.getAttribute('data-mode')));
+  p.addEventListener('click', ()=>{
+    const m=p.getAttribute('data-mode');
+    applyMode(m);
+    if(typeof maybeShowModeIntro==='function') maybeShowModeIntro(m);
+  });
 });
 applyMode('resisted', {push:false});
 
@@ -3233,6 +3261,76 @@ function renderPresetTarget(){
     (done ? (' — '+(hits>=Math.ceil(t.reps*0.8)?'session on plan':'short of plan'))
           : (' · '+Math.max(0,t.reps-reps.length)+' reps to go'))+'</div>';
 }
+
+// ============== PER-MODE INTRO CARDS (§12) ==============
+const MODE_INTRO = {
+  resisted:{
+    title:'Resisted Sprint',
+    text:'Athlete starts about 1 m in front of the rig. On Start rep the motor applies the working load — the athlete sprints away from the rig.',
+    svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<line x1="30" y1="30" x2="116" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
+        '<circle cx="124" cy="30" r="9" fill="#f0f0f3"/>'+
+        '<line x1="138" y1="30" x2="178" y2="30" stroke="#5aa86a" stroke-width="3"/>'+
+        '<path d="M184 30 l-10 -6 v12 z" fill="#5aa86a"/></svg>'},
+  assisted:{
+    title:'Assisted Sprint',
+    text:'Walk the cable out so the athlete is past the end zone. On Start rep the motor tows the athlete back toward the rig — an overspeed run.',
+    svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<line x1="30" y1="30" x2="158" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
+        '<circle cx="166" cy="30" r="9" fill="#f0f0f3"/>'+
+        '<line x1="150" y1="30" x2="40" y2="30" stroke="#5aa86a" stroke-width="3"/>'+
+        '<path d="M34 30 l10 -6 v12 z" fill="#5aa86a"/></svg>'},
+  cod:{
+    title:'Change of Direction',
+    text:'Set the zero point at least 0.15 m from the start. The athlete sprints out and returns — the motor resists both the way out and the way back (eccentric load on the return).',
+    svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<line x1="30" y1="30" x2="118" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
+        '<circle cx="124" cy="30" r="9" fill="#f0f0f3"/>'+
+        '<line x1="138" y1="22" x2="178" y2="22" stroke="#d4823a" stroke-width="3"/>'+
+        '<path d="M184 22 l-10 -5 v10 z" fill="#d4823a"/>'+
+        '<line x1="178" y1="38" x2="138" y2="38" stroke="#5aa86a" stroke-width="3"/>'+
+        '<path d="M132 38 l10 -5 v10 z" fill="#5aa86a"/></svg>'},
+  gym:{
+    title:'Gym',
+    text:'Static position. Direction OUT = the cable extends on the concentric (lifting) phase; Direction IN = it retracts. Set concentric and eccentric weights separately.',
+    svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<line x1="30" y1="30" x2="110" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
+        '<circle cx="118" cy="30" r="9" fill="#f0f0f3"/>'+
+        '<line x1="118" y1="14" x2="118" y2="6" stroke="#5aa86a" stroke-width="3"/>'+
+        '<path d="M118 2 l-5 9 h10 z" fill="#5aa86a"/>'+
+        '<line x1="118" y1="46" x2="118" y2="54" stroke="#d4823a" stroke-width="3"/>'+
+        '<path d="M118 58 l-5 -9 h10 z" fill="#d4823a"/></svg>'},
+};
+const _introSeenSession = new Set();
+function maybeShowModeIntro(mode){
+  const intro=MODE_INTRO[mode];
+  if(!intro) return;
+  if(localStorage.getItem('ppa.modeIntroSeen.'+mode)==='1') return;
+  if(_introSeenSession.has(mode)) return;
+  const card=document.getElementById('mode-intro');
+  if(!card) return;
+  document.getElementById('mi-title').textContent=intro.title;
+  document.getElementById('mi-diagram').innerHTML=intro.svg;
+  document.getElementById('mi-text').textContent=intro.text;
+  card.setAttribute('data-mode',mode);
+  card.hidden=false;
+}
+(function(){
+  const card=document.getElementById('mode-intro');
+  if(!card) return;
+  document.getElementById('mi-got').onclick=()=>{
+    _introSeenSession.add(card.getAttribute('data-mode'));
+    card.hidden=true;
+  };
+  document.getElementById('mi-never').onclick=()=>{
+    localStorage.setItem('ppa.modeIntroSeen.'+card.getAttribute('data-mode'),'1');
+    card.hidden=true;
+  };
+})();
 
 // ============== BT HID INPUT LAYER (§2.6) ==============
 // Abstraction so a coach could pair a presenter remote / footswitch and have
@@ -3842,6 +3940,9 @@ SETUP_HTML = """<!doctype html>
           <label><input type="checkbox" id="cfg-auto-stop" checked> Full Auto rep detection</label>
         </div>
         <div class="meta" style="margin-top:6px">Rep auto-ends ~1s after the athlete stops (cable below 0.2 m/s). Turn off for flying sprints with a long coast-down.</div>
+        <div class="divider"></div>
+        <button type="button" class="ghost" id="reset-tips" style="width:100%">Reset onboarding tips</button>
+        <div class="meta" style="margin-top:6px">Brings back the per-mode intro cards on the live screen.</div>
       </div>
 
       <div class="card">
@@ -4185,6 +4286,13 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   const stored=localStorage.getItem('ppa.setup.tab');
   show((stored && document.querySelector('section[data-panel="'+stored+'"]'))?stored:'athletes');
 })();
+
+// Reset per-mode onboarding tips (§12)
+document.getElementById('reset-tips').onclick=()=>{
+  Object.keys(localStorage).filter(k=>k.indexOf('ppa.modeIntroSeen.')===0)
+    .forEach(k=>localStorage.removeItem(k));
+  alert('Onboarding tips reset — they will show again on the live screen.');
+};
 
 loadAthletes();
 loadTemplateList();
