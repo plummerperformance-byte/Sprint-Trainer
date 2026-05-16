@@ -3178,15 +3178,39 @@ function updateEccNote(){
   const concKg=parseFloat(document.getElementById('cfg-resist').value)||0;
   const eccEl=document.getElementById('cfg-ecc-kg');
   const eccKg=eccEl?(parseFloat(eccEl.value)||0):0;
-  if(concKg<=0||eccKg<=0){ note.textContent=''; return; }
+  if(concKg<=0||eccKg<=0){ note.textContent=''; note.style.color=''; return; }
   const pct=((eccKg-concKg)/concKg)*100;
-  note.textContent = pct>0.5 ? ('+'+pct.toFixed(0)+'% eccentric overload')
-                   : pct<-0.5 ? (Math.abs(pct).toFixed(0)+'% eccentric under-load')
-                   : 'Matched concentric / eccentric';
+  const ratio=eccKg/concKg;
+  if(ratio>1.7){
+    note.style.color='var(--bad)';
+    note.textContent='⚠ Eccentric is '+pct.toFixed(0)+'% above concentric — a very high overload, injury risk.';
+  }else if(ratio>1.4){
+    note.style.color='var(--warn)';
+    note.textContent='⚠ Eccentric is '+pct.toFixed(0)+'% above concentric — high eccentric load.';
+  }else{
+    note.style.color='';
+    note.textContent = pct>0.5 ? ('+'+pct.toFixed(0)+'% eccentric overload')
+                     : pct<-0.5 ? (Math.abs(pct).toFixed(0)+'% eccentric under-load')
+                     : 'Matched concentric / eccentric';
+  }
+}
+// On commit (blur/enter), an extreme overload (>70%) needs an explicit OK.
+function confirmEccOverload(){
+  const concKg=parseFloat(document.getElementById('cfg-resist').value)||0;
+  const eccEl=document.getElementById('cfg-ecc-kg');
+  if(!eccEl||concKg<=0) return;
+  const eccKg=parseFloat(eccEl.value)||0;
+  if(eccKg/concKg>1.7){
+    const pct=((eccKg-concKg)/concKg)*100;
+    const ok=confirm('Eccentric is '+pct.toFixed(0)+'% above concentric. '+
+      'This is a very high overload.\n\nOK = keep the value · Cancel = reset to a safe 40% overload.');
+    if(!ok){ eccEl.value=(concKg*1.4).toFixed(1); }
+    updateEccNote();
+  }
 }
 (function(){
   const e=document.getElementById('cfg-ecc-kg'), r=document.getElementById('cfg-resist');
-  if(e) e.addEventListener('input',updateEccNote);
+  if(e){ e.addEventListener('input',updateEccNote); e.addEventListener('change',confirmEccOverload); }
   if(r) r.addEventListener('input',updateEccNote);
   updateEccNote();
 })();
