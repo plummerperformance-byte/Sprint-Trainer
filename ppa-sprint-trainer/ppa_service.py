@@ -1240,6 +1240,25 @@ PHASE_C_HTML = """<!doctype html>
              text-align:center;transition:background 120ms,color 120ms,border-color 120ms}
   .mode-pill:hover{color:var(--fg);border-color:var(--accent)}
   .mode-pill.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
+
+  /* Session presets — one-tap full session setup */
+  .preset-row{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px}
+  .preset-btn{flex:0 0 auto;min-height:48px;padding:10px 14px;font-size:13px;font-weight:600;
+              background:var(--card);color:var(--fg);border:1px solid var(--line);
+              border-radius:10px;cursor:pointer;white-space:nowrap}
+  .preset-btn:hover{border-color:var(--accent)}
+  .preset-btn.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+  @media (min-width:880px){ .preset-row{flex-wrap:wrap;overflow-x:visible} }
+  .preset-target{background:#0a0a0c;border:1px solid var(--line);border-radius:8px;
+                 padding:10px 12px;margin-bottom:10px;font-size:12px}
+  .preset-target[hidden]{display:none}
+  .pt-label{color:var(--fg);font-weight:600;margin-bottom:6px}
+  .pt-dots{display:flex;gap:5px;flex-wrap:wrap}
+  .pt-dot{width:16px;height:16px;border-radius:50%;border:1px solid var(--line);background:transparent}
+  .pt-dot.hit{background:var(--good);border-color:var(--good)}
+  .pt-dot.miss{background:var(--bad);border-color:var(--bad)}
+  .pt-summary{margin-top:6px;color:var(--muted)}
+
   @media (max-width:414px){
     .mode-bar{flex-wrap:wrap}
     .mode-pill{flex:1 1 calc(50% - 4px);font-size:13px}
@@ -1610,6 +1629,15 @@ PHASE_C_HTML = """<!doctype html>
     <button class="mode-pill" data-mode="gym" role="tab" aria-selected="false">Gym</button>
   </div>
 
+  <div class="preset-row" id="preset-row" role="group" aria-label="Session presets">
+    <button type="button" class="preset-btn" data-preset="match_prep">🏉 Match-prep accel</button>
+    <button type="button" class="preset-btn" data-preset="top_end">⚡ Top-end speed</button>
+    <button type="button" class="preset-btn" data-preset="decel">🛡️ Decel mechanics</button>
+    <button type="button" class="preset-btn" data-preset="overspeed">🪂 Overspeed</button>
+    <button type="button" class="preset-btn" data-preset="power_gym">🏋️ Power gym</button>
+    <button type="button" class="preset-btn" data-preset="fv_test">📊 FV profile</button>
+  </div>
+
   <div class="top-grid">
     <div class="chart-card" id="chart-card">
       <div class="chart-empty" id="chart-empty">No rep yet — start a drill to see live data here.</div>
@@ -1768,6 +1796,7 @@ PHASE_C_HTML = """<!doctype html>
 
   <div class="card">
     <div class="meta" style="margin-bottom:10px">Recent reps</div>
+    <div class="preset-target" id="preset-target" hidden></div>
     <div class="reps-list" id="reps-list"></div>
   </div>
 
@@ -2928,6 +2957,7 @@ function renderRepsList(reps){
       if(e.key==='Enter'||e.key===' '){ e.preventDefault(); activate(); }
     });
   });
+  if(typeof renderPresetTarget==='function') renderPresetTarget();
 }
 
 loadAthletes();
@@ -3102,6 +3132,77 @@ function updateEccNote(){
   if(r) r.addEventListener('input',updateEccNote);
   updateEccNote();
 })();
+
+// ============== SESSION PRESETS (§10) ==============
+const PRESETS = {
+  match_prep:{name:'Match-prep accel',mode:'resisted',drill:'Acceleration',resist_kg:6,resist_distance_m:15,
+    target:{reps:5,metric:'peak_speed_mps',threshold:6.0,cmp:'gte'},target_label:'5 reps · peak v ≥ 6.0 m/s'},
+  top_end:{name:'Top-end speed',mode:'resisted',drill:'Sprint',resist_kg:3,resist_distance_m:40,
+    target:{reps:4,metric:'peak_speed_mps',threshold:8.0,cmp:'gte'},target_label:'4 reps · peak v ≥ 8.0 m/s'},
+  decel:{name:'Decel mechanics',mode:'resisted',drill:'Sprint',resist_kg:2,resist_distance_m:20,
+    target:{reps:6,metric:'peak_speed_mps',threshold:0,cmp:'gte'},target_label:'6 reps · decel focus'},
+  overspeed:{name:'Overspeed sprint',mode:'assisted',drill:'Sprint',resist_kg:2,resist_distance_m:30,
+    target:{reps:4,metric:'peak_speed_mps',threshold:9.5,cmp:'gte'},target_label:'4 reps · peak v ≥ 9.5 m/s'},
+  power_gym:{name:'Power gym',mode:'gym',drill:'FreeTest',resist_kg:50,ecc_kg:70,chain_kg_per_m:2,resist_distance_m:1,
+    target:{reps:15,metric:'peak_power_w',threshold:800,cmp:'gte'},target_label:'15 reps · peak P ≥ 800 W'},
+  fv_test:{name:'FV profile',mode:'resisted',drill:'Acceleration',resist_kg:4,resist_distance_m:20,
+    target:{reps:4,metric:'peak_speed_mps',threshold:0,cmp:'gte'},target_label:'Capture 4 loads for an FV profile'},
+};
+let activePreset=null;
+function applyPreset(key){
+  const p=PRESETS[key]; if(!p) return;
+  activePreset=key;
+  applyMode(p.mode);
+  const setv=(id,v)=>{ const el=document.getElementById(id); if(el&&v!=null) el.value=v; };
+  setv('cfg-resist',p.resist_kg);
+  setv('cfg-resist-dist',p.resist_distance_m);
+  if(p.mode==='gym'){ setv('cfg-ecc-kg',p.ecc_kg); setv('cfg-chain',p.chain_kg_per_m); }
+  if(p.drill){ cfgDrill.value=p.drill; renderDrillGrid(p.mode); }
+  document.querySelectorAll('.preset-btn').forEach(b=>
+    b.classList.toggle('active',b.getAttribute('data-preset')===key));
+  localStorage.setItem('ppa.lastPreset',key);
+  const ce=document.getElementById('chart-empty');
+  if(ce) ce.innerHTML='<div style="font-weight:700;color:var(--accent);font-size:14px">Preset loaded · '+p.name+'</div>'+
+    '<div style="margin-top:6px">'+p.target_label+'</div>'+
+    '<div style="margin-top:10px;color:var(--muted)">Tap Arm rig to begin.</div>';
+  if(typeof updateEccNote==='function') updateEccNote();
+  renderPresetTarget();
+}
+document.querySelectorAll('.preset-btn').forEach(b=>
+  b.addEventListener('click',()=>applyPreset(b.getAttribute('data-preset'))));
+(function(){
+  const last=localStorage.getItem('ppa.lastPreset');
+  if(last&&PRESETS[last]) document.querySelectorAll('.preset-btn').forEach(b=>
+    b.classList.toggle('active',b.getAttribute('data-preset')===last));
+})();
+function repHitsTarget(rep,t){
+  const v=rep[t.metric];
+  if(t.threshold===0) return v!=null;
+  if(v==null) return false;
+  return t.cmp==='lte' ? v<=t.threshold : v>=t.threshold;
+}
+function renderPresetTarget(){
+  const el=document.getElementById('preset-target');
+  if(!el) return;
+  const p=activePreset?PRESETS[activePreset]:null;
+  if(!p){ el.hidden=true; return; }
+  el.hidden=false;
+  const reps=(window._lastReps||[]).filter(r=>r.valid!==false);
+  const t=p.target;
+  let hits=0,dots='';
+  for(let i=0;i<t.reps;i++){
+    const rep=reps[i];
+    let cls='';
+    if(rep){ const ok=repHitsTarget(rep,t); cls=ok?'hit':'miss'; if(ok) hits++; }
+    dots+='<span class="pt-dot '+cls+'"></span>';
+  }
+  const done=reps.length>=t.reps;
+  el.innerHTML='<div class="pt-label">'+p.name+' · '+p.target_label+'</div>'+
+    '<div class="pt-dots">'+dots+'</div>'+
+    '<div class="pt-summary">'+hits+' of '+t.reps+' hit'+
+    (done ? (' — '+(hits>=Math.ceil(t.reps*0.8)?'session on plan':'short of plan'))
+          : (' · '+Math.max(0,t.reps-reps.length)+' reps to go'))+'</div>';
+}
 
 // ============== BT HID INPUT LAYER (§2.6) ==============
 // Abstraction so a coach could pair a presenter remote / footswitch and have
