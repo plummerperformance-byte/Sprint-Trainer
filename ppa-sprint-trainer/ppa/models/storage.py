@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import IntEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -393,6 +394,10 @@ class MotionStorage(_Entity):
     ppa_surface_temp_c: float | None = None
     ppa_video_url: str | None = None
     ppa_rpe: int | None = None               # 1-10
+    # Sprint context — explicit, not implied from is_eccentric (which is about
+    # the gym concentric/eccentric phase). Kept ppa_-prefixed per the hard
+    # constraint (the brief's 4.6 wrote it unprefixed).
+    ppa_direction: Literal["resisted", "assisted"] | None = None
 
 
 # --------------------------------------------------------------------------

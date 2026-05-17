@@ -424,6 +424,7 @@ CREATE TABLE IF NOT EXISTS v2_motions (
     ppa_surface_temp_c     REAL,
     ppa_video_url          TEXT,
     ppa_rpe                INTEGER,
+    ppa_direction          TEXT,
     row_version            INTEGER NOT NULL DEFAULT 0,
     local_db_row_version   INTEGER NOT NULL DEFAULT 0,
     is_locally_edited      INTEGER NOT NULL DEFAULT 0,

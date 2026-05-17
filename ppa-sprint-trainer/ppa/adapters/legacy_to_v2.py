@@ -172,7 +172,7 @@ _MOTION_FIELDS = [
     "avg_acceleration", "top_speed", "work", "distance", "total_distance",
     "duration", "total_duration", "start_position", "stop_position", "data",
     "ppa_environment", "ppa_wind_mps", "ppa_surface_temp_c", "ppa_video_url",
-    "ppa_rpe",
+    "ppa_rpe", "ppa_direction",
 ]
 _SYNC_FIELDS = [
     "row_version", "local_db_row_version", "is_locally_edited",
