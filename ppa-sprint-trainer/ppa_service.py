@@ -1308,7 +1308,8 @@ PHASE_C_HTML = """<!doctype html>
   *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;
        min-height:100vh;display:flex;flex-direction:column}
-  .wrap{flex:1;width:100%;max-width:1200px;margin:0 auto;padding:18px}
+  .wrap{flex:1;width:100%;max-width:1500px;margin:0 auto;padding:18px;
+        display:flex;flex-direction:column}
   /* Keep the topbar + mode bar clear of the fixed phase-pill / e-stop stack.
      Only needed when the sheet isn't open (an open desktop sheet already
      reserves its own column and shifts the e-stop left). */
@@ -1464,8 +1465,13 @@ PHASE_C_HTML = """<!doctype html>
   label{display:block;color:var(--muted);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;margin:0 0 4px}
 
   /* Top grid: chart 60% + stats 40% */
-  .top-grid{display:grid;grid-template-columns:3fr 2fr;gap:14px}
-  @media (max-width:767px){ .top-grid{grid-template-columns:1fr} }
+  /* Top grid grows to fill the viewport so the chart uses the screen. */
+  .top-grid{display:grid;grid-template-columns:3fr 2fr;grid-template-rows:1fr;gap:14px;
+            flex:1 1 auto;min-height:360px;max-height:64vh;margin-bottom:14px}
+  @media (max-width:767px){
+    .top-grid{grid-template-columns:1fr;grid-template-rows:auto auto;
+              flex:0 0 auto;max-height:none}
+  }
 
   /* Chart card */
   .chart-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;
@@ -1487,7 +1493,8 @@ PHASE_C_HTML = """<!doctype html>
             border:1px solid var(--line);border-radius:9px;cursor:pointer;min-height:44px}
   .mi-never:hover{color:var(--fg)}
   .chart-empty{color:var(--muted);text-align:center;font-size:14px;padding:60px 0}
-  #live-chart{width:100%;height:240px;background:#0a0a0c;border:1px solid var(--line);border-radius:6px}
+  #live-chart{width:100%;height:auto;flex:1 1 auto;min-height:220px;
+              background:#0a0a0c;border:1px solid var(--line);border-radius:6px}
 
   /* Stats card */
   .stats-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;
@@ -1776,13 +1783,13 @@ PHASE_C_HTML = """<!doctype html>
   /* Desktop: the sheet is open by default and gets its own column — the main
      content reflows into the space beside it instead of sitting underneath. */
   @media (min-width:1100px){
-    body.sheet-open .wrap{max-width:1200px;margin:0 auto;padding-right:418px}
+    body.sheet-open .wrap{max-width:1500px;margin:0 auto;padding-right:418px}
     body.sheet-open .bottombar{padding-right:398px}
     body.sheet-open #estop-btn,
     body.sheet-open #phase-pill{right:398px}
   }
   @media (min-width:1280px){
-    body.sheet-open .wrap{max-width:1400px}
+    body.sheet-open .wrap{max-width:1800px}
   }
 
   /* Reports (collapsible) */
