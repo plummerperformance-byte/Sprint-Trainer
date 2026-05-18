@@ -67,6 +67,7 @@ IDLE_PERIOD = 1.0 / IDLE_POLL_HZ
 RING_SIZE = 6000  # ~10 minutes at 10 Hz
 VELOCITY_CAP_GAIN = 10.0  # kg of extra resistance per m/s over the velocity cap
 CURVE_POINTS = 6          # resistance-curve control points (evenly spaced on x)
+CURVE_PCT_MAX = 300       # max curve point — % of working resistance
 CURVE_VELOCITY_MAX = 8.0  # m/s — x-axis span for a velocity-based resistance curve
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -225,7 +226,7 @@ class AthleticConfigRequest(BaseModel):
     kg_limit: Optional[float] = None         # configurable max resistance
     velocity_cap_mps: Optional[float] = None
     curve_axis: Optional[str] = None
-    curve_kg: Optional[list[float]] = None
+    curve_pct: Optional[list[float]] = None
     chain_kg_per_m: Optional[float] = None
     eccentric_overload_pct: Optional[float] = None
     concentric_dir: Optional[str] = None
@@ -286,7 +287,8 @@ class ServiceState:
             "resist_distance_m": 15.0,  # distance the athlete is resisted for
             "velocity_cap_mps": 0.0,    # 0 = off; >0 caps cable speed (resisted mode)
             "curve_axis": "off",        # off | distance | velocity — resistance curve
-            "curve_kg": [5.0, 5.0, 5.0, 5.0, 5.0, 5.0],  # 6 evenly-spaced curve points
+            # 6 evenly-spaced curve points, as % of the working resistance.
+            "curve_pct": [100.0, 100.0, 100.0, 100.0, 100.0, 100.0],
             "kg_limit": KG_LIMIT_DEFAULT,  # configurable max resistance (capped at KG_LIMIT_HARD)
             "return_kg": 1.0,
             "return_distance_m": 0.5,
@@ -795,21 +797,22 @@ def _finalise_in_progress_rep(rip: Optional[dict], period: float) -> Optional[di
     return rip
 
 
-def _resistance_curve_kg(curve_kg, x, x_max):
-    """Linear-interpolate the resistance curve. curve_kg is N evenly-spaced
-    points spanning x in [0, x_max]; returns the kg at x."""
-    n = len(curve_kg) if curve_kg else 0
+def _resistance_curve(curve_pct, x, x_max):
+    """Linear-interpolate the resistance curve. curve_pct is N evenly-spaced
+    points (% of working resistance) spanning x in [0, x_max]; returns the
+    percentage at x. 100.0 if no curve is defined."""
+    n = len(curve_pct) if curve_pct else 0
     if n == 0:
-        return 0.0
+        return 100.0
     if n == 1 or x_max <= 0:
-        return curve_kg[0]
+        return curve_pct[0]
     frac = min(max(x / x_max, 0.0), 1.0)
     pos = frac * (n - 1)
     i = int(pos)
     if i >= n - 1:
-        return curve_kg[-1]
+        return curve_pct[-1]
     t = pos - i
-    return curve_kg[i] * (1.0 - t) + curve_kg[i + 1] * t
+    return curve_pct[i] * (1.0 - t) + curve_pct[i + 1] * t
 
 
 async def _athletic_loop(state: "ServiceState"):
@@ -915,14 +918,18 @@ async def _athletic_loop(state: "ServiceState"):
                     band_outer_m = recovery_m + cfg["resist_distance_m"]
                     in_resist_band = recovery_m <= rep_ext_m < band_outer_m
                     if in_resist_band:
-                        # Resistance curve overrides the flat value when enabled.
+                        # Resistance curve shapes the working resistance: each
+                        # point is a % of resist_kg, so the same curve scales
+                        # with whatever working load the coach sets.
                         c_axis = cfg.get("curve_axis", "off")
                         if c_axis == "distance":
-                            target_kg = _resistance_curve_kg(
-                                cfg["curve_kg"], rep_ext_m, cfg["resist_distance_m"])
+                            pct = _resistance_curve(
+                                cfg["curve_pct"], rep_ext_m, cfg["resist_distance_m"])
+                            target_kg = cfg["resist_kg"] * pct / 100.0
                         elif c_axis == "velocity":
-                            target_kg = _resistance_curve_kg(
-                                cfg["curve_kg"], speed_mps, CURVE_VELOCITY_MAX)
+                            pct = _resistance_curve(
+                                cfg["curve_pct"], speed_mps, CURVE_VELOCITY_MAX)
+                            target_kg = cfg["resist_kg"] * pct / 100.0
                         else:
                             target_kg = cfg["resist_kg"]
                         kg_lim = cfg.get("kg_limit", KG_LIMIT_DEFAULT)
@@ -2187,7 +2194,7 @@ let lastCorridor=0;     // current Recovery distance from athletic config (for c
 let drillStartedAt=null; // ms timestamp when athletic_mode flipped True (for session timer)
 let currentMode='resisted'; // active training-mode pill (resisted|assisted|cod|gym)
 // Variable-resistance curve, mirrored from the Adjust panel template picker.
-const vrState={axis:'off',kg:[5,5,5,5,5,5]};
+const vrState={axis:'off',pts:[100,100,100,100,100,100]};  // curve points, % of load
 
 // Gym shows concentric + eccentric as plain kg inputs; the backend wants an
 // overload percentage, so convert here: pct = (ecc-conc)/conc, clamped 0-100.
@@ -2213,7 +2220,7 @@ function buildAthleticCfg(){
     concentric_dir:document.getElementById('cfg-condir').value,
     drill:document.getElementById('cfg-drill').value,
     curve_axis:vrState.axis,
-    curve_kg:vrState.kg,
+    curve_pct:vrState.pts,
   };
 }
 async function armRig(){
@@ -2409,28 +2416,28 @@ async function refreshSuggestedLoad(){
   }
   function renderPreview(){
     const VW=300,VH=90,PL=6,PR=6,PT=10,PB=10,PW=VW-PL-PR,PH=VH-PT-PB;
-    const mx=Math.max.apply(null,vrState.kg.concat([0.5]));
+    const mx=Math.max.apply(null,vrState.pts.concat([10]));
     const x=i=>PL+(i/(N-1))*PW;
     const y=v=>PT+(1-v/mx)*PH;
     const dim=(vrState.axis==='off');
     const col=dim?'#4a4a52':'#d4823a';
     let poly='';
-    for(let i=0;i<N;i++) poly+=x(i).toFixed(1)+','+y(vrState.kg[i]).toFixed(1)+' ';
+    for(let i=0;i<N;i++) poly+=x(i).toFixed(1)+','+y(vrState.pts[i]).toFixed(1)+' ';
     let s='<polyline points="'+poly+'" fill="none" stroke="'+col+'" stroke-width="2"'+
           (dim?' stroke-dasharray="4 3"':'')+'/>';
     for(let j=0;j<N;j++)
-      s+='<circle cx="'+x(j).toFixed(1)+'" cy="'+y(vrState.kg[j]).toFixed(1)+'" r="3.5" fill="'+col+'"/>';
+      s+='<circle cx="'+x(j).toFixed(1)+'" cy="'+y(vrState.pts[j]).toFixed(1)+'" r="3.5" fill="'+col+'"/>';
     svg.innerHTML=s;
     svg.style.opacity=dim?0.6:1;
   }
   function setMeta(){
     if(metaEl) metaEl.textContent=(vrState.axis==='off')
       ? 'Flat working resistance — same load the whole rep.'
-      : 'Load shaped across the resist distance. Edit curves on /setup.';
+      : 'Working resistance shaped across the resist distance (% of the set load). Edit curves on /setup.';
   }
   function postVr(){
     fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({curve_axis:vrState.axis,curve_kg:vrState.kg})}).catch(()=>{});
+      body:JSON.stringify({curve_axis:vrState.axis,curve_pct:vrState.pts})}).catch(()=>{});
   }
   function pick(id,push){
     activeId=id;
@@ -2439,7 +2446,7 @@ async function refreshSuggestedLoad(){
     }else{
       const c=curves.find(x=>String(x.id)===String(id));
       if(c&&c.points&&c.points.length===N){
-        vrState.kg=c.points.slice();
+        vrState.pts=c.points.slice();
         vrState.axis='distance';
       }
     }
@@ -2454,12 +2461,12 @@ async function refreshSuggestedLoad(){
   ]).then(([list,st])=>{
     curves=Array.isArray(list)?list:[];
     const cfg=st.config||{};
-    if(cfg.curve_kg&&cfg.curve_kg.length===N) vrState.kg=cfg.curve_kg.slice();
+    if(cfg.curve_pct&&cfg.curve_pct.length===N) vrState.pts=cfg.curve_pct.slice();
     if(cfg.curve_axis) vrState.axis=cfg.curve_axis;
     activeId='off';
     if(vrState.axis!=='off'){
       const match=curves.find(c=>c.points&&c.points.length===N&&
-        c.points.every((p,i)=>Math.abs(p-vrState.kg[i])<0.01));
+        c.points.every((p,i)=>Math.abs(p-vrState.pts[i])<0.01));
       activeId=match?match.id:'custom';
     }
     renderChips(); setMeta(); renderPreview();
@@ -4770,7 +4777,7 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   wire('audio-rest','ppa.audio.rest');
 })();
 
-// ---- Resistance curve editor + library (draggable 6-point graph) ----
+// ---- Resistance curve editor + library (draggable 6-point graph, % of load) ----
 (function(){
   var svg=document.getElementById('curve-svg');
   if(!svg) return;
@@ -4778,39 +4785,38 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   var libSel=document.getElementById('curve-lib-select');
   var nameInp=document.getElementById('curve-name');
   var saveMsg=document.getElementById('curve-save-msg');
-  var N=6,VW=300,VH=160,PL=34,PR=12,PT=12,PB=24;
-  var PW=VW-PL-PR,PH=VH-PT-PB,KGMAX=30;
+  var N=6,VW=300,VH=160,PL=40,PR=12,PT=12,PB=24;
+  var PW=VW-PL-PR,PH=VH-PT-PB,PCTMAX=250;
   var axis='off';
-  var kg=[5,5,5,5,5,5];
+  var pts=[100,100,100,100,100,100];  // % of working resistance
   var curves=[];        // saved library curves
   var selectedId=null;  // id of the loaded library curve (null = unsaved)
   function ptx(i){ return PL+(i/(N-1))*PW; }
-  function pty(v){ return PT+(1-v/KGMAX)*PH; }
-  function y2kg(y){ var v=(1-(y-PT)/PH)*KGMAX; return Math.max(0,Math.min(KGMAX,v)); }
-  function gridStep(){ return KGMAX>20?10:5; }
+  function pty(v){ return PT+(1-v/PCTMAX)*PH; }
+  function y2pct(y){ var v=(1-(y-PT)/PH)*PCTMAX; return Math.max(0,Math.min(PCTMAX,v)); }
   function render(){
     var s='';
     s+='<rect x="'+PL+'" y="'+PT+'" width="'+PW+'" height="'+PH+'" fill="none" stroke="#2c2c34"/>';
-    for(var k=0;k<=KGMAX;k+=gridStep()){
-      var gy=pty(k);
-      s+='<line x1="'+PL+'" y1="'+gy+'" x2="'+(PL+PW)+'" y2="'+gy+'" stroke="#22222a"/>';
-      s+='<text x="'+(PL-5)+'" y="'+(gy+3)+'" fill="#8a8a96" font-size="9" text-anchor="end">'+k+'</text>';
+    for(var k=0;k<=PCTMAX;k+=50){
+      var gy=pty(k),ref=(k===100);
+      s+='<line x1="'+PL+'" y1="'+gy+'" x2="'+(PL+PW)+'" y2="'+gy+'" stroke="'+(ref?'#5a5a66':'#22222a')+'"'+(ref?' stroke-dasharray="3 2"':'')+'/>';
+      s+='<text x="'+(PL-5)+'" y="'+(gy+3)+'" fill="#8a8a96" font-size="9" text-anchor="end">'+k+'%</text>';
     }
     var xl=(axis==='velocity')?'cable speed (m/s)':(axis==='distance')?'distance (m)':'';
     s+='<text x="'+(PL+PW/2)+'" y="'+(VH-7)+'" fill="#8a8a96" font-size="9" text-anchor="middle">'+xl+'</text>';
     var poly='';
-    for(var i=0;i<N;i++){ poly+=ptx(i)+','+pty(kg[i])+' '; }
+    for(var i=0;i<N;i++){ poly+=ptx(i)+','+pty(pts[i])+' '; }
     s+='<polyline points="'+poly+'" fill="none" stroke="#d4823a" stroke-width="2"/>';
     for(var j=0;j<N;j++){
-      s+='<circle cx="'+ptx(j)+'" cy="'+pty(kg[j])+'" r="7" fill="#d4823a" stroke="#0a0a0c" stroke-width="1.5"/>';
-      s+='<text x="'+ptx(j)+'" y="'+(pty(kg[j])-10)+'" fill="#f0f0f3" font-size="9" text-anchor="middle">'+kg[j].toFixed(1)+'</text>';
+      s+='<circle cx="'+ptx(j)+'" cy="'+pty(pts[j])+'" r="7" fill="#d4823a" stroke="#0a0a0c" stroke-width="1.5"/>';
+      s+='<text x="'+ptx(j)+'" y="'+(pty(pts[j])-10)+'" fill="#f0f0f3" font-size="9" text-anchor="middle">'+Math.round(pts[j])+'%</text>';
     }
     svg.innerHTML=s;
     svg.style.opacity=(axis==='off')?0.4:1;
   }
   function postCurve(){
     fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({curve_axis:axis,curve_kg:kg})}).catch(function(){});
+      body:JSON.stringify({curve_axis:axis,curve_pct:pts})}).catch(function(){});
   }
   function svgPt(e){
     var r=svg.getBoundingClientRect();
@@ -4825,7 +4831,7 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   });
   svg.addEventListener('pointermove',function(e){
     if(drag<0) return;
-    kg[drag]=Math.round(y2kg(svgPt(e).y)*2)/2;
+    pts[drag]=Math.round(y2pct(svgPt(e).y)/5)*5;
     render();
   });
   function endDrag(){ if(drag>=0){ drag=-1; postCurve(); } }
@@ -4839,8 +4845,8 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
       bs[i].style.color=on?'#fff':'#8a8a96';
     }
     if(meta){
-      meta.textContent=(axis==='distance')?'Resistance shaped over distance (0 to resist distance). Drag the points.'
-        :(axis==='velocity')?'Resistance shaped over cable speed (0 to 8 m/s). Drag the points.'
+      meta.textContent=(axis==='distance')?'Each point is a % of the working resistance, shaped over the resist distance. Drag the points.'
+        :(axis==='velocity')?'Each point is a % of the working resistance, shaped over cable speed (0–8 m/s). Drag the points.'
         :'Off — flat working resistance is used.';
     }
   }
@@ -4862,7 +4868,7 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
     for(var i=0;i<curves.length;i++){ if(curves[i].id===id){ c=curves[i]; break; } }
     if(!c||!c.points||c.points.length!==N) return;
     selectedId=id;
-    kg=c.points.slice();
+    pts=c.points.slice();
     if(nameInp) nameInp.value=c.name;
     if(axis==='off') axis='distance';
     setBtns(); render(); postCurve();
@@ -4888,7 +4894,7 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   function saveCurve(asNew){
     var name=(nameInp.value||'').trim();
     if(!name){ flash('Type a curve name first',false); return; }
-    var body={name:name,points:kg};
+    var body={name:name,points:pts};
     if(!asNew && selectedId!=null) body.id=selectedId;
     fetch('/api/curves',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)}).then(function(r){
@@ -4917,10 +4923,8 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   // Seed editor from current rig config, then load the library.
   fetch('/api/c/state').then(function(r){return r.json();}).then(function(j){
     var cfg=j.config||{};
-    var lim=(j.limits&&j.limits.kg_max)||cfg.kg_limit;
-    if(lim){ KGMAX=Math.max(10,lim); }
     if(cfg.curve_axis) axis=cfg.curve_axis;
-    if(cfg.curve_kg&&cfg.curve_kg.length===N) kg=cfg.curve_kg.slice();
+    if(cfg.curve_pct&&cfg.curve_pct.length===N) pts=cfg.curve_pct.slice();
     setBtns(); render(); refreshLib();
   }).catch(function(){ setBtns(); render(); refreshLib(); });
 })();
@@ -5754,8 +5758,8 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             pts = [float(p) for p in points]
         except (TypeError, ValueError):
             raise HTTPException(400, "points must be numbers")
-        if not all(0 <= p <= KG_LIMIT_HARD for p in pts):
-            raise HTTPException(400, f"points must be in [0, {KG_LIMIT_HARD}] kg")
+        if not all(0 <= p <= CURVE_PCT_MAX for p in pts):
+            raise HTTPException(400, f"points must be in [0, {CURVE_PCT_MAX}] %")
         curve_id = req.get("id")
         try:
             return await state.db_call(persistence.save_curve, name, pts, curve_id)
@@ -6053,12 +6057,12 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             if req.curve_axis not in ("off", "distance", "velocity"):
                 raise HTTPException(400, "curve_axis must be off/distance/velocity")
             c["curve_axis"] = req.curve_axis
-        if req.curve_kg is not None:
-            if (len(req.curve_kg) != CURVE_POINTS
-                    or not all(0 <= v <= KG_LIMIT_HARD for v in req.curve_kg)):
+        if req.curve_pct is not None:
+            if (len(req.curve_pct) != CURVE_POINTS
+                    or not all(0 <= v <= CURVE_PCT_MAX for v in req.curve_pct)):
                 raise HTTPException(
-                    400, f"curve_kg must be {CURVE_POINTS} values in [0, {KG_LIMIT_HARD}]")
-            c["curve_kg"] = [float(v) for v in req.curve_kg]
+                    400, f"curve_pct must be {CURVE_POINTS} values in [0, {CURVE_PCT_MAX}]")
+            c["curve_pct"] = [float(v) for v in req.curve_pct]
         if req.return_kg is not None:
             if not 0 <= req.return_kg <= 5:
                 raise HTTPException(400, "return_kg out of range [0, 5]")

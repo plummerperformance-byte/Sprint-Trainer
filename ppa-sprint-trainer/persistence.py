@@ -1014,28 +1014,33 @@ def _seed_default_rig(conn: sqlite3.Connection) -> None:
 
 
 # Built-in resistance-curve library, seeded once when the table is empty.
-# Concrete 6-point shapes (kg) at a 5 kg working-load reference.
+# Each curve is six points expressed as % of the working resistance, so a
+# curve scales with whatever load the coach sets.
 _BUILTIN_CURVES = [
-    ("Flat",         [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]),
-    ("Sprint-accel", [7.5, 7.5, 6.5, 5.0, 3.5, 3.0]),
-    ("Plateau-drop", [5.0, 5.0, 5.0, 5.0, 3.5, 2.0]),
-    ("Pyramid",      [2.5, 4.5, 6.5, 6.5, 4.5, 2.5]),
-    ("Block start",  [10.0, 8.0, 6.0, 5.0, 4.5, 4.0]),
-    ("Light-Heavy",  [1.0, 2.0, 3.5, 5.0, 6.5, 7.5]),
-    ("Late-load",    [1.5, 2.5, 3.5, 7.0, 7.5, 5.5]),
+    ("Flat",         [100.0, 100.0, 100.0, 100.0, 100.0, 100.0]),
+    ("Sprint-accel", [150.0, 150.0, 130.0, 100.0, 70.0, 60.0]),
+    ("Plateau-drop", [100.0, 100.0, 100.0, 100.0, 70.0, 40.0]),
+    ("Pyramid",      [50.0, 90.0, 130.0, 130.0, 90.0, 50.0]),
+    ("Block start",  [200.0, 160.0, 120.0, 100.0, 90.0, 80.0]),
+    ("Light-Heavy",  [20.0, 40.0, 70.0, 100.0, 130.0, 150.0]),
+    ("Late-load",    [30.0, 50.0, 70.0, 140.0, 150.0, 110.0]),
 ]
+_CURVE_SCHEMA_VERSION = "2"  # bump to reseed builtins (e.g. units change)
 
 
 def _seed_builtin_curves(conn: sqlite3.Connection) -> None:
-    """Seed the resistance-curve library with the built-in shapes. Idempotent —
-    runs only when the table is empty, so user edits/deletes are preserved."""
-    row = conn.execute("SELECT COUNT(*) AS n FROM resistance_curves").fetchone()
-    if row and row["n"] == 0:
-        with conn:
-            for name, pts in _BUILTIN_CURVES:
-                conn.execute(
-                    "INSERT INTO resistance_curves(name, points_json) VALUES (?, ?)",
-                    (name, json.dumps(pts)))
+    """Seed the resistance-curve library with the built-in shapes. Reseeds
+    (wiping the table) when the schema version changes — e.g. the v1->v2
+    move from absolute kg to % of working resistance."""
+    if get_setting(conn, "curve_schema") == _CURVE_SCHEMA_VERSION:
+        return
+    with conn:
+        conn.execute("DELETE FROM resistance_curves")
+        for name, pts in _BUILTIN_CURVES:
+            conn.execute(
+                "INSERT INTO resistance_curves(name, points_json) VALUES (?, ?)",
+                (name, json.dumps(pts)))
+    set_setting(conn, "curve_schema", _CURVE_SCHEMA_VERSION)
 
 
 def list_curves(conn: sqlite3.Connection) -> list[dict]:
