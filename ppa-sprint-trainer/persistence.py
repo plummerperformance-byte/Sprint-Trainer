@@ -13,9 +13,13 @@ import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
-DB_PATH = r"C:\Users\trigo\ppa.db"
+# DB lives alongside this module so the path is portable across machines and
+# usernames (was previously hardcoded to C:\Users\trigo\, which broke on any
+# other machine). Override with the service's --db flag if needed.
+DB_PATH = str(Path(__file__).resolve().parent / "ppa.db")
 
 log = logging.getLogger("ppa.persistence")
 

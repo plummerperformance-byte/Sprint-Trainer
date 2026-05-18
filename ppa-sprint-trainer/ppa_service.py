@@ -25,7 +25,7 @@ Safety:
   - Torque limit capped at 300% (the factory ceiling) by ppa_drive.
 
 Persistence:
-  - SQLite at C:\\Users\\trigo\\ppa.db.  Schema in persistence.py.
+  - SQLite at ppa.db alongside persistence.py (override with --db).  Schema in persistence.py.
   - Sessions/reps/samples persist across process restart.
   - Polling loop continues to run + serve WS even if DB writes fail.
 
