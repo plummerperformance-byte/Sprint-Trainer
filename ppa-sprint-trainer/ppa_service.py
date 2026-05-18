@@ -55,6 +55,7 @@ from pydantic import BaseModel, Field
 from ppa_drive import PPADrive, TORQUE_LIMIT_MAX_PERCENT
 import persistence
 import analytics
+from ppa.analytics import load_advisor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("ppa_service")
@@ -1288,6 +1289,24 @@ PHASE_C_HTML = """<!doctype html>
   .preset-btn:hover{border-color:var(--accent)}
   .preset-btn.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
   @media (min-width:880px){ .preset-row{flex-wrap:wrap;overflow-x:visible} }
+  /* Athlete profile card — derived PRs + L-V profile */
+  .profile-card{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;
+                background:var(--card);border:1px solid var(--line);border-radius:10px;
+                padding:10px 14px;margin-bottom:14px}
+  .profile-card[hidden]{display:none}
+  .pc-stats{display:flex;gap:14px;flex-wrap:wrap}
+  .pc-stat{display:flex;flex-direction:column;line-height:1.2}
+  .pc-stat .pc-l{font-size:9px;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase}
+  .pc-stat .pc-v{font-size:15px;font-weight:700;color:var(--fg)}
+  .pc-meta{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+  .pc-orient{color:var(--accent);font-weight:600}
+  /* Auto-apply load advisor */
+  .autoload{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .autoload select,.autoload input{min-height:40px}
+  .autoload input[hidden]{display:none}
+  #cfg-autoload-param{width:80px}
+  .resist-suggest{flex:1 1 100%;font-size:11px;color:var(--muted);min-height:14px}
+  .resist-suggest.has{color:var(--accent);font-weight:600}
   .preset-target{background:#0a0a0c;border:1px solid var(--line);border-radius:8px;
                  padding:10px 12px;margin-bottom:10px;font-size:12px}
   .preset-target[hidden]{display:none}
@@ -1701,6 +1720,11 @@ PHASE_C_HTML = """<!doctype html>
     <button class="mode-pill" data-mode="gym" role="tab" aria-selected="false">Gym</button>
   </div>
 
+  <div class="profile-card" id="athlete-profile-card" hidden>
+    <div class="pc-stats" id="pc-stats"></div>
+    <div class="pc-meta" id="pc-meta"></div>
+  </div>
+
   <div class="preset-row" id="preset-row" role="group" aria-label="Session presets">
     <button type="button" class="preset-btn" data-preset="match_prep">🏉 Match-prep accel</button>
     <button type="button" class="preset-btn" data-preset="top_end">⚡ Top-end speed</button>
@@ -1961,7 +1985,17 @@ PHASE_C_HTML = """<!doctype html>
   </div>
   <div class="field">
     <label id="cfg-resist-l">Working resistance (kg)</label>
-    <input type="number" id="cfg-resist" value="5" step="0.5" min="0.5" max="10">
+    <input type="number" id="cfg-resist" value="5" step="0.5" min="0.5" max="53">
+    <div class="autoload">
+      <select id="cfg-autoload" aria-label="Auto-apply load">
+        <option value="off">Auto-load: Off</option>
+        <option value="previous">Match previous</option>
+        <option value="bodyweight_pct">Body weight %</option>
+        <option value="vdec">Velocity decrement</option>
+      </select>
+      <input type="number" id="cfg-autoload-param" hidden step="1" min="1" max="100" placeholder="%">
+      <div class="resist-suggest" id="cfg-resist-suggested"></div>
+    </div>
   </div>
   <div class="field" data-modes="resisted assisted cod">
     <label id="cfg-resist-dist-l">Resist distance (m)</label>
@@ -2113,6 +2147,7 @@ document.getElementById('athlete-chip-btn').onclick=(e)=>{
   menu.querySelectorAll('.am-item').forEach(b=>b.onclick=()=>{
     athleteSel.value=b.getAttribute('data-aid');
     renderAthleteChip(); menu.hidden=true;
+    if(typeof loadAthleteProfile==='function') loadAthleteProfile(athleteSel.value);
   });
   menu.hidden=false;
 };
@@ -2120,6 +2155,80 @@ document.addEventListener('click',(e)=>{
   const chip=document.getElementById('athlete-chip');
   if(chip&&!chip.contains(e.target)) document.getElementById('athlete-menu').hidden=true;
 });
+
+// ---- Athlete profile card + auto-load advisor ----
+window._athleteProfile=null;
+function _pfNum(v,d){ return (v==null)?'–':Number(v).toFixed(d==null?1:d); }
+async function loadAthleteProfile(aid){
+  const card=document.getElementById('athlete-profile-card');
+  if(!card) return;
+  if(!aid){ card.hidden=true; window._athleteProfile=null; refreshSuggestedLoad(); return; }
+  try{
+    const r=await fetch('/api/athletes/'+encodeURIComponent(aid)+'/profile');
+    if(!r.ok){ card.hidden=true; window._athleteProfile=null; refreshSuggestedLoad(); return; }
+    const p=await r.json();
+    window._athleteProfile=p;
+    const prs=p.prs||{}, lv=p.lv_profile||{};
+    document.getElementById('pc-stats').innerHTML=[
+      ['Top speed', prs.pr_speed_mps!=null?_pfNum(prs.pr_speed_mps,2)+' m/s':'–'],
+      ['Peak power', prs.pr_power_w!=null?_pfNum(prs.pr_power_w,0)+' W':'–'],
+      ['Best 10 m', prs.pr_split_10m_s!=null?_pfNum(prs.pr_split_10m_s,2)+' s':'–'],
+      ['Best 40 m', prs.pr_split_40m_s!=null?_pfNum(prs.pr_split_40m_s,2)+' s':'–'],
+    ].map(s=>'<div class="pc-stat"><span class="pc-l">'+s[0]+'</span>'+
+            '<span class="pc-v">'+s[1]+'</span></div>').join('');
+    const meta=[];
+    if(lv.orientation) meta.push('<span class="pc-orient">'+lv.orientation+'</span>');
+    const bm=(p.athlete||{}).body_mass_kg;
+    if(bm!=null) meta.push(bm+' kg');
+    if(p.last_session_at) meta.push('Last '+String(p.last_session_at).split('T')[0]);
+    meta.push((p.session_count||0)+' sessions');
+    document.getElementById('pc-meta').innerHTML=meta.join(' · ');
+    card.hidden=false;
+    // Velocity-decrement auto-loading needs a sufficient L-V profile.
+    const vopt=document.querySelector('#cfg-autoload option[value="vdec"]');
+    if(vopt) vopt.disabled=(p.lv_profile_quality!=='ok');
+  }catch(e){ card.hidden=true; }
+  refreshSuggestedLoad();
+}
+async function refreshSuggestedLoad(){
+  const out=document.getElementById('cfg-resist-suggested');
+  const sel=document.getElementById('cfg-autoload');
+  if(!out||!sel) return;
+  const target=sel.value;
+  const aid=athleteSel.value;
+  if(target==='off'||!aid){ out.textContent=''; out.classList.remove('has'); return; }
+  const param=document.getElementById('cfg-autoload-param').value;
+  const drill=(document.getElementById('cfg-drill')||{}).value||'';
+  let u='/api/athletes/'+encodeURIComponent(aid)+'/load_suggestion?target='+
+        encodeURIComponent(target)+'&drill='+encodeURIComponent(drill);
+  if(param!=='') u+='&target_param='+encodeURIComponent(param);
+  try{
+    const r=await fetch(u);
+    if(!r.ok){ out.textContent=''; out.classList.remove('has'); return; }
+    const j=await r.json();
+    if(j.suggestion!=null){
+      document.getElementById('cfg-resist').value=j.suggestion;
+      out.textContent='Suggested: '+j.suggestion+' kg — applied';
+      out.classList.add('has');
+    }else{
+      out.textContent=j.reason?('No suggestion — '+j.reason):'No suggestion';
+      out.classList.remove('has');
+    }
+  }catch(e){ out.textContent=''; out.classList.remove('has'); }
+}
+(function(){
+  const sel=document.getElementById('cfg-autoload');
+  const param=document.getElementById('cfg-autoload-param');
+  if(sel){
+    sel.addEventListener('change',()=>{
+      const needsParam=(sel.value==='bodyweight_pct'||sel.value==='vdec');
+      param.hidden=!needsParam;
+      if(needsParam&&param.value===''){ param.value=(sel.value==='vdec')?10:30; }
+      refreshSuggestedLoad();
+    });
+  }
+  if(param) param.addEventListener('input',refreshSuggestedLoad);
+})();
 
 // ---- Gear toggle (header) ----
 let currentGear=1;
@@ -2455,6 +2564,8 @@ async function loadAthletes(){
       if(a.squad_group) window._athleteGroup[String(a.id)]=a.squad_group;
     });
     if(typeof renderAthleteChip==='function') renderAthleteChip();
+    if(athleteSel.value && typeof loadAthleteProfile==='function')
+      loadAthleteProfile(athleteSel.value);
   }catch(e){}
 }
 // Adding athletes is done on /setup (Athletes tab).
@@ -3242,6 +3353,7 @@ function renderDrillGrid(mode){
         x.classList.toggle('selected', sel);
         x.setAttribute('aria-pressed', sel ? 'true' : 'false');
       });
+      if(typeof refreshSuggestedLoad==='function') refreshSuggestedLoad();
     });
   });
 }
@@ -3275,6 +3387,7 @@ function applyMode(mode, opts){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({mode: mode})}).catch(()=>{});
   }
+  if(typeof refreshSuggestedLoad==='function') refreshSuggestedLoad();
 }
 document.querySelectorAll('.mode-pill').forEach(p=>{
   p.addEventListener('click', ()=>{
@@ -3329,7 +3442,7 @@ function confirmEccOverload(){
   if(eccKg/concKg>1.7){
     const pct=((eccKg-concKg)/concKg)*100;
     const ok=confirm('Eccentric is '+pct.toFixed(0)+'% above concentric. '+
-      'This is a very high overload.\n\nOK = keep the value · Cancel = reset to a safe 40% overload.');
+      'This is a very high overload.\\n\\nOK = keep the value · Cancel = reset to a safe 40% overload.');
     if(!ok){ eccEl.value=(concKg*1.4).toFixed(1); }
     updateEccNote();
   }
@@ -4842,6 +4955,26 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                         persistence.athlete_progression, athlete_id, metric, agg)}
         except ValueError as e:
             raise HTTPException(400, str(e))
+
+    @app.get("/api/athletes/{athlete_id}/profile")
+    async def athlete_profile(athlete_id: int):
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        result = await state.db_call(persistence.athlete_profile, athlete_id)
+        if result["athlete"] is None:
+            raise HTTPException(404, f"athlete {athlete_id} not found")
+        return result
+
+    @app.get("/api/athletes/{athlete_id}/load_suggestion")
+    async def athlete_load_suggestion(athlete_id: int, target: str = "off",
+                                      target_param: Optional[float] = None,
+                                      drill: Optional[str] = None):
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        profile = await state.db_call(persistence.athlete_profile, athlete_id)
+        if profile["athlete"] is None:
+            raise HTTPException(404, f"athlete {athlete_id} not found")
+        return load_advisor.suggest_load(profile, target, target_param, drill)
 
     @app.post("/api/c/dev/seed")
     async def phase_c_dev_seed(reps: int = 4):

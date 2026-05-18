@@ -810,6 +810,100 @@ def athlete_history(conn: sqlite3.Connection, athlete_id: int, limit: int = 50) 
     return {"athlete": athlete, "sessions": [dict(s) for s in sessions]}
 
 
+def athlete_profile(conn: sqlite3.Connection, athlete_id: int,
+                    recent_window: int = 10) -> dict:
+    """Derived athlete-centric profile: PRs, latest L-V profile, recent loads.
+
+    Computed on demand from the athlete's rep history — no stored table, so
+    it never goes stale on a rep insert / validity toggle / weight edit.
+    Feeds the coach UI's load-suggestion advisor.
+    """
+    athlete = get_athlete(conn, athlete_id)
+    if athlete is None:
+        return {"athlete": None, "prs": {}, "lv_profile": {},
+                "lv_profile_quality": "insufficient", "recent_loads": {},
+                "session_count": 0, "last_session_at": None}
+
+    pr = conn.execute(
+        """SELECT MAX(CASE WHEN COALESCE(r.valid,1)=1 THEN r.peak_speed_mps END) AS pr_speed_mps,
+                  MAX(CASE WHEN COALESCE(r.valid,1)=1 THEN r.peak_force_n   END) AS pr_force_n,
+                  MAX(CASE WHEN COALESCE(r.valid,1)=1 THEN r.peak_power_w   END) AS pr_power_w,
+                  MIN(CASE WHEN COALESCE(r.valid,1)=1 THEN json_extract(r.splits_s_json,'$."10"') END) AS pr_split_10m_s,
+                  MIN(CASE WHEN COALESCE(r.valid,1)=1 THEN json_extract(r.splits_s_json,'$."40"') END) AS pr_split_40m_s,
+                  COUNT(CASE WHEN COALESCE(r.valid,1)=1 THEN r.id END) AS valid_rep_count
+           FROM reps r JOIN sessions s ON s.id = r.session_id
+           WHERE s.athlete_id = ?""",
+        (athlete_id,),
+    ).fetchone()
+    prs = dict(pr) if pr else {}
+
+    sc = conn.execute(
+        "SELECT COUNT(*) AS session_count, MAX(started_at) AS last_session_at "
+        "FROM sessions WHERE athlete_id = ?",
+        (athlete_id,),
+    ).fetchone()
+
+    recent = conn.execute(
+        """SELECT r.f0_rel_nkg, r.v0_mps, r.pmax_rel_wkg, r.fv_slope_per_kg,
+                  s.hmi_load_kg
+           FROM reps r JOIN sessions s ON s.id = r.session_id
+           WHERE s.athlete_id = ? AND COALESCE(r.valid,1) = 1
+           ORDER BY s.started_at DESC, r.id DESC
+           LIMIT ?""",
+        (athlete_id, recent_window),
+    ).fetchall()
+
+    def _median(vals):
+        vals = sorted(v for v in vals if v is not None)
+        if not vals:
+            return None
+        n = len(vals)
+        mid = n // 2
+        return vals[mid] if n % 2 else (vals[mid - 1] + vals[mid]) / 2.0
+
+    lv = {
+        "f0_rel_nkg": _median([r["f0_rel_nkg"] for r in recent]),
+        "v0_mps": _median([r["v0_mps"] for r in recent]),
+        "pmax_rel_wkg": _median([r["pmax_rel_wkg"] for r in recent]),
+        "fv_slope_per_kg": _median([r["fv_slope_per_kg"] for r in recent]),
+    }
+    try:
+        from insights import fv_orientation
+        ori = fv_orientation(lv["fv_slope_per_kg"])
+        lv["orientation"] = ori["tag"] if ori else None
+    except Exception:
+        lv["orientation"] = None
+
+    usable = [r for r in recent
+              if r["fv_slope_per_kg"] is not None and r["v0_mps"] is not None]
+    loaded = [r for r in usable if r["hmi_load_kg"] is not None]
+    distinct_loads = {round(r["hmi_load_kg"], 1) for r in loaded}
+    # When sessions carry load data, require a spread of ≥2 loads; when no
+    # load data exists at all, gate on the valid-rep count alone.
+    load_ok = len(distinct_loads) >= 2 if loaded else True
+    quality = "ok" if len(usable) >= 3 and load_ok else "insufficient"
+
+    loads = conn.execute(
+        """SELECT r.drill AS drill, s.hmi_load_kg AS load_kg, MAX(s.started_at)
+           FROM reps r JOIN sessions s ON s.id = r.session_id
+           WHERE s.athlete_id = ? AND r.drill IS NOT NULL
+           GROUP BY r.drill""",
+        (athlete_id,),
+    ).fetchall()
+    recent_loads = {r["drill"]: r["load_kg"] for r in loads
+                    if r["load_kg"] is not None}
+
+    return {
+        "athlete": athlete,
+        "prs": prs,
+        "lv_profile": lv,
+        "lv_profile_quality": quality,
+        "recent_loads": recent_loads,
+        "session_count": sc["session_count"] if sc else 0,
+        "last_session_at": sc["last_session_at"] if sc else None,
+    }
+
+
 def load_session_reps(conn: sqlite3.Connection, session_id: int) -> dict:
     """Return a session's reps in the in-memory rep-dict shape (with samples
     rehydrated from samples_json). Designed for /api/sessions/{id}/load to
