@@ -4159,6 +4159,8 @@ SETUP_HTML = """<!doctype html>
           <button type="button" class="curve-preset" data-curve="plateau_drop">Plateau-drop</button>
           <button type="button" class="curve-preset" data-curve="pyramid">Pyramid</button>
           <button type="button" class="curve-preset" data-curve="block_start">Block start</button>
+          <button type="button" class="curve-preset" data-curve="light_heavy">Light→Heavy</button>
+          <button type="button" class="curve-preset" data-curve="late_load">Late-load</button>
           <button type="button" class="curve-preset" data-curve="custom">Custom</button>
         </div>
         <div class="row" style="gap:6px;margin-bottom:6px">
@@ -4527,6 +4529,10 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
     plateau_drop:function(b){ return [b,b,b,b,0.7*b,0.4*b]; },
     pyramid:     function(b){ return [0.5*b,0.9*b,1.3*b,1.3*b,0.9*b,0.5*b]; },
     block_start: function(b){ return [2*b,1.6*b,1.2*b,b,0.9*b,0.8*b]; },
+    // Build speed first, then introduce resistance (1080 "on-ice" pattern).
+    light_heavy: function(b){ return [0.2*b,0.4*b,0.7*b,b,1.3*b,1.5*b]; },
+    // Light early, heavy spike through the late-accel phase, ease at the end.
+    late_load:   function(b){ return [0.3*b,0.5*b,0.7*b,1.4*b,1.5*b,1.1*b]; },
   };
   var cpBtns=document.querySelectorAll('.curve-preset');
   for(var ci=0;ci<cpBtns.length;ci++){
