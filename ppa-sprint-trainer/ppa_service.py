@@ -1328,17 +1328,40 @@ PHASE_C_HTML = """<!doctype html>
     .stat-line .v.secondary{font-size:26px}
   }
 
-  /* Drill picker — 2-column tile grid (replaces the old select) */
-  .drill-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-  .drill-tile{display:flex;flex-direction:column;gap:3px;align-items:flex-start;
-              min-height:70px;padding:10px 12px;text-align:left;cursor:pointer;
-              background:#0a0a0c;color:var(--fg);border:1px solid var(--line);
-              border-radius:8px;transition:border-color 120ms,background 120ms}
-  .drill-tile:hover{border-color:var(--accent)}
-  .drill-tile.selected{border-color:var(--accent);background:var(--accent-soft)}
-  .drill-tile .dt-label{font-size:13px;font-weight:700;letter-spacing:0.02em}
-  .drill-tile .dt-desc{font-size:11px;font-weight:400;color:var(--muted);
-                       line-height:1.3;text-transform:none;letter-spacing:0}
+  /* Drill picker — dropdown + description line */
+  .drill-desc{font-size:11px;color:var(--muted);line-height:1.3;margin-top:4px;min-height:14px}
+  /* Stepper — − [value] + for numeric fields */
+  .stepper{display:flex;align-items:stretch;gap:6px}
+  .stepper button{flex:0 0 46px;padding:0;font-size:22px;font-weight:700;line-height:1;
+                  min-height:46px;background:#0a0a0c;color:var(--accent);
+                  border:1px solid var(--line);border-radius:8px;cursor:pointer}
+  .stepper button:hover{border-color:var(--accent)}
+  .stepper button:active{background:var(--accent-soft)}
+  .sheet .field .stepper input{flex:1 1 auto;width:auto;text-align:center;
+                  font-size:20px;font-weight:700;min-height:46px}
+  .stepper.off{opacity:0.4;pointer-events:none}
+  /* On/off switch */
+  .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+  .switch input{position:absolute;opacity:0;width:0;height:0}
+  .switch .track{width:42px;height:24px;border-radius:999px;background:var(--line);
+                 position:relative;transition:background 140ms;flex:0 0 auto}
+  .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;
+                 border-radius:50%;background:#fff;transition:transform 140ms}
+  .switch input:checked + .track{background:var(--accent)}
+  .switch input:checked + .track::after{transform:translateX(18px)}
+  .switch .sw-label{font-size:11px;font-weight:700;letter-spacing:0.08em;
+                 text-transform:uppercase;color:var(--muted)}
+  .field-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .field-head label{margin:0}
+  /* Variable-resistance template picker */
+  .vr-presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .vr-preset{padding:6px 10px;font-size:11px;font-weight:600;min-height:32px;
+             background:#0a0a0c;color:var(--muted);border:1px solid var(--line);
+             border-radius:7px;cursor:pointer}
+  .vr-preset:hover{color:var(--fg);border-color:var(--accent)}
+  .vr-preset.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .vr-preview{display:block;width:100%;height:90px;background:#0a0a0c;
+             border:1px solid var(--line);border-radius:8px}
   /* Gym direction toggle */
   .dir-toggle{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
   .dir-btn{flex:1;padding:10px;font-size:13px;font-weight:600;background:#0a0a0c;
@@ -1981,14 +2004,22 @@ PHASE_C_HTML = """<!doctype html>
   <div class="field">
     <label>Drill</label>
     <input type="hidden" id="cfg-drill" value="Sprint">
-    <div class="drill-grid" id="drill-grid"></div>
+    <select id="cfg-drill-sel" aria-label="Drill"></select>
+    <div class="drill-desc" id="cfg-drill-desc"></div>
   </div>
   <div class="field">
     <label id="cfg-resist-l">Working resistance (kg)</label>
-    <input type="number" id="cfg-resist" value="5" step="0.5" min="0.5" max="53">
+    <div class="stepper">
+      <button type="button" data-step="-1" data-target="cfg-resist" aria-label="Decrease">−</button>
+      <input type="number" id="cfg-resist" value="5" step="0.5" min="0.5" max="53" inputmode="decimal">
+      <button type="button" data-step="1" data-target="cfg-resist" aria-label="Increase">+</button>
+    </div>
     <div class="autoload">
-      <select id="cfg-autoload" aria-label="Auto-apply load">
-        <option value="off">Auto-load: Off</option>
+      <label class="switch">
+        <input type="checkbox" id="cfg-autoload-toggle">
+        <span class="track"></span><span class="sw-label">Auto-load</span>
+      </label>
+      <select id="cfg-autoload" aria-label="Auto-apply load" hidden>
         <option value="previous">Match previous</option>
         <option value="bodyweight_pct">Body weight %</option>
         <option value="vdec">Velocity decrement</option>
@@ -1999,11 +2030,31 @@ PHASE_C_HTML = """<!doctype html>
   </div>
   <div class="field" data-modes="resisted assisted cod">
     <label id="cfg-resist-dist-l">Resist distance (m)</label>
-    <input type="number" id="cfg-resist-dist" value="15" step="1" min="1" max="50">
+    <div class="stepper">
+      <button type="button" data-step="-5" data-target="cfg-resist-dist" aria-label="Decrease">−</button>
+      <input type="number" id="cfg-resist-dist" value="15" step="5" min="1" max="50" inputmode="numeric">
+      <button type="button" data-step="5" data-target="cfg-resist-dist" aria-label="Increase">+</button>
+    </div>
   </div>
   <div class="field" data-modes="resisted assisted">
-    <label>Velocity cap (m/s) — 0 = off</label>
-    <input type="number" id="cfg-vcap" value="0" step="0.5" min="0" max="15">
+    <div class="field-head">
+      <label>Velocity cap (m/s)</label>
+      <label class="switch">
+        <input type="checkbox" id="cfg-vcap-toggle">
+        <span class="track"></span>
+      </label>
+    </div>
+    <div class="stepper" id="cfg-vcap-stepper">
+      <button type="button" data-step="-0.5" data-target="cfg-vcap" aria-label="Decrease">−</button>
+      <input type="number" id="cfg-vcap" value="6" step="0.5" min="0.5" max="15" inputmode="decimal">
+      <button type="button" data-step="0.5" data-target="cfg-vcap" aria-label="Increase">+</button>
+    </div>
+  </div>
+  <div class="field" data-modes="resisted assisted">
+    <label>Variable resistance</label>
+    <div class="vr-presets" id="vr-presets"></div>
+    <svg class="vr-preview" id="vr-preview" viewBox="0 0 300 90" preserveAspectRatio="none"></svg>
+    <div class="meta" id="vr-meta" style="font-size:10px;margin-top:4px"></div>
   </div>
   <div class="field" data-modes="gym">
     <label>Direction</label>
@@ -2054,6 +2105,8 @@ let cachedSamples=[];   // last full curve to keep showing during 'recover'
 let lastCorridor=0;     // current Recovery distance from athletic config (for chart threshold + corridor highlight)
 let drillStartedAt=null; // ms timestamp when athletic_mode flipped True (for session timer)
 let currentMode='resisted'; // active training-mode pill (resisted|assisted|cod|gym)
+// Variable-resistance curve, mirrored from the Adjust panel template picker.
+const vrState={axis:'off',kg:[5,5,5,5,5,5]};
 
 // Gym shows concentric + eccentric as plain kg inputs; the backend wants an
 // overload percentage, so convert here: pct = (ecc-conc)/conc, clamped 0-100.
@@ -2068,15 +2121,18 @@ function buildAthleticCfg(){
   // Live-screen fields only. Recovery / slew / rest / countdown are managed
   // on /setup and pushed straight to the backend config, so they're omitted
   // here — the backend keeps its last value for any key not sent.
+  const vcapOn=document.getElementById('cfg-vcap-toggle').checked;
   return {
     mode:currentMode,
     resist_kg:parseFloat(document.getElementById('cfg-resist').value),
     resist_distance_m:parseFloat(document.getElementById('cfg-resist-dist').value),
-    velocity_cap_mps:parseFloat(document.getElementById('cfg-vcap').value)||0,
+    velocity_cap_mps:vcapOn?(parseFloat(document.getElementById('cfg-vcap').value)||0):0,
     chain_kg_per_m:parseFloat(document.getElementById('cfg-chain').value)||0,
     eccentric_overload_pct:eccOverloadPct(),
     concentric_dir:document.getElementById('cfg-condir').value,
     drill:document.getElementById('cfg-drill').value,
+    curve_axis:vrState.axis,
+    curve_kg:vrState.kg,
   };
 }
 async function armRig(){
@@ -2193,8 +2249,9 @@ async function loadAthleteProfile(aid){
 async function refreshSuggestedLoad(){
   const out=document.getElementById('cfg-resist-suggested');
   const sel=document.getElementById('cfg-autoload');
+  const toggle=document.getElementById('cfg-autoload-toggle');
   if(!out||!sel) return;
-  const target=sel.value;
+  const target=(toggle&&toggle.checked)?sel.value:'off';
   const aid=athleteSel.value;
   if(target==='off'||!aid){ out.textContent=''; out.classList.remove('has'); return; }
   const param=document.getElementById('cfg-autoload-param').value;
@@ -2219,15 +2276,122 @@ async function refreshSuggestedLoad(){
 (function(){
   const sel=document.getElementById('cfg-autoload');
   const param=document.getElementById('cfg-autoload-param');
-  if(sel){
-    sel.addEventListener('change',()=>{
-      const needsParam=(sel.value==='bodyweight_pct'||sel.value==='vdec');
-      param.hidden=!needsParam;
-      if(needsParam&&param.value===''){ param.value=(sel.value==='vdec')?10:30; }
-      refreshSuggestedLoad();
-    });
+  const toggle=document.getElementById('cfg-autoload-toggle');
+  function syncParam(){
+    const needsParam=toggle&&toggle.checked&&(sel.value==='bodyweight_pct'||sel.value==='vdec');
+    param.hidden=!needsParam;
+    if(needsParam&&param.value===''){ param.value=(sel.value==='vdec')?10:30; }
   }
+  window._syncAutoload=function(){
+    sel.hidden=!(toggle&&toggle.checked);
+    syncParam();
+    refreshSuggestedLoad();
+  };
+  if(toggle) toggle.addEventListener('change',window._syncAutoload);
+  if(sel) sel.addEventListener('change',()=>{ syncParam(); refreshSuggestedLoad(); });
   if(param) param.addEventListener('input',refreshSuggestedLoad);
+})();
+
+// ---- Adjust panel: ± steppers + velocity-cap on/off toggle ----
+(function(){
+  document.querySelectorAll('.sheet .stepper button[data-step]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const inp=document.getElementById(b.getAttribute('data-target'));
+      if(!inp) return;
+      const step=parseFloat(b.getAttribute('data-step'));
+      const min=inp.min!==''?parseFloat(inp.min):-Infinity;
+      const max=inp.max!==''?parseFloat(inp.max):Infinity;
+      let v=(parseFloat(inp.value)||0)+step;
+      v=Math.max(min,Math.min(max,Math.round(v*100)/100));
+      inp.value=v;
+      inp.dispatchEvent(new Event('input',{bubbles:true}));
+      inp.dispatchEvent(new Event('change',{bubbles:true}));
+    });
+  });
+  const vcapToggle=document.getElementById('cfg-vcap-toggle');
+  const vcapStepper=document.getElementById('cfg-vcap-stepper');
+  window._syncVcap=function(){
+    if(vcapStepper) vcapStepper.classList.toggle('off',!(vcapToggle&&vcapToggle.checked));
+  };
+  if(vcapToggle) vcapToggle.addEventListener('change',window._syncVcap);
+  window._syncVcap();
+})();
+
+// ---- Variable resistance — template picker + shape preview (Adjust panel) ----
+(function(){
+  const wrap=document.getElementById('vr-presets');
+  const svg=document.getElementById('vr-preview');
+  const metaEl=document.getElementById('vr-meta');
+  if(!wrap||!svg) return;
+  const N=6,KGMAX=10;
+  function clampPt(v){ return Math.max(0,Math.min(KGMAX,Math.round(v*2)/2)); }
+  const PRESETS={
+    sprint_accel:b=>[1.5*b,1.5*b,1.3*b,b,0.7*b,0.6*b],
+    plateau_drop:b=>[b,b,b,b,0.7*b,0.4*b],
+    pyramid:b=>[0.5*b,0.9*b,1.3*b,1.3*b,0.9*b,0.5*b],
+    block_start:b=>[2*b,1.6*b,1.2*b,b,0.9*b,0.8*b],
+    light_heavy:b=>[0.2*b,0.4*b,0.7*b,b,1.3*b,1.5*b],
+    late_load:b=>[0.3*b,0.5*b,0.7*b,1.4*b,1.5*b,1.1*b],
+  };
+  const CHIPS=[['off','Off'],['sprint_accel','Sprint-accel'],['plateau_drop','Plateau-drop'],
+    ['pyramid','Pyramid'],['block_start','Block start'],['light_heavy','Light→Heavy'],
+    ['late_load','Late-load']];
+  let activeKey='off';
+  wrap.innerHTML=CHIPS.map(c=>
+    '<button type="button" class="vr-preset" data-key="'+c[0]+'">'+c[1]+'</button>').join('');
+  const chipBtns=wrap.querySelectorAll('.vr-preset');
+  function markActive(){
+    chipBtns.forEach(b=>b.classList.toggle('active',b.getAttribute('data-key')===activeKey));
+  }
+  function renderPreview(){
+    const VW=300,VH=90,PL=6,PR=6,PT=10,PB=10,PW=VW-PL-PR,PH=VH-PT-PB;
+    const mx=Math.max.apply(null,vrState.kg.concat([0.5]));
+    const x=i=>PL+(i/(N-1))*PW;
+    const y=v=>PT+(1-v/mx)*PH;
+    const dim=(vrState.axis==='off');
+    const col=dim?'#4a4a52':'#d4823a';
+    let poly='';
+    for(let i=0;i<N;i++) poly+=x(i).toFixed(1)+','+y(vrState.kg[i]).toFixed(1)+' ';
+    let s='<polyline points="'+poly+'" fill="none" stroke="'+col+'" stroke-width="2"'+
+          (dim?' stroke-dasharray="4 3"':'')+'/>';
+    for(let j=0;j<N;j++)
+      s+='<circle cx="'+x(j).toFixed(1)+'" cy="'+y(vrState.kg[j]).toFixed(1)+'" r="3.5" fill="'+col+'"/>';
+    svg.innerHTML=s;
+    svg.style.opacity=dim?0.6:1;
+  }
+  function postVr(){
+    fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({curve_axis:vrState.axis,curve_kg:vrState.kg})}).catch(()=>{});
+  }
+  function setMeta(){
+    if(metaEl) metaEl.textContent=(vrState.axis==='off')
+      ? 'Flat working resistance — same load the whole rep.'
+      : 'Load shaped across the resist distance, scaled off the working resistance.';
+  }
+  function apply(key,push){
+    activeKey=key;
+    if(key==='off'){
+      vrState.axis='off';
+    }else if(PRESETS[key]){
+      const base=parseFloat((document.getElementById('cfg-resist')||{}).value)||5;
+      vrState.kg=PRESETS[key](base).map(clampPt);
+      vrState.axis='distance';
+    }
+    markActive(); setMeta(); renderPreview();
+    if(push!==false) postVr();
+  }
+  chipBtns.forEach(b=>b.addEventListener('click',()=>apply(b.getAttribute('data-key'),true)));
+  const resistInp=document.getElementById('cfg-resist');
+  if(resistInp) resistInp.addEventListener('input',()=>{
+    if(activeKey!=='off'&&PRESETS[activeKey]) apply(activeKey,false);
+  });
+  fetch('/api/c/state').then(r=>r.json()).then(j=>{
+    const cfg=j.config||{};
+    if(cfg.curve_kg&&cfg.curve_kg.length===N) vrState.kg=cfg.curve_kg.slice();
+    if(cfg.curve_axis) vrState.axis=cfg.curve_axis;
+    activeKey=(vrState.axis==='off')?'off':'custom';
+    markActive(); setMeta(); renderPreview();
+  }).catch(()=>{ markActive(); setMeta(); renderPreview(); });
 })();
 
 // ---- Gear toggle (header) ----
@@ -3263,7 +3427,13 @@ document.getElementById('new-set-btn').onclick=async()=>{
     const set = (id, val) => { const el = document.getElementById(id); if(el && val != null) el.value = val; };
     set('cfg-resist',      cfg.resist_kg);
     set('cfg-resist-dist', cfg.resist_distance_m);
-    set('cfg-vcap',        cfg.velocity_cap_mps);
+    const vcapToggle=document.getElementById('cfg-vcap-toggle');
+    if(vcapToggle){
+      const vc=cfg.velocity_cap_mps;
+      if(vc!=null && vc>0){ document.getElementById('cfg-vcap').value=vc; vcapToggle.checked=true; }
+      else vcapToggle.checked=false;
+      if(typeof window._syncVcap==='function') window._syncVcap();
+    }
     set('cfg-chain',       cfg.chain_kg_per_m);
     set('cfg-ecc',         cfg.eccentric_overload_pct);
     set('cfg-condir',      cfg.concentric_dir);
@@ -3330,31 +3500,30 @@ const DRILLS_BY_MODE = {
   gym:      ['FreeTest','HighKnee','FastLeg'],
 };
 const cfgDrill = document.getElementById('cfg-drill');   // hidden input — backend value
-const drillGrid = document.getElementById('drill-grid');
+const drillSel = document.getElementById('cfg-drill-sel');
+const drillDesc = document.getElementById('cfg-drill-desc');
+function _drillView(v, mode){
+  const d = DRILLS[v] || {label:v, desc:''};
+  return (mode === 'assisted' && d.assisted) ? d.assisted : d;
+}
+function updateDrillDesc(mode){
+  if(drillDesc) drillDesc.textContent = _drillView(cfgDrill.value, mode).desc || '';
+}
 function renderDrillGrid(mode){
-  if(!drillGrid) return;
+  if(!drillSel) return;
   const list = DRILLS_BY_MODE[mode] || DRILLS_BY_MODE.resisted;
   if(list.indexOf(cfgDrill.value) < 0) cfgDrill.value = list[0];
-  drillGrid.innerHTML = list.map(v=>{
-    const d = DRILLS[v] || {label:v, desc:''};
-    const ov = (mode === 'assisted' && d.assisted) ? d.assisted : d;
-    const on = (v === cfgDrill.value);
-    return '<button type="button" class="drill-tile'+(on?' selected':'')+'" '+
-        'data-drill="'+v+'" aria-pressed="'+(on?'true':'false')+'">'+
-      '<span class="dt-label">'+ov.label+'</span>'+
-      '<span class="dt-desc">'+ov.desc+'</span>'+
-    '</button>';
-  }).join('');
-  drillGrid.querySelectorAll('.drill-tile').forEach(t=>{
-    t.addEventListener('click', ()=>{
-      cfgDrill.value = t.getAttribute('data-drill');
-      drillGrid.querySelectorAll('.drill-tile').forEach(x=>{
-        const sel = x.getAttribute('data-drill') === cfgDrill.value;
-        x.classList.toggle('selected', sel);
-        x.setAttribute('aria-pressed', sel ? 'true' : 'false');
-      });
-      if(typeof refreshSuggestedLoad==='function') refreshSuggestedLoad();
-    });
+  drillSel.innerHTML = list.map(v=>
+    '<option value="'+v+'"'+(v===cfgDrill.value?' selected':'')+'>'+
+    _drillView(v, mode).label+'</option>').join('');
+  drillSel.value = cfgDrill.value;
+  updateDrillDesc(mode);
+}
+if(drillSel){
+  drillSel.addEventListener('change', ()=>{
+    cfgDrill.value = drillSel.value;
+    updateDrillDesc(currentMode);
+    if(typeof refreshSuggestedLoad==='function') refreshSuggestedLoad();
   });
 }
 
