@@ -1980,7 +1980,7 @@ PHASE_C_HTML = """<!doctype html>
 
   <div class="field">
     <label>Drill</label>
-    <input type="hidden" id="cfg-drill" value="Acceleration">
+    <input type="hidden" id="cfg-drill" value="Sprint">
     <div class="drill-grid" id="drill-grid"></div>
   </div>
   <div class="field">
@@ -3324,8 +3324,8 @@ const DRILLS = {
   FreeTest:       {label:'Free run',           desc:'Unstructured free run'},
 };
 const DRILLS_BY_MODE = {
-  resisted: ['Acceleration','Sprint','ASkip','BSkip','Ankling','HighKnee','FastLeg','StraightLegRun'],
-  assisted: ['ApproachJump','SkippingJumps','Sprint'],
+  resisted: ['Sprint','Acceleration','ASkip','BSkip','Ankling','HighKnee','FastLeg','StraightLegRun'],
+  assisted: ['Sprint','ApproachJump','SkippingJumps'],
   cod:      ['FreeTest'],
   gym:      ['FreeTest','HighKnee','FastLeg'],
 };
