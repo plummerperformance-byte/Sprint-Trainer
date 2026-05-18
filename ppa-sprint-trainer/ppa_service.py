@@ -109,6 +109,10 @@ SPEED_LIMIT_ARMED = 560   # RPM cap during Phase C ops (~3.2 m/s). Sized for the
                           # unaffected, so resisted sprints are not braked.
 RETURN_SPEED_GAIN = 4.0   # kg of retract load per m/s of return-speed error (P-gain)
 RETURN_KG_MAX = 12.0      # cap on the return-phase reel-in load
+JOG_KG = 4.0              # maintenance-jog torque level (kg-equivalent)
+JOG_KG_MAX = 10.0         # hard cap on any jog torque magnitude
+JOG_DEADLINE_S = 0.7      # jog auto-zeros if no keepalive within this window
+CPM_DEFAULT = analytics.COUNTS_PER_METRE  # locked-in default position calibration
 KG_LIMIT_HARD = 53.0      # absolute ceiling — empirical 300% torque-clip limit, never exceed
 KG_LIMIT_DEFAULT = 30.0   # default for the configurable max-resistance setting
 WATCHDOG_GRACE = 7.0      # s to wait after heartbeat stop for drive auto-disable
@@ -313,6 +317,8 @@ class ServiceState:
         self.athletic_task: Optional[asyncio.Task] = None
         self.athletic_current_kg: float = 0.0  # current commanded kg (slew-limited)
         self._return_log_t: float = 0.0  # throttle for return-phase tuning logs
+        self._jog_deadline: float = 0.0  # maintenance-jog auto-zero deadline
+        self._cal_zero_counts: Optional[int] = None  # calibration zero datum
         # Rep tracking inside athletic mode: a "rep" is one resist phase
         self.athletic_reps: list[dict] = []
         self._rep_in_progress: Optional[dict] = None
@@ -544,6 +550,32 @@ class ServiceState:
         self.phase_c_setpoint_pct = pct
         return {"kg": kg, "torque_pct": round(pct, 2), "p03_25_raw": raw}
 
+    def phase_c_jog_kg(self, signed_kg: float) -> dict:
+        """Maintenance jog. signed_kg > 0 retracts (reels in), < 0 extends
+        (pays out). The only path that commands extend-direction torque.
+        Magnitude is hard-capped; callers must keepalive or it auto-zeros."""
+        if self.phase_c != "armed":
+            raise RuntimeError(f"cannot jog in state {self.phase_c}")
+        if abs(signed_kg) > JOG_KG_MAX:
+            raise ValueError(f"jog kg magnitude > {JOG_KG_MAX} hard cap")
+        pct = -signed_kg * PCT_PER_KG  # +kg -> negative torque -> retract
+        raw = int(round(pct * 10))
+        with self.modbus_lock:
+            ok = self._modbus_write_one(P03_25, raw)
+        if not ok:
+            raise RuntimeError("jog setpoint write failed")
+        self.phase_c_setpoint_pct = pct
+        return {"kg": signed_kg, "torque_pct": round(pct, 2)}
+
+    def phase_c_jog_stop(self) -> dict:
+        """Zero the jog setpoint. Safe to call from any state."""
+        self._jog_deadline = 0.0
+        if self.phase_c == "armed":
+            with self.modbus_lock:
+                self._modbus_write_one(P03_25, 0)
+        self.phase_c_setpoint_pct = 0.0
+        return {"jog": "stopped"}
+
     def phase_c_disarm(self) -> dict:
         if self.phase_c == "idle":
             return {"phase_c": "idle"}
@@ -623,6 +655,14 @@ class ServiceState:
                 state = await loop.run_in_executor(None, self._read_snapshot)
                 self.latest = state
                 self.ring.append(state)
+                # Jog-watchdog — auto-zero the maintenance jog if the UI stops
+                # sending keepalives (button released, page hidden, drop-out).
+                if self._jog_deadline and time.time() > self._jog_deadline:
+                    self._jog_deadline = 0.0
+                    try:
+                        await loop.run_in_executor(None, self.phase_c_jog_stop)
+                    except Exception as e:
+                        log.warning("jog-watchdog stop failed: %s", e)
                 # fan-out to WS subscribers (best-effort, drop if queue full)
                 for q in list(self.subscribers):
                     if q.qsize() < 8:
@@ -4465,6 +4505,38 @@ SETUP_HTML = """<!doctype html>
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <h2>Rig maintenance</h2>
+        <div class="meta" style="margin-bottom:10px">Cable detached, operator at the rig. The red STOP button kills the motor at any point.</div>
+        <div class="field">
+          <label>Motor</label>
+          <button type="button" class="ghost" id="maint-motor" style="width:100%">Motor: off</button>
+        </div>
+        <div class="field">
+          <label>Jog cable — hold to move</label>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="seg-btn" id="jog-retract">&#9664; Retract</button>
+            <button type="button" class="seg-btn" id="jog-extend">Extend &#9654;</button>
+          </div>
+          <div class="meta" id="jog-pos" style="margin-top:6px">Position: —</div>
+        </div>
+        <div class="divider"></div>
+        <div class="field">
+          <label>Position calibration</label>
+          <div class="meta" style="margin-bottom:8px">Jog the cable fully in, tap Mark zero. Pull it out a measured distance, type that distance, tap Set calibration.</div>
+          <button type="button" class="ghost" id="cal-zero" style="width:100%;margin-bottom:8px">Mark zero (home)</button>
+          <div style="display:flex;gap:6px">
+            <input type="number" id="cal-distance" placeholder="Distance pulled out (m)" step="0.1" min="0.5" max="60" style="flex:1">
+            <button type="button" class="secondary" id="cal-set">Set calibration</button>
+          </div>
+          <div class="meta" id="cal-msg" style="margin-top:6px;min-height:14px"></div>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:4px">
+            <span class="meta" id="cal-current" style="flex:1"></span>
+            <button type="button" class="ghost" id="cal-reset" style="color:var(--bad)">Reset to default</button>
+          </div>
+        </div>
+      </div>
   </section>
 </div>
 
@@ -4872,6 +4944,98 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   }catch(e){}
 })();
 
+// ---- Rig maintenance: motor / jog / calibrate ----
+(function(){
+  const motorBtn=document.getElementById('maint-motor');
+  if(!motorBtn) return;
+  const jogPos=document.getElementById('jog-pos');
+  const calCurrent=document.getElementById('cal-current');
+  const calMsg=document.getElementById('cal-msg');
+  let armed=false;
+  function calFlash(m,ok){
+    if(!calMsg) return;
+    calMsg.textContent=m; calMsg.style.color=ok?'var(--accent)':'var(--bad)';
+  }
+  async function refresh(){
+    try{
+      const j=await(await fetch('/api/c/state')).json();
+      armed=(j.phase_c==='armed');
+      motorBtn.textContent='Motor: '+(armed?'ON':'off');
+      motorBtn.style.color=armed?'var(--accent)':'';
+      motorBtn.style.borderColor=armed?'var(--accent)':'';
+      if(jogPos) jogPos.textContent='Position: '+
+        (j.position_counts!=null?j.position_counts+' counts':'—')+
+        (j.extension_m!=null?'  ·  '+Number(j.extension_m).toFixed(2)+' m':'');
+      const cpm=j.limits&&j.limits.counts_per_metre;
+      if(calCurrent&&cpm) calCurrent.textContent='Current: '+Math.round(cpm)+' counts/m';
+    }catch(e){}
+  }
+  motorBtn.addEventListener('click',async()=>{
+    motorBtn.disabled=true;
+    try{ await fetch(armed?'/api/c/disarm':'/api/c/arm',{method:'POST'}); }
+    catch(e){}
+    motorBtn.disabled=false;
+    refresh();
+  });
+  // Jog — hold to move; the backend jog-watchdog auto-zeros if keepalives stop.
+  let jogTimer=null;
+  function jogStart(dir){
+    if(jogTimer) return;
+    if(!armed){ calFlash('Turn the motor on before jogging',false); return; }
+    const send=()=>fetch('/api/c/jog',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({direction:dir})}).catch(()=>{});
+    send();
+    jogTimer=setInterval(send,350);
+  }
+  function jogStop(){
+    if(jogTimer){ clearInterval(jogTimer); jogTimer=null; }
+    fetch('/api/c/jog/stop',{method:'POST'}).catch(()=>{});
+  }
+  [['jog-retract','retract'],['jog-extend','extend']].forEach(([id,dir])=>{
+    const b=document.getElementById(id);
+    if(!b) return;
+    b.addEventListener('pointerdown',e=>{ e.preventDefault(); jogStart(dir); });
+    ['pointerup','pointerleave','pointercancel'].forEach(ev=>
+      b.addEventListener(ev,jogStop));
+  });
+  window.addEventListener('blur',jogStop);
+  document.addEventListener('visibilitychange',()=>{ if(document.hidden) jogStop(); });
+  // Calibration.
+  document.getElementById('cal-zero').onclick=async()=>{
+    try{
+      const r=await fetch('/api/c/calibrate/zero',{method:'POST'});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){ calFlash(j.detail||'Failed',false); return; }
+      calFlash('Zero set at '+j.zero_counts+' counts. Now pull the cable out and measure it.',true);
+    }catch(e){ calFlash('Failed',false); }
+  };
+  document.getElementById('cal-set').onclick=async()=>{
+    const d=parseFloat(document.getElementById('cal-distance').value);
+    if(isNaN(d)){ calFlash('Enter the distance you pulled the cable out',false); return; }
+    try{
+      const r=await fetch('/api/c/calibrate/span',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({distance_m:d})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){ calFlash(j.detail||'Failed',false); return; }
+      calFlash('Calibrated: '+Math.round(j.counts_per_metre)+' counts/m ('
+        +j.span_counts+' counts over '+j.distance_m+' m)',true);
+      refresh();
+    }catch(e){ calFlash('Failed',false); }
+  };
+  document.getElementById('cal-reset').onclick=async()=>{
+    if(!confirm('Revert to the default position calibration?')) return;
+    try{
+      await fetch('/api/c/calibrate/reset',{method:'POST'});
+      calFlash('Reverted to the default calibration.',true);
+      refresh();
+    }catch(e){ calFlash('Failed',false); }
+  };
+  refresh();
+  setInterval(refresh,1500);
+})();
+
 // ---- Tab switching ----
 (function(){
   const tabs=document.querySelectorAll('.setup-tab');
@@ -4914,6 +5078,14 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             state.db = persistence.open_db(state.db_path)
             persistence.init_schema(state.db)
             log.info("DB ready at %s", state.db_path)
+            # Apply a stored position calibration, if one has been set.
+            cpm = persistence.get_setting(state.db, "counts_per_metre")
+            if cpm:
+                try:
+                    analytics.COUNTS_PER_METRE = float(cpm)
+                    log.info("calibration: counts_per_metre = %s (from settings)", cpm)
+                except ValueError:
+                    log.warning("calibration: bad counts_per_metre setting %r", cpm)
         except Exception as e:
             log.error("DB init failed: %s — service will run without persistence", e)
             state.db = None
@@ -5087,6 +5259,85 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         except Exception as e:
             raise HTTPException(500, f"phase_c setkg failed: {e}")
 
+    @app.post("/api/c/jog")
+    async def phase_c_jog(req: dict):
+        """Maintenance jog — hold-to-move. The UI re-posts every ~350 ms while
+        the button is held; the jog-watchdog auto-zeros it otherwise."""
+        if state.drive is None:
+            raise HTTPException(503, "drive not connected")
+        if state.athletic_mode:
+            raise HTTPException(409, "stop the drill before jogging")
+        if state.phase_c != "armed":
+            raise HTTPException(409, "motor must be on to jog")
+        direction = req.get("direction")
+        if direction not in ("retract", "extend"):
+            raise HTTPException(400, "direction must be retract or extend")
+        signed = JOG_KG if direction == "retract" else -JOG_KG
+        loop = asyncio.get_running_loop()
+        try:
+            r = await loop.run_in_executor(None, state.phase_c_jog_kg, signed)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            raise HTTPException(500, f"jog failed: {e}")
+        state._jog_deadline = time.time() + JOG_DEADLINE_S
+        return r
+
+    @app.post("/api/c/jog/stop")
+    async def phase_c_jog_stop_endpoint():
+        if state.drive is None:
+            raise HTTPException(503, "drive not connected")
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, state.phase_c_jog_stop)
+
+    @app.post("/api/c/calibrate/zero")
+    async def phase_c_calibrate_zero():
+        """Capture the current cable position as the calibration zero datum."""
+        if state.latest is None or state.latest.position_counts is None:
+            raise HTTPException(503, "no position telemetry")
+        state._cal_zero_counts = state.latest.position_counts
+        return {"zero_counts": state._cal_zero_counts}
+
+    @app.post("/api/c/calibrate/span")
+    async def phase_c_calibrate_span(req: dict):
+        """Set counts_per_metre from the encoder delta since the zero datum
+        and the measured pull-out distance."""
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        if state._cal_zero_counts is None:
+            raise HTTPException(409, "set the zero datum first")
+        if state.latest is None or state.latest.position_counts is None:
+            raise HTTPException(503, "no position telemetry")
+        try:
+            distance_m = float(req.get("distance_m"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "distance_m must be a number")
+        if not 0.5 <= distance_m <= 60:
+            raise HTTPException(400, "distance_m out of range [0.5, 60]")
+        delta = abs(state.latest.position_counts - state._cal_zero_counts)
+        if delta < 1000:
+            raise HTTPException(400, "cable barely moved — pull it further out")
+        cpm = delta / distance_m
+        if not 5000 <= cpm <= 100000:
+            raise HTTPException(400, f"implausible counts_per_metre ({cpm:.0f})")
+        analytics.COUNTS_PER_METRE = cpm
+        await state.db_call(persistence.set_setting, "counts_per_metre", cpm)
+        state._cal_zero_counts = None
+        log.warning("calibration: counts_per_metre set to %.1f (%d counts / %.2f m)",
+                    cpm, delta, distance_m)
+        return {"counts_per_metre": round(cpm, 1), "span_counts": delta,
+                "distance_m": distance_m}
+
+    @app.post("/api/c/calibrate/reset")
+    async def phase_c_calibrate_reset():
+        """Revert to the locked-in default position calibration."""
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        analytics.COUNTS_PER_METRE = CPM_DEFAULT
+        await state.db_call(persistence.set_setting, "counts_per_metre", CPM_DEFAULT)
+        state._cal_zero_counts = None
+        return {"counts_per_metre": CPM_DEFAULT}
+
     @app.get("/api/c/state")
     async def phase_c_state():
         # Cable extension from drill-start position (metres). Useful for debugging
@@ -5109,12 +5360,15 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             "athletic_phase": state.athletic_phase,
             "athletic_start_pos": state.athletic_start_pos,
             "extension_m": extension_m,
+            "position_counts": (state.latest.position_counts
+                                if state.latest is not None else None),
             "config": state.athletic_config,
             "limits": {
                 "kg_max": state.athletic_config.get("kg_limit", KG_LIMIT_DEFAULT),
                 "kg_max_hard": KG_LIMIT_HARD,
                 "speed_limit_rpm_armed": SPEED_LIMIT_ARMED,
                 "pct_per_kg": PCT_PER_KG,
+                "counts_per_metre": analytics.COUNTS_PER_METRE,
             },
         }
 

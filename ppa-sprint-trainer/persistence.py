@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS resistance_curves (
     updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS samples (
     session_id       INTEGER NOT NULL REFERENCES sessions(id),
     t_offset_ms      INTEGER NOT NULL,
@@ -1082,6 +1088,20 @@ def save_curve(conn: sqlite3.Connection, name: str, points: list,
 def delete_curve(conn: sqlite3.Connection, curve_id: int) -> None:
     with conn:
         conn.execute("DELETE FROM resistance_curves WHERE id=?", (curve_id,))
+
+
+def get_setting(conn: sqlite3.Connection, key: str, default=None):
+    row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value) -> None:
+    with conn:
+        conn.execute(
+            "INSERT INTO settings(key, value) VALUES(?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
+            "updated_at=datetime('now')",
+            (key, str(value)))
 
 
 def list_rigs(conn: sqlite3.Connection) -> list[dict]:
