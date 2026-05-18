@@ -4323,6 +4323,7 @@ SETUP_HTML = """<!doctype html>
     <button class="setup-tab" data-tab="drills">Drills &amp; Presets</button>
     <button class="setup-tab" data-tab="reports">Reports</button>
     <button class="setup-tab" data-tab="settings">Settings</button>
+    <button class="setup-tab" data-tab="calibrate">Calibrate</button>
   </nav>
 
   <section data-panel="athletes">
@@ -4520,6 +4521,9 @@ SETUP_HTML = """<!doctype html>
         </div>
       </div>
 
+  </section>
+
+  <section data-panel="calibrate" hidden>
       <div class="card">
         <h2>Rig maintenance</h2>
         <div class="meta" style="margin-bottom:10px">Cable detached, operator at the rig. The red STOP button kills the motor at any point.</div>
