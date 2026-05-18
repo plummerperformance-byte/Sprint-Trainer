@@ -2305,31 +2305,25 @@ async function refreshSuggestedLoad(){
   window._syncVcap();
 })();
 
-// ---- Variable resistance — template picker + shape preview (Adjust panel) ----
+// ---- Variable resistance — curve-library picker + shape preview (Adjust panel) ----
 (function(){
   const wrap=document.getElementById('vr-presets');
   const svg=document.getElementById('vr-preview');
   const metaEl=document.getElementById('vr-meta');
   if(!wrap||!svg) return;
-  const N=6,KGMAX=10;
-  function clampPt(v){ return Math.max(0,Math.min(KGMAX,Math.round(v*2)/2)); }
-  const PRESETS={
-    sprint_accel:b=>[1.5*b,1.5*b,1.3*b,b,0.7*b,0.6*b],
-    plateau_drop:b=>[b,b,b,b,0.7*b,0.4*b],
-    pyramid:b=>[0.5*b,0.9*b,1.3*b,1.3*b,0.9*b,0.5*b],
-    block_start:b=>[2*b,1.6*b,1.2*b,b,0.9*b,0.8*b],
-    light_heavy:b=>[0.2*b,0.4*b,0.7*b,b,1.3*b,1.5*b],
-    late_load:b=>[0.3*b,0.5*b,0.7*b,1.4*b,1.5*b,1.1*b],
-  };
-  const CHIPS=[['off','Off'],['sprint_accel','Sprint-accel'],['plateau_drop','Plateau-drop'],
-    ['pyramid','Pyramid'],['block_start','Block start'],['light_heavy','Light→Heavy'],
-    ['late_load','Late-load']];
-  let activeKey='off';
-  wrap.innerHTML=CHIPS.map(c=>
-    '<button type="button" class="vr-preset" data-key="'+c[0]+'">'+c[1]+'</button>').join('');
-  const chipBtns=wrap.querySelectorAll('.vr-preset');
-  function markActive(){
-    chipBtns.forEach(b=>b.classList.toggle('active',b.getAttribute('data-key')===activeKey));
+  const N=6;
+  let curves=[];
+  let activeId='off';   // 'off', a curve id, or 'custom'
+  function renderChips(){
+    let html='<button type="button" class="vr-preset" data-id="off">Off</button>';
+    curves.forEach(c=>{
+      html+='<button type="button" class="vr-preset" data-id="'+c.id+'">'+c.name+'</button>';
+    });
+    wrap.innerHTML=html;
+    wrap.querySelectorAll('.vr-preset').forEach(b=>{
+      b.classList.toggle('active',b.getAttribute('data-id')===String(activeId));
+      b.addEventListener('click',()=>pick(b.getAttribute('data-id'),true));
+    });
   }
   function renderPreview(){
     const VW=300,VH=90,PL=6,PR=6,PT=10,PB=10,PW=VW-PL-PR,PH=VH-PT-PB;
@@ -2347,39 +2341,47 @@ async function refreshSuggestedLoad(){
     svg.innerHTML=s;
     svg.style.opacity=dim?0.6:1;
   }
+  function setMeta(){
+    if(metaEl) metaEl.textContent=(vrState.axis==='off')
+      ? 'Flat working resistance — same load the whole rep.'
+      : 'Load shaped across the resist distance. Edit curves on /setup.';
+  }
   function postVr(){
     fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({curve_axis:vrState.axis,curve_kg:vrState.kg})}).catch(()=>{});
   }
-  function setMeta(){
-    if(metaEl) metaEl.textContent=(vrState.axis==='off')
-      ? 'Flat working resistance — same load the whole rep.'
-      : 'Load shaped across the resist distance, scaled off the working resistance.';
-  }
-  function apply(key,push){
-    activeKey=key;
-    if(key==='off'){
+  function pick(id,push){
+    activeId=id;
+    if(id==='off'){
       vrState.axis='off';
-    }else if(PRESETS[key]){
-      const base=parseFloat((document.getElementById('cfg-resist')||{}).value)||5;
-      vrState.kg=PRESETS[key](base).map(clampPt);
-      vrState.axis='distance';
+    }else{
+      const c=curves.find(x=>String(x.id)===String(id));
+      if(c&&c.points&&c.points.length===N){
+        vrState.kg=c.points.slice();
+        vrState.axis='distance';
+      }
     }
-    markActive(); setMeta(); renderPreview();
+    wrap.querySelectorAll('.vr-preset').forEach(b=>
+      b.classList.toggle('active',b.getAttribute('data-id')===String(activeId)));
+    setMeta(); renderPreview();
     if(push!==false) postVr();
   }
-  chipBtns.forEach(b=>b.addEventListener('click',()=>apply(b.getAttribute('data-key'),true)));
-  const resistInp=document.getElementById('cfg-resist');
-  if(resistInp) resistInp.addEventListener('input',()=>{
-    if(activeKey!=='off'&&PRESETS[activeKey]) apply(activeKey,false);
-  });
-  fetch('/api/c/state').then(r=>r.json()).then(j=>{
-    const cfg=j.config||{};
+  Promise.all([
+    fetch('/api/curves').then(r=>r.json()).catch(()=>[]),
+    fetch('/api/c/state').then(r=>r.json()).catch(()=>({})),
+  ]).then(([list,st])=>{
+    curves=Array.isArray(list)?list:[];
+    const cfg=st.config||{};
     if(cfg.curve_kg&&cfg.curve_kg.length===N) vrState.kg=cfg.curve_kg.slice();
     if(cfg.curve_axis) vrState.axis=cfg.curve_axis;
-    activeKey=(vrState.axis==='off')?'off':'custom';
-    markActive(); setMeta(); renderPreview();
-  }).catch(()=>{ markActive(); setMeta(); renderPreview(); });
+    activeId='off';
+    if(vrState.axis!=='off'){
+      const match=curves.find(c=>c.points&&c.points.length===N&&
+        c.points.every((p,i)=>Math.abs(p-vrState.kg[i])<0.01));
+      activeId=match?match.id:'custom';
+    }
+    renderChips(); setMeta(); renderPreview();
+  });
 })();
 
 // ---- Gear toggle (header) ----
@@ -3430,6 +3432,12 @@ document.getElementById('new-set-btn').onclick=async()=>{
     set('cfg-slew',        cfg.slew_kg_per_s);
     set('cfg-rest',        cfg.rest_interval_s);
     set('cfg-countdown',   cfg.countdown_s);
+    // Clamp the working-resistance stepper to the configured max resistance.
+    const kgLim=(j.limits&&j.limits.kg_max)||cfg.kg_limit;
+    if(kgLim){
+      const ri=document.getElementById('cfg-resist');
+      if(ri){ ri.max=kgLim; if((parseFloat(ri.value)||0)>kgLim) ri.value=kgLim; }
+    }
     if(cfg.drill){ const sel = document.getElementById('cfg-drill'); if(sel) sel.value = cfg.drill; }
     if(cfg.mode) applyMode(cfg.mode, {push:false});
     if(cfg.cod_prefix){ const sel = document.getElementById('cfg-cod-prefix'); if(sel) sel.value = cfg.cod_prefix; }
@@ -4171,11 +4179,6 @@ SETUP_HTML = """<!doctype html>
                   text-transform:none;letter-spacing:0;color:var(--fg);margin:0}
   .curve-axis-btn{flex:1;padding:8px;border:none;border-radius:5px;font-size:11px;
                   cursor:pointer;min-height:36px}
-  .curve-preset{padding:7px 12px;font-size:12px;font-weight:600;background:#0a0a0c;
-                color:var(--muted);border:1px solid var(--line);border-radius:6px;
-                cursor:pointer;min-height:36px}
-  .curve-preset:hover{color:var(--fg);border-color:var(--accent)}
-  .curve-preset.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
   .hist-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .hist-list{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto}
   .hist-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
@@ -4306,15 +4309,12 @@ SETUP_HTML = """<!doctype html>
 
       <div class="card">
         <h2>Resistance curve</h2>
-        <div class="curve-preset-row" id="curve-preset-row" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-          <button type="button" class="curve-preset" data-curve="flat">Flat</button>
-          <button type="button" class="curve-preset" data-curve="sprint_accel">Sprint-accel</button>
-          <button type="button" class="curve-preset" data-curve="plateau_drop">Plateau-drop</button>
-          <button type="button" class="curve-preset" data-curve="pyramid">Pyramid</button>
-          <button type="button" class="curve-preset" data-curve="block_start">Block start</button>
-          <button type="button" class="curve-preset" data-curve="light_heavy">Light→Heavy</button>
-          <button type="button" class="curve-preset" data-curve="late_load">Late-load</button>
-          <button type="button" class="curve-preset" data-curve="custom">Custom</button>
+        <div class="field">
+          <label>Curve library</label>
+          <div class="row" style="gap:6px">
+            <select id="curve-lib-select" style="flex:1"></select>
+            <button type="button" class="ghost" id="curve-delete" title="Delete selected curve" style="color:var(--bad)">×</button>
+          </div>
         </div>
         <div class="row" style="gap:6px;margin-bottom:6px">
           <button type="button" class="curve-axis-btn" data-axis="off">Off</button>
@@ -4324,6 +4324,15 @@ SETUP_HTML = """<!doctype html>
         <svg id="curve-svg" width="100%" viewBox="0 0 300 160"
              style="display:block;border:1px solid var(--line);border-radius:6px;touch-action:none"></svg>
         <div class="meta" id="curve-meta" style="margin-top:4px">Off — flat working resistance is used.</div>
+        <div class="field" style="margin-top:10px">
+          <label>Save edited curve</label>
+          <div class="row" style="gap:6px">
+            <input type="text" id="curve-name" placeholder="Curve name" style="flex:1">
+            <button type="button" class="ghost" id="curve-save">Save</button>
+            <button type="button" class="secondary" id="curve-save-as">Save as new</button>
+          </div>
+        </div>
+        <div class="meta" id="curve-save-msg" style="min-height:14px"></div>
       </div>
   </section>
 
@@ -4354,7 +4363,10 @@ SETUP_HTML = """<!doctype html>
             <input type="number" id="cfg-rest" value="180" step="15" min="0" max="600"></div>
           <div class="field"><label>Pre-drill countdown (s)</label>
             <input type="number" id="cfg-countdown" value="5" step="1" min="0" max="10"></div>
+          <div class="field"><label>Max resistance (kg)</label>
+            <input type="number" id="cfg-kg-limit" value="30" step="1" min="1" max="53"></div>
         </div>
+        <div class="meta" style="margin-top:6px">Hard ceiling for any commanded load (working, curve and velocity-cap boost). Capped at 53 kg — the rig's 300% torque limit.</div>
         <div class="divider"></div>
         <div class="checkrow">
           <label><input type="checkbox" id="cfg-auto-stop" checked> Full Auto rep detection</label>
@@ -4574,7 +4586,8 @@ document.getElementById('tpl-delete').onclick=async()=>{
 
 // ---- Session-default numbers → push to athletic config on change ----
 [['cfg-return','return_kg'],['cfg-dist','return_distance_m'],['cfg-slew','slew_kg_per_s'],
- ['cfg-rest','rest_interval_s'],['cfg-countdown','countdown_s']].forEach(([id,key])=>{
+ ['cfg-rest','rest_interval_s'],['cfg-countdown','countdown_s'],
+ ['cfg-kg-limit','kg_limit']].forEach(([id,key])=>{
   const el=document.getElementById(id);
   el.addEventListener('change',()=>{
     const v=parseFloat(el.value);
@@ -4601,22 +4614,28 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   wire('audio-rest','ppa.audio.rest');
 })();
 
-// ---- Resistance curve editor (draggable 6-point graph) ----
+// ---- Resistance curve editor + library (draggable 6-point graph) ----
 (function(){
   var svg=document.getElementById('curve-svg');
   if(!svg) return;
   var meta=document.getElementById('curve-meta');
+  var libSel=document.getElementById('curve-lib-select');
+  var nameInp=document.getElementById('curve-name');
+  var saveMsg=document.getElementById('curve-save-msg');
   var N=6,VW=300,VH=160,PL=34,PR=12,PT=12,PB=24;
-  var PW=VW-PL-PR,PH=VH-PT-PB,KGMAX=10;
+  var PW=VW-PL-PR,PH=VH-PT-PB,KGMAX=30;
   var axis='off';
   var kg=[5,5,5,5,5,5];
+  var curves=[];        // saved library curves
+  var selectedId=null;  // id of the loaded library curve (null = unsaved)
   function ptx(i){ return PL+(i/(N-1))*PW; }
   function pty(v){ return PT+(1-v/KGMAX)*PH; }
   function y2kg(y){ var v=(1-(y-PT)/PH)*KGMAX; return Math.max(0,Math.min(KGMAX,v)); }
+  function gridStep(){ return KGMAX>20?10:5; }
   function render(){
     var s='';
     s+='<rect x="'+PL+'" y="'+PT+'" width="'+PW+'" height="'+PH+'" fill="none" stroke="#2c2c34"/>';
-    for(var k=0;k<=KGMAX;k+=5){
+    for(var k=0;k<=KGMAX;k+=gridStep()){
       var gy=pty(k);
       s+='<line x1="'+PL+'" y1="'+gy+'" x2="'+(PL+PW)+'" y2="'+gy+'" stroke="#22222a"/>';
       s+='<text x="'+(PL-5)+'" y="'+(gy+3)+'" fill="#8a8a96" font-size="9" text-anchor="end">'+k+'</text>';
@@ -4673,38 +4692,81 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   for(var bi=0;bi<abs.length;bi++){
     abs[bi].onclick=function(){ axis=this.getAttribute('data-axis'); setBtns(); render(); postCurve(); };
   }
-  // §13 Curve presets — replace the 6 points with a named shape, scaled off
-  // the current base load. "Custom" keeps whatever is drawn.
-  function clampPt(v){ return Math.max(0, Math.min(KGMAX, Math.round(v*2)/2)); }
-  var CURVE_PRESETS = {
-    flat:        function(b){ return [b,b,b,b,b,b]; },
-    sprint_accel:function(b){ return [1.5*b,1.5*b,1.3*b,b,0.7*b,0.6*b]; },
-    plateau_drop:function(b){ return [b,b,b,b,0.7*b,0.4*b]; },
-    pyramid:     function(b){ return [0.5*b,0.9*b,1.3*b,1.3*b,0.9*b,0.5*b]; },
-    block_start: function(b){ return [2*b,1.6*b,1.2*b,b,0.9*b,0.8*b]; },
-    // Build speed first, then introduce resistance (1080 "on-ice" pattern).
-    light_heavy: function(b){ return [0.2*b,0.4*b,0.7*b,b,1.3*b,1.5*b]; },
-    // Light early, heavy spike through the late-accel phase, ease at the end.
-    late_load:   function(b){ return [0.3*b,0.5*b,0.7*b,1.4*b,1.5*b,1.1*b]; },
-  };
-  var cpBtns=document.querySelectorAll('.curve-preset');
-  for(var ci=0;ci<cpBtns.length;ci++){
-    cpBtns[ci].onclick=function(){
-      var key=this.getAttribute('data-curve');
-      for(var x=0;x<cpBtns.length;x++) cpBtns[x].classList.toggle('active',cpBtns[x]===this);
-      if(key==='custom') return;   // keep the manually-drawn points
-      var base=Math.max.apply(null,kg)||5;
-      kg=CURVE_PRESETS[key](base).map(clampPt);
-      if(axis==='off' && key!=='flat') axis='distance';
-      setBtns(); render(); postCurve();
-    };
+  // ---- Curve library: load / save / save-as / delete ----
+  function renderLibOptions(){
+    var html='<option value="">— Current (unsaved) —</option>';
+    for(var i=0;i<curves.length;i++){
+      html+='<option value="'+curves[i].id+'"'+(curves[i].id===selectedId?' selected':'')+'>'+
+            curves[i].name+'</option>';
+    }
+    libSel.innerHTML=html;
   }
+  function loadCurve(id){
+    var c=null;
+    for(var i=0;i<curves.length;i++){ if(curves[i].id===id){ c=curves[i]; break; } }
+    if(!c||!c.points||c.points.length!==N) return;
+    selectedId=id;
+    kg=c.points.slice();
+    if(nameInp) nameInp.value=c.name;
+    if(axis==='off') axis='distance';
+    setBtns(); render(); postCurve();
+  }
+  function refreshLib(cb){
+    fetch('/api/curves').then(function(r){return r.json();}).then(function(list){
+      curves=Array.isArray(list)?list:[];
+      renderLibOptions();
+      if(cb) cb();
+    }).catch(function(){ if(cb) cb(); });
+  }
+  function flash(msg,ok){
+    if(!saveMsg) return;
+    saveMsg.textContent=msg;
+    saveMsg.style.color=ok?'var(--accent)':'var(--bad)';
+  }
+  libSel.addEventListener('change',function(){
+    var v=libSel.value;
+    if(v===''){ selectedId=null; return; }
+    loadCurve(parseInt(v,10));
+    flash('',true);
+  });
+  function saveCurve(asNew){
+    var name=(nameInp.value||'').trim();
+    if(!name){ flash('Type a curve name first',false); return; }
+    var body={name:name,points:kg};
+    if(!asNew && selectedId!=null) body.id=selectedId;
+    fetch('/api/curves',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)}).then(function(r){
+      if(!r.ok) return r.json().then(function(j){ throw new Error(j.detail||('HTTP '+r.status)); });
+      return r.json();
+    }).then(function(c){
+      selectedId=c.id;
+      flash('Saved "'+c.name+'"',true);
+      refreshLib();
+    }).catch(function(e){ flash("Couldn't save — "+e.message,false); });
+  }
+  document.getElementById('curve-save').onclick=function(){ saveCurve(false); };
+  document.getElementById('curve-save-as').onclick=function(){ saveCurve(true); };
+  document.getElementById('curve-delete').onclick=function(){
+    if(selectedId==null){ flash('Pick a saved curve to delete',false); return; }
+    var c=null;
+    for(var i=0;i<curves.length;i++){ if(curves[i].id===selectedId) c=curves[i]; }
+    if(!confirm('Delete curve "'+(c?c.name:'')+'"?')) return;
+    fetch('/api/curves/'+selectedId,{method:'DELETE'}).then(function(){
+      selectedId=null;
+      if(nameInp) nameInp.value='';
+      flash('Deleted',true);
+      refreshLib();
+    }).catch(function(){ flash("Couldn't delete",false); });
+  };
+  // Seed editor from current rig config, then load the library.
   fetch('/api/c/state').then(function(r){return r.json();}).then(function(j){
     var cfg=j.config||{};
+    var lim=(j.limits&&j.limits.kg_max)||cfg.kg_limit;
+    if(lim){ KGMAX=Math.max(10,lim); }
     if(cfg.curve_axis) axis=cfg.curve_axis;
     if(cfg.curve_kg&&cfg.curve_kg.length===N) kg=cfg.curve_kg.slice();
-    setBtns(); render();
-  }).catch(function(){ setBtns(); render(); });
+    setBtns(); render(); refreshLib();
+  }).catch(function(){ setBtns(); render(); refreshLib(); });
 })();
 
 // ---- Seed session-default numbers from current rig config ----
@@ -4717,6 +4779,7 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
     set('cfg-slew',cfg.slew_kg_per_s);
     set('cfg-rest',cfg.rest_interval_s);
     set('cfg-countdown',cfg.countdown_s);
+    set('cfg-kg-limit',cfg.kg_limit);
     if(cfg.gear!=null) document.getElementById('cfg-gear').value=String(cfg.gear);
     if(cfg.auto_stop_enabled!=null)
       document.getElementById('cfg-auto-stop').checked=!!cfg.auto_stop_enabled;
@@ -5332,6 +5395,40 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                   "rest_interval_s", "countdown_s"):
             if k in cfg: state.athletic_config[k] = cfg[k]
         return {"loaded": template_id, "name": tpl["name"], "config": state.athletic_config}
+
+    # ---- Resistance-curve library ----
+    @app.get("/api/curves")
+    async def curves_list():
+        if state.db is None: raise HTTPException(503, "database not available")
+        return await state.db_call(persistence.list_curves)
+
+    @app.post("/api/curves")
+    async def curves_save(req: dict):
+        if state.db is None: raise HTTPException(503, "database not available")
+        name = (req.get("name") or "").strip()
+        if not name: raise HTTPException(400, "curve name required")
+        points = req.get("points")
+        if not isinstance(points, list) or len(points) != CURVE_POINTS:
+            raise HTTPException(400, f"points must be {CURVE_POINTS} numbers")
+        try:
+            pts = [float(p) for p in points]
+        except (TypeError, ValueError):
+            raise HTTPException(400, "points must be numbers")
+        if not all(0 <= p <= KG_LIMIT_HARD for p in pts):
+            raise HTTPException(400, f"points must be in [0, {KG_LIMIT_HARD}] kg")
+        curve_id = req.get("id")
+        try:
+            return await state.db_call(persistence.save_curve, name, pts, curve_id)
+        except persistence.sqlite3.IntegrityError:
+            raise HTTPException(409, f"a curve named '{name}' already exists")
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.delete("/api/curves/{curve_id}")
+    async def curves_delete(curve_id: int):
+        if state.db is None: raise HTTPException(503, "database not available")
+        await state.db_call(persistence.delete_curve, curve_id)
+        return {"deleted": curve_id}
 
     @app.post("/api/c/estop")
     async def emergency_stop():

@@ -9,6 +9,7 @@ while allowing async polling-loop writes via run_in_executor.
 """
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
@@ -79,6 +80,14 @@ CREATE TABLE IF NOT EXISTS templates (
     updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_templates_name ON templates(name);
+
+CREATE TABLE IF NOT EXISTS resistance_curves (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,
+    points_json TEXT    NOT NULL,
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS samples (
     session_id       INTEGER NOT NULL REFERENCES sessions(id),
@@ -185,6 +194,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # the table is empty.
     _ensure_column(conn, "sessions", "rig_id", "rig_id INTEGER DEFAULT 1")
     _seed_default_rig(conn)
+    _seed_builtin_curves(conn)
     _recover_orphans(conn)
 
 
@@ -995,6 +1005,83 @@ def _seed_default_rig(conn: sqlite3.Connection) -> None:
         with conn:
             conn.execute("INSERT INTO rigs(id, name, location) VALUES (1, ?, ?)",
                          ("PPA-1", "Workshop"))
+
+
+# Built-in resistance-curve library, seeded once when the table is empty.
+# Concrete 6-point shapes (kg) at a 5 kg working-load reference.
+_BUILTIN_CURVES = [
+    ("Flat",         [5.0, 5.0, 5.0, 5.0, 5.0, 5.0]),
+    ("Sprint-accel", [7.5, 7.5, 6.5, 5.0, 3.5, 3.0]),
+    ("Plateau-drop", [5.0, 5.0, 5.0, 5.0, 3.5, 2.0]),
+    ("Pyramid",      [2.5, 4.5, 6.5, 6.5, 4.5, 2.5]),
+    ("Block start",  [10.0, 8.0, 6.0, 5.0, 4.5, 4.0]),
+    ("Light-Heavy",  [1.0, 2.0, 3.5, 5.0, 6.5, 7.5]),
+    ("Late-load",    [1.5, 2.5, 3.5, 7.0, 7.5, 5.5]),
+]
+
+
+def _seed_builtin_curves(conn: sqlite3.Connection) -> None:
+    """Seed the resistance-curve library with the built-in shapes. Idempotent —
+    runs only when the table is empty, so user edits/deletes are preserved."""
+    row = conn.execute("SELECT COUNT(*) AS n FROM resistance_curves").fetchone()
+    if row and row["n"] == 0:
+        with conn:
+            for name, pts in _BUILTIN_CURVES:
+                conn.execute(
+                    "INSERT INTO resistance_curves(name, points_json) VALUES (?, ?)",
+                    (name, json.dumps(pts)))
+
+
+def list_curves(conn: sqlite3.Connection) -> list[dict]:
+    """List all saved resistance curves, oldest first (built-ins lead)."""
+    rows = conn.execute(
+        "SELECT id, name, points_json, created_at, updated_at "
+        "FROM resistance_curves ORDER BY id"
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try: d["points"] = json.loads(d.pop("points_json") or "[]")
+        except Exception: d["points"] = []
+        out.append(d)
+    return out
+
+
+def save_curve(conn: sqlite3.Connection, name: str, points: list,
+               curve_id: Optional[int] = None) -> dict:
+    """Upsert a resistance curve. With curve_id, updates that row (rename
+    allowed). Without, updates by name if it exists, else inserts."""
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("curve name required")
+    pts = [float(p) for p in points]
+    pts_json = json.dumps(pts)
+    now = _now_iso()
+    with conn:
+        if curve_id is not None:
+            conn.execute(
+                "UPDATE resistance_curves SET name=?, points_json=?, updated_at=? "
+                "WHERE id=?", (name, pts_json, now, curve_id))
+            cid = curve_id
+        else:
+            existing = conn.execute(
+                "SELECT id FROM resistance_curves WHERE name=?", (name,)).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE resistance_curves SET points_json=?, updated_at=? "
+                    "WHERE id=?", (pts_json, now, existing["id"]))
+                cid = existing["id"]
+            else:
+                cur = conn.execute(
+                    "INSERT INTO resistance_curves(name, points_json) VALUES (?, ?)",
+                    (name, pts_json))
+                cid = cur.lastrowid
+    return {"id": cid, "name": name, "points": pts}
+
+
+def delete_curve(conn: sqlite3.Connection, curve_id: int) -> None:
+    with conn:
+        conn.execute("DELETE FROM resistance_curves WHERE id=?", (curve_id,))
 
 
 def list_rigs(conn: sqlite3.Connection) -> list[dict]:
