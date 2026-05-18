@@ -102,7 +102,13 @@ SON_CMD = 0x02
 PCT_PER_KG = 5.64        # locked-in 2026-05-10 4-point fit
 SPLIT_LENGTH_M = 5.0     # 1080-style uniform split bucket (metres)
 HEARTBEAT_INTERVAL = 1.5  # s; well under 5s drive watchdog
-SPEED_LIMIT_ARMED = 200   # RPM cap during Phase C ops (~1.15 m/s)
+SPEED_LIMIT_ARMED = 560   # RPM cap during Phase C ops (~3.2 m/s). Sized for the
+                          # return-phase reel-in (up to 3 m/s) with headroom. This
+                          # is a torque-mode limit — it bounds motor-DRIVEN speed
+                          # only; athlete-driven (back-driven) sprint speed is
+                          # unaffected, so resisted sprints are not braked.
+RETURN_SPEED_GAIN = 4.0   # kg of retract load per m/s of return-speed error (P-gain)
+RETURN_KG_MAX = 12.0      # cap on the return-phase reel-in load
 KG_LIMIT_HARD = 53.0      # absolute ceiling — empirical 300% torque-clip limit, never exceed
 KG_LIMIT_DEFAULT = 30.0   # default for the configurable max-resistance setting
 WATCHDOG_GRACE = 7.0      # s to wait after heartbeat stop for drive auto-disable
@@ -221,6 +227,7 @@ class AthleticConfigRequest(BaseModel):
     concentric_dir: Optional[str] = None
     return_kg: Optional[float] = None
     return_distance_m: Optional[float] = None
+    return_speed_mps: Optional[float] = None
     slew_kg_per_s: Optional[float] = None
     drill: Optional[str] = None
     rest_interval_s: Optional[int] = None    # §12 inter-rep rest timer
@@ -279,6 +286,7 @@ class ServiceState:
             "kg_limit": KG_LIMIT_DEFAULT,  # configurable max resistance (capped at KG_LIMIT_HARD)
             "return_kg": 1.0,
             "return_distance_m": 0.5,
+            "return_speed_mps": 2.0,  # cable reel-in speed for the return phase
             "slew_kg_per_s": 12.0,  # max rate of change of commanded kg
             # Drill catalogue (lifted from T-APEX TrainingMode):
             "drill": "FreeTest",  # FreeTest, ASkip, BSkip, Ankling, SkippingJumps,
@@ -890,7 +898,16 @@ async def _athletic_loop(state: "ServiceState"):
                             else:
                                 target_kg = min(target_kg + over, kg_lim)
                     else:
-                        target_kg = cfg["return_kg"]
+                        # Return zone — reel the cable in at the configured speed.
+                        # Closed loop: modulate retract load to chase the target
+                        # retract speed. Applies both in the recovery corridor and
+                        # after the rep completes past the resist band.
+                        ret_target = cfg.get("return_speed_mps", 2.0)
+                        spd_rpm = tel.speed_rpm or 0
+                        retract_mps = (-spd_rpm * MPS_PER_RPM) if spd_rpm < 0 else 0.0
+                        err = ret_target - retract_mps
+                        target_kg = cfg["return_kg"] + RETURN_SPEED_GAIN * err
+                        target_kg = max(0.0, min(target_kg, RETURN_KG_MAX))
                     new_phase = "resist" if in_resist_band else "return"
                     if state.athletic_rep_stop_requested or auto_stop_now or (
                             rip is not None and rip.get("_left_start")
@@ -2621,7 +2638,7 @@ let preRepLastConfig = null;     // detect parameter changes -> always show
 
 function configChanged(a, b){
   if(!a || !b) return true;
-  return ['resist_kg','resist_distance_m','velocity_cap_mps','chain_kg_per_m','eccentric_overload_pct','concentric_dir','return_kg','return_distance_m','slew_kg_per_s','drill','athlete_id']
+  return ['resist_kg','resist_distance_m','velocity_cap_mps','chain_kg_per_m','eccentric_overload_pct','concentric_dir','return_kg','return_distance_m','return_speed_mps','slew_kg_per_s','drill','athlete_id']
     .some(k => a[k] !== b[k]);
 }
 
@@ -2634,6 +2651,7 @@ function buildPreRepGrid(cfg, athleteName){
     ['Resist distance',     cfg.resist_distance_m + ' m'],
     ['Recovery resistance', cfg.return_kg + ' kg'],
     ['Recovery distance',   cfg.return_distance_m + ' m'],
+    ['Return speed',        (cfg.return_speed_mps!=null?cfg.return_speed_mps:2) + ' m/s'],
     ['Ease-in speed',       cfg.slew_kg_per_s + ' kg/s'],
   ];
   return rows.map(([l,v]) => '<div class="l">'+l+'</div><div class="v">'+v+'</div>').join('');
@@ -4179,6 +4197,11 @@ SETUP_HTML = """<!doctype html>
                   text-transform:none;letter-spacing:0;color:var(--fg);margin:0}
   .curve-axis-btn{flex:1;padding:8px;border:none;border-radius:5px;font-size:11px;
                   cursor:pointer;min-height:36px}
+  .seg-btn{flex:1;padding:9px;font-size:12px;font-weight:600;cursor:pointer;
+           background:#0a0a0c;color:var(--muted);border:1px solid var(--line);
+           border-radius:6px;min-height:38px}
+  .seg-btn:hover{color:var(--fg);border-color:var(--accent)}
+  .seg-btn.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
   .hist-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .hist-list{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto}
   .hist-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
@@ -4367,6 +4390,15 @@ SETUP_HTML = """<!doctype html>
             <input type="number" id="cfg-kg-limit" value="30" step="1" min="1" max="53"></div>
         </div>
         <div class="meta" style="margin-top:6px">Hard ceiling for any commanded load (working, curve and velocity-cap boost). Capped at 53 kg — the rig's 300% torque limit.</div>
+        <div class="field" style="margin-top:12px">
+          <label>Return speed</label>
+          <div id="return-speed-seg" style="display:flex;gap:6px">
+            <button type="button" class="seg-btn" data-speed="1">Slow · 1 m/s</button>
+            <button type="button" class="seg-btn" data-speed="2">Medium · 2 m/s</button>
+            <button type="button" class="seg-btn" data-speed="3">Fast · 3 m/s</button>
+          </div>
+        </div>
+        <div class="meta" style="margin-top:6px">Speed the cable reels back in once the athlete is past the resist band or inside the recovery zone.</div>
         <div class="divider"></div>
         <div class="checkrow">
           <label><input type="checkbox" id="cfg-auto-stop" checked> Full Auto rep detection</label>
@@ -4599,6 +4631,21 @@ document.getElementById('cfg-gear').addEventListener('change',e=>
 document.getElementById('cfg-auto-stop').addEventListener('change',e=>
   postConfig({auto_stop_enabled:e.target.checked}));
 
+// ---- Return-speed segmented control ----
+(function(){
+  const seg=document.getElementById('return-speed-seg');
+  if(!seg) return;
+  const btns=seg.querySelectorAll('.seg-btn');
+  window._markReturnSpeed=function(v){
+    btns.forEach(b=>b.classList.toggle('active',parseFloat(b.getAttribute('data-speed'))===v));
+  };
+  btns.forEach(b=>b.addEventListener('click',()=>{
+    const v=parseFloat(b.getAttribute('data-speed'));
+    window._markReturnSpeed(v);
+    postConfig({return_speed_mps:v});
+  }));
+})();
+
 // ---- Units + audio (localStorage, shared with /coach) ----
 (()=>{
   const u=document.getElementById('cfg-units');
@@ -4783,6 +4830,8 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
     if(cfg.gear!=null) document.getElementById('cfg-gear').value=String(cfg.gear);
     if(cfg.auto_stop_enabled!=null)
       document.getElementById('cfg-auto-stop').checked=!!cfg.auto_stop_enabled;
+    if(typeof window._markReturnSpeed==='function')
+      window._markReturnSpeed(cfg.return_speed_mps!=null?cfg.return_speed_mps:2);
   }catch(e){}
 })();
 
@@ -5727,6 +5776,10 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             if not 0 < req.return_distance_m <= 5:
                 raise HTTPException(400, "return_distance_m out of range (0, 5]")
             c["return_distance_m"] = req.return_distance_m
+        if req.return_speed_mps is not None:
+            if not 0.5 <= req.return_speed_mps <= 3.0:
+                raise HTTPException(400, "return_speed_mps out of range [0.5, 3.0]")
+            c["return_speed_mps"] = req.return_speed_mps
         if req.slew_kg_per_s is not None:
             if not 1.0 <= req.slew_kg_per_s <= 60.0:
                 raise HTTPException(400, "slew_kg_per_s out of range [1, 60]")
