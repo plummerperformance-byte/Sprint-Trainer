@@ -312,6 +312,7 @@ class ServiceState:
         self.athletic_current_set: int = 1   # reps are grouped into sets
         self.athletic_task: Optional[asyncio.Task] = None
         self.athletic_current_kg: float = 0.0  # current commanded kg (slew-limited)
+        self._return_log_t: float = 0.0  # throttle for return-phase tuning logs
         # Rep tracking inside athletic mode: a "rep" is one resist phase
         self.athletic_reps: list[dict] = []
         self._rep_in_progress: Optional[dict] = None
@@ -907,7 +908,17 @@ async def _athletic_loop(state: "ServiceState"):
                         retract_mps = (-spd_rpm * MPS_PER_RPM) if spd_rpm < 0 else 0.0
                         err = ret_target - retract_mps
                         target_kg = cfg["return_kg"] + RETURN_SPEED_GAIN * err
-                        target_kg = max(0.0, min(target_kg, RETURN_KG_MAX))
+                        # Bound by RETURN_KG_MAX and the configured max resistance.
+                        ret_cap = min(RETURN_KG_MAX,
+                                      cfg.get("kg_limit", KG_LIMIT_DEFAULT))
+                        target_kg = max(0.0, min(target_kg, ret_cap))
+                        # Throttled telemetry for tuning RETURN_SPEED_GAIN.
+                        _now = time.time()
+                        if _now - state._return_log_t >= 1.0:
+                            state._return_log_t = _now
+                            log.info("return: target=%.2f measured=%.2f m/s "
+                                     "-> load=%.1f kg", ret_target, retract_mps,
+                                     target_kg)
                     new_phase = "resist" if in_resist_band else "return"
                     if state.athletic_rep_stop_requested or auto_stop_now or (
                             rip is not None and rip.get("_left_start")
@@ -1490,12 +1501,26 @@ PHASE_C_HTML = """<!doctype html>
 
   /* Universal Emergency Stop (§2.5) — every screen, every depth, one tap, no
      confirmation. Sized for sweaty thumb on a phone. Sits below phase pill. */
-  .estop-btn{position:fixed;top:80px;right:18px;width:64px;height:64px;
-             border-radius:50%;background:var(--bad);color:#fff;border:3px solid #ff8a8a;
-             font-size:14px;font-weight:800;letter-spacing:0.08em;cursor:pointer;z-index:100;
-             box-shadow:0 6px 18px rgba(232,90,90,0.4);
-             -webkit-tap-highlight-color:transparent}
-  .estop-btn:hover,.estop-btn:active{background:#ff6b6b;transform:scale(1.05)}
+  .estop-btn{position:fixed;top:80px;right:18px;width:74px;height:74px;
+             border-radius:50%;border:none;cursor:pointer;z-index:100;
+             display:flex;align-items:center;justify-content:center;
+             background:radial-gradient(circle at 50% 35%,#e84a4a 0%,#cc1f1f 38%,#9c0f0f 72%,#6b0808 100%);
+             box-shadow:0 0 0 5px #7a0c0c,0 0 16px 6px rgba(255,80,80,0.35),
+                        0 10px 22px rgba(0,0,0,0.55),
+                        inset 0 5px 13px rgba(255,255,255,0.5),
+                        inset 0 -13px 22px rgba(0,0,0,0.5);
+             color:#fff;font-size:16px;font-weight:800;letter-spacing:0.05em;
+             text-shadow:0 1px 3px rgba(0,0,0,0.6);
+             -webkit-tap-highlight-color:transparent;transition:transform 100ms}
+  .estop-btn::before{content:"";position:absolute;left:17%;top:11%;width:66%;height:44%;
+             border-radius:50%;pointer-events:none;
+             background:linear-gradient(rgba(255,255,255,0.6),rgba(255,255,255,0.04))}
+  .estop-btn span{position:relative;z-index:1}
+  .estop-btn:hover,.estop-btn:active{transform:scale(1.06)}
+  .estop-btn:active{box-shadow:0 0 0 5px #7a0c0c,0 0 16px 6px rgba(255,80,80,0.35),
+                        0 4px 10px rgba(0,0,0,0.55),
+                        inset 0 5px 13px rgba(255,255,255,0.35),
+                        inset 0 -13px 22px rgba(0,0,0,0.55)}
   .estop-btn.firing{animation:estop-pulse 0.4s ease-out 3}
   @keyframes estop-pulse{0%,100%{transform:scale(1)} 50%{transform:scale(1.15)}}
 
@@ -1727,7 +1752,7 @@ PHASE_C_HTML = """<!doctype html>
 </head><body>
 
 <div id="phase-pill" class="phase-pill-fixed standby">STANDBY</div>
-<button id="estop-btn" class="estop-btn" title="Emergency stop — one tap, no confirmation" aria-label="Emergency stop">STOP</button>
+<button id="estop-btn" class="estop-btn" title="Emergency stop — one tap, no confirmation" aria-label="Emergency stop"><span>STOP</span></button>
 
 <div class="wrap">
 
@@ -4213,13 +4238,25 @@ SETUP_HTML = """<!doctype html>
   .hist-summary .sep{color:#3a3a44;margin:0 6px}
   .hist-reps{color:var(--accent);font-weight:600;font-size:11px}
   .hist-empty{color:var(--muted);text-align:center;padding:18px;font-size:13px}
-  .estop-btn{position:fixed;top:14px;right:14px;width:56px;height:56px;border-radius:50%;
-             background:var(--bad);color:#fff;border:3px solid #ff8a8a;font-size:13px;
-             font-weight:800;cursor:pointer;z-index:100}
+  .estop-btn{position:fixed;top:14px;right:14px;width:66px;height:66px;border-radius:50%;
+             border:none;cursor:pointer;z-index:100;
+             display:flex;align-items:center;justify-content:center;
+             background:radial-gradient(circle at 50% 35%,#e84a4a 0%,#cc1f1f 38%,#9c0f0f 72%,#6b0808 100%);
+             box-shadow:0 0 0 5px #7a0c0c,0 0 16px 6px rgba(255,80,80,0.35),
+                        0 10px 22px rgba(0,0,0,0.55),
+                        inset 0 5px 13px rgba(255,255,255,0.5),
+                        inset 0 -13px 22px rgba(0,0,0,0.5);
+             color:#fff;font-size:15px;font-weight:800;letter-spacing:0.05em;
+             text-shadow:0 1px 3px rgba(0,0,0,0.6);transition:transform 100ms}
+  .estop-btn::before{content:"";position:absolute;left:17%;top:11%;width:66%;height:44%;
+             border-radius:50%;pointer-events:none;
+             background:linear-gradient(rgba(255,255,255,0.6),rgba(255,255,255,0.04))}
+  .estop-btn span{position:relative;z-index:1}
+  .estop-btn:hover,.estop-btn:active{transform:scale(1.06)}
 </style>
 </head><body>
 
-<button id="estop-btn" class="estop-btn" title="Emergency stop" aria-label="Emergency stop">STOP</button>
+<button id="estop-btn" class="estop-btn" title="Emergency stop" aria-label="Emergency stop"><span>STOP</span></button>
 
 <div class="wrap">
   <div class="topbar">
