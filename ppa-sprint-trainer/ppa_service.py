@@ -103,7 +103,8 @@ PCT_PER_KG = 5.64        # locked-in 2026-05-10 4-point fit
 SPLIT_LENGTH_M = 5.0     # 1080-style uniform split bucket (metres)
 HEARTBEAT_INTERVAL = 1.5  # s; well under 5s drive watchdog
 SPEED_LIMIT_ARMED = 200   # RPM cap during Phase C ops (~1.15 m/s)
-KG_LIMIT_C = 10.0         # hard cap on UI-set Phase C setpoint
+KG_LIMIT_HARD = 53.0      # absolute ceiling — empirical 300% torque-clip limit, never exceed
+KG_LIMIT_DEFAULT = 30.0   # default for the configurable max-resistance setting
 WATCHDOG_GRACE = 7.0      # s to wait after heartbeat stop for drive auto-disable
 
 
@@ -211,6 +212,7 @@ class AthleticConfigRequest(BaseModel):
     breaks body parsing — FastAPI falls back to query-param mode."""
     resist_kg: Optional[float] = None
     resist_distance_m: Optional[float] = None
+    kg_limit: Optional[float] = None         # configurable max resistance
     velocity_cap_mps: Optional[float] = None
     curve_axis: Optional[str] = None
     curve_kg: Optional[list[float]] = None
@@ -274,6 +276,7 @@ class ServiceState:
             "velocity_cap_mps": 0.0,    # 0 = off; >0 caps cable speed (resisted mode)
             "curve_axis": "off",        # off | distance | velocity — resistance curve
             "curve_kg": [5.0, 5.0, 5.0, 5.0, 5.0, 5.0],  # 6 evenly-spaced curve points
+            "kg_limit": KG_LIMIT_DEFAULT,  # configurable max resistance (capped at KG_LIMIT_HARD)
             "return_kg": 1.0,
             "return_distance_m": 0.5,
             "slew_kg_per_s": 12.0,  # max rate of change of commanded kg
@@ -521,8 +524,8 @@ class ServiceState:
             raise RuntimeError(f"cannot set kg in state {self.phase_c}")
         if kg < 0:
             raise ValueError("only positive kg (retract direction) supported")
-        if kg > KG_LIMIT_C:
-            raise ValueError(f"kg > {KG_LIMIT_C} hard cap")
+        if kg > KG_LIMIT_HARD:
+            raise ValueError(f"kg > {KG_LIMIT_HARD} hard cap")
         pct = -kg * PCT_PER_KG  # negative torque = retract direction
         raw = int(round(pct * 10))
         with self.modbus_lock:
@@ -847,7 +850,7 @@ async def _athletic_loop(state: "ServiceState"):
                     is_ecc = abs(spd) > 3 and cur_dir != cfg.get("concentric_dir", "extend")
                     if is_ecc:
                         loaded *= 1.0 + cfg["eccentric_overload_pct"] / 100.0
-                    target_kg = min(loaded, KG_LIMIT_C)
+                    target_kg = min(loaded, cfg.get("kg_limit", KG_LIMIT_DEFAULT))
                     new_phase = "return" if is_ecc else "resist"
                     if state.athletic_rep_stop_requested or (
                             rip is not None and rip.get("_left_start")
@@ -873,7 +876,8 @@ async def _athletic_loop(state: "ServiceState"):
                                 cfg["curve_kg"], speed_mps, CURVE_VELOCITY_MAX)
                         else:
                             target_kg = cfg["resist_kg"]
-                        target_kg = min(target_kg, KG_LIMIT_C)
+                        kg_lim = cfg.get("kg_limit", KG_LIMIT_DEFAULT)
+                        target_kg = min(target_kg, kg_lim)
                         # Velocity cap — hold the athlete near the cap. Resisted:
                         # ADD resistance when over the cap. Assisted: the motor is
                         # towing them, so REDUCE the tow instead (adding would
@@ -884,7 +888,7 @@ async def _athletic_loop(state: "ServiceState"):
                             if cfg.get("mode") == "assisted":
                                 target_kg = max(0.0, target_kg - over)
                             else:
-                                target_kg = min(target_kg + over, KG_LIMIT_C)
+                                target_kg = min(target_kg + over, kg_lim)
                     else:
                         target_kg = cfg["return_kg"]
                     new_phase = "resist" if in_resist_band else "return"
@@ -1653,7 +1657,7 @@ PHASE_C_HTML = """<!doctype html>
   .bottombar{position:sticky;bottom:0;background:rgba(10,10,12,0.96);
              border-top:1px solid var(--line);padding:12px 18px;z-index:40;
              backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-  /* Bottombar: Adjust · single phase-aware primary action · motor icon */
+  /* Bottombar: Adjust · single phase-aware primary action */
   .bottombar-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:10px}
   #adjust-btn{flex:0 0 auto;min-height:56px;padding:0 16px;font-size:13px;font-weight:700;
               background:transparent;color:var(--fg);border:1px solid var(--line);
@@ -1661,9 +1665,6 @@ PHASE_C_HTML = """<!doctype html>
   #primary-action{flex:1;min-height:56px;font-size:17px;font-weight:700}
   #primary-action.danger{background:var(--bad);color:#fff;min-height:64px}
   #primary-action.warn{background:var(--warn);color:#0a0a0c}
-  #motor-btn{flex:0 0 auto;width:56px;height:56px;min-height:56px;padding:0}
-  #motor-btn .mb-label{display:none}
-  #motor-btn::before{content:"\23FB";font-size:22px}
 
   /* Settings sheet (slides in from right on coach) */
   .sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,0.5);opacity:0;pointer-events:none;
@@ -1991,7 +1992,6 @@ PHASE_C_HTML = """<!doctype html>
   <div class="bottombar-inner" id="bottombar-inner">
     <button type="button" id="adjust-btn" title="Adjust drill settings">Adjust</button>
     <button id="primary-action">Arm rig</button>
-    <button id="motor-btn" title="Motor on/off" aria-label="Motor on/off"><span class="mb-label">Motor</span></button>
   </div>
 </div>
 
@@ -2085,7 +2085,6 @@ PHASE_C_HTML = """<!doctype html>
 
 <script>
 const stateTag=document.getElementById('state-tag');
-const motorBtn=document.getElementById('motor-btn');
 const phasePill=document.getElementById('phase-pill');
 const statSpeed=document.getElementById('stat-speed');
 const statForce=document.getElementById('stat-force');
@@ -2142,25 +2141,14 @@ async function armRig(){
   const aid=document.getElementById('athlete-select').value;
   await fetch('/api/c/athletic/start'+(aid?('?athlete_id='+encodeURIComponent(aid)):''),{method:'POST'});
 }
-async function disarmRig(){
-  await fetch('/api/c/athletic/stop',{method:'POST'});
-  await fetch('/api/c/disarm',{method:'POST'});
-}
 async function repAction(){
   const c=await(await fetch('/api/c/state')).json();
   const url=(c.athletic_phase==='ready')?'/api/c/athletic/start_rep':'/api/c/athletic/stop_rep';
   const r=await fetch(url,{method:'POST'});
   if(!r.ok){const j=await r.json().catch(()=>({}));alert('Rep: '+(j.detail||JSON.stringify(j)));}
 }
-motorBtn.onclick=async()=>{
-  motorBtn.disabled=true;
-  try{
-    const c=await(await fetch('/api/c/state')).json();
-    if(c.phase_c==='armed') await disarmRig(); else await armRig();
-  }catch(e){}
-  motorBtn.disabled=false;
-};
 // Single phase-aware primary action: Arm rig → Start/Next rep → Stop → Reset.
+// Powering the rig off is handled by the red E-stop button (safe + idempotent).
 const primaryBtn=document.getElementById('primary-action');
 primaryBtn.onclick=async()=>{
   primaryBtn.disabled=true;
@@ -3802,7 +3790,6 @@ function pollGamepads(){
       if(isPressed && !wasPressed){
         // First button on most remotes/presenters
         if(i === 0 && !primaryBtn.disabled) primaryBtn.click();
-        else if(i === 1) motorBtn.click();
         else if(i === 9 || i === 8) document.getElementById('estop-btn')?.click();
       }
       last[i] = isPressed;
@@ -3844,9 +3831,6 @@ async function refresh(){
   if(autoInd) autoInd.style.display=(c.config&&c.config.auto_stop_enabled)?'inline-block':'none';
 
   const armed=c.phase_c==='armed';
-  const mbLabel=motorBtn.querySelector('.mb-label');
-  if(mbLabel) mbLabel.textContent=armed?'Motor ON':'Motor OFF';
-  motorBtn.classList.toggle('on',armed);
   const repActive=c.athletic_phase==='resist'||c.athletic_phase==='return';
 
   // Single phase-aware primary action — Arm rig → Start/Next rep → Stop → Reset
@@ -4978,7 +4962,8 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             "extension_m": extension_m,
             "config": state.athletic_config,
             "limits": {
-                "kg_max": KG_LIMIT_C,
+                "kg_max": state.athletic_config.get("kg_limit", KG_LIMIT_DEFAULT),
+                "kg_max_hard": KG_LIMIT_HARD,
                 "speed_limit_rpm_armed": SPEED_LIMIT_ARMED,
                 "pct_per_kg": PCT_PER_KG,
             },
@@ -5599,9 +5584,13 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
     @app.post("/api/c/athletic/config")
     async def phase_c_athletic_config(req: AthleticConfigRequest):
         c = state.athletic_config
+        if req.kg_limit is not None:
+            if not 1.0 <= req.kg_limit <= KG_LIMIT_HARD:
+                raise HTTPException(400, f"kg_limit out of range [1, {KG_LIMIT_HARD}]")
+            c["kg_limit"] = float(req.kg_limit)
         if req.resist_kg is not None:
-            if not 0 < req.resist_kg <= KG_LIMIT_C:
-                raise HTTPException(400, f"resist_kg out of range (0, {KG_LIMIT_C}]")
+            if not 0 < req.resist_kg <= KG_LIMIT_HARD:
+                raise HTTPException(400, f"resist_kg out of range (0, {KG_LIMIT_HARD}]")
             c["resist_kg"] = req.resist_kg
         if req.resist_distance_m is not None:
             if not 0 < req.resist_distance_m <= 50:
@@ -5629,9 +5618,9 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             c["curve_axis"] = req.curve_axis
         if req.curve_kg is not None:
             if (len(req.curve_kg) != CURVE_POINTS
-                    or not all(0 <= v <= KG_LIMIT_C for v in req.curve_kg)):
+                    or not all(0 <= v <= KG_LIMIT_HARD for v in req.curve_kg)):
                 raise HTTPException(
-                    400, f"curve_kg must be {CURVE_POINTS} values in [0, {KG_LIMIT_C}]")
+                    400, f"curve_kg must be {CURVE_POINTS} values in [0, {KG_LIMIT_HARD}]")
             c["curve_kg"] = [float(v) for v in req.curve_kg]
         if req.return_kg is not None:
             if not 0 <= req.return_kg <= 5:
@@ -5751,7 +5740,8 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             "phase_c": {
                 "state": state.phase_c,
                 "setpoint_pct": round(state.phase_c_setpoint_pct, 2),
-                "kg_max": KG_LIMIT_C,
+                "kg_max": state.athletic_config.get("kg_limit", KG_LIMIT_DEFAULT),
+                "kg_max_hard": KG_LIMIT_HARD,
                 "pct_per_kg": PCT_PER_KG,
                 "speed_limit_rpm_armed": SPEED_LIMIT_ARMED,
                 "heartbeat_interval_s": HEARTBEAT_INTERVAL,
