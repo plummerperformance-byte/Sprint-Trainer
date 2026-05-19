@@ -110,6 +110,11 @@ SPEED_LIMIT_ARMED = 560   # RPM cap during Phase C ops (~3.2 m/s). Sized for the
                           # unaffected, so resisted sprints are not braked.
 RETURN_SPEED_GAIN = 4.0   # kg of retract load per m/s of return-speed error (P-gain)
 RETURN_KG_MAX = 12.0      # cap on the return-phase reel-in load
+FLYWHEEL_TAU = 0.25       # s — flywheel-mode velocity-tracking time constant. The
+                          # virtual flywheel speed is a low-pass of cable speed with
+                          # this constant; it smooths the v→a derivative so the
+                          # inertial reaction is stable at the current 10 Hz loop.
+                          # See docs/flywheel-loop-rate-plan.md §6.
 JOG_KG = 4.0              # maintenance-jog torque level (kg-equivalent)
 JOG_KG_MAX = 10.0         # hard cap on any jog torque magnitude
 JOG_DEADLINE_S = 0.7      # jog auto-zeros if no keepalive within this window
@@ -230,6 +235,8 @@ class AthleticConfigRequest(BaseModel):
     chain_kg_per_m: Optional[float] = None
     eccentric_overload_pct: Optional[float] = None
     concentric_dir: Optional[str] = None
+    virtual_mass_kg: Optional[float] = None    # flywheel: virtual inertia dial
+    viscous_damping: Optional[float] = None    # flywheel: bearing-drag term, kg per m/s
     return_kg: Optional[float] = None
     return_distance_m: Optional[float] = None
     return_speed_mps: Optional[float] = None
@@ -299,10 +306,12 @@ class ServiceState:
             # ApproachJump, HighKnee, FastLeg, Acceleration, Sprint, StraightLegRun
             "rest_interval_s": 180,   # §12 inter-rep rest timer (3 min default)
             "countdown_s": 5,         # §9 solo-start countdown (5 s default)
-            "mode": "resisted",       # resisted | assisted | cod | gym
+            "mode": "resisted",       # resisted | assisted | cod | gym | flywheel
             "chain_kg_per_m": 0.0,          # gym: extra kg per metre of extension
-            "eccentric_overload_pct": 0.0,  # gym: % boost on the eccentric phase
+            "eccentric_overload_pct": 0.0,  # gym + flywheel: % boost on the eccentric phase
             "concentric_dir": "extend",     # gym: which cable direction is concentric
+            "virtual_mass_kg": 25.0,        # flywheel: virtual inertia (resistance dial)
+            "viscous_damping": 0.0,         # flywheel: bearing-drag term, kg per m/s
             "cod_prefix": "auto",     # §16.5 — auto | resisted | assisted (only used when mode=cod)
             "gear": 1,                # §16.6 — 1 (no pulley) | 2 (pulley engaged, 2× capacity)
             "rig_id": 1,              # §15.3 — which rig produced this data
@@ -318,6 +327,7 @@ class ServiceState:
         self.athletic_current_set: int = 1   # reps are grouped into sets
         self.athletic_task: Optional[asyncio.Task] = None
         self.athletic_current_kg: float = 0.0  # current commanded kg (slew-limited)
+        self.flywheel_v: float = 0.0  # flywheel mode: virtual wheel speed (m/s), reset per rep
         self._return_log_t: float = 0.0  # throttle for return-phase tuning logs
         self._jog_deadline: float = 0.0  # maintenance-jog auto-zero deadline
         self._cal_zero_counts: Optional[int] = None  # calibration zero datum
@@ -867,10 +877,10 @@ async def _athletic_loop(state: "ServiceState"):
 
             # §11 Full Auto rep detection — once a rep has run a minimum time and
             # the athlete has left the start, end it when the cable stays slower
-            # than the threshold for the dwell period. Sprint modes only; gym
-            # reps are short out-and-back cycles that pause legitimately.
+            # than the threshold for the dwell period. Sprint modes only; gym and
+            # flywheel reps are short out-and-back cycles that pause legitimately.
             auto_stop_now = False
-            if (cfg.get("auto_stop_enabled", True) and cfg.get("mode") != "gym"
+            if (cfg.get("auto_stop_enabled", True) and cfg.get("mode") not in ("gym", "flywheel")
                     and rip is not None and rip.get("_left_start")
                     and (time.time() - rip["started_at"]) >= AUTO_STOP_MIN_S):
                 if speed_mps < cfg.get("auto_stop_velocity_threshold", 0.2):
@@ -903,6 +913,41 @@ async def _athletic_loop(state: "ServiceState"):
                     if is_ecc:
                         loaded *= 1.0 + cfg["eccentric_overload_pct"] / 100.0
                     target_kg = min(loaded, cfg.get("kg_limit", KG_LIMIT_DEFAULT))
+                    new_phase = "return" if is_ecc else "resist"
+                    if state.athletic_rep_stop_requested or (
+                            rip is not None and rip.get("_left_start")
+                            and rep_ext_counts <= POSITION_TOLERANCE_COUNTS):
+                        new_phase = "ready"
+                elif cfg.get("mode") == "flywheel":
+                    # FLYWHEEL — virtual-inertia training. The cable spins up a
+                    # simulated flywheel; the resistance the athlete feels is the
+                    # inertial reaction to *accelerating* that wheel (F = M·a), so
+                    # constant-speed pulling feels light and hard acceleration
+                    # feels heavy — the defining feel of inertial/flywheel work.
+                    #
+                    # The wheel speed `flywheel_v` is a low-pass of the measured
+                    # cable speed (time constant FLYWHEEL_TAU), held as a smooth
+                    # state. Differentiating that smooth state — instead of the
+                    # raw, jittery telemetry — keeps the model stable at the
+                    # current ~10 Hz loop. This is the "virtual-flywheel" variant
+                    # from docs/flywheel-loop-rate-plan.md §6; the exact F = M·a
+                    # model lands once the loop-rate work reaches ~100 Hz.
+                    M = cfg.get("virtual_mass_kg", 25.0)
+                    c_visc = cfg.get("viscous_damping", 0.0)
+                    spd_rpm = tel.speed_rpm or 0
+                    prev_fw = state.flywheel_v
+                    # 1st-order low-pass: flywheel_v eases toward cable speed.
+                    alpha = PERIOD / (FLYWHEEL_TAU + PERIOD)
+                    state.flywheel_v = prev_fw + (speed_mps - prev_fw) * alpha
+                    fw_accel = (state.flywheel_v - prev_fw) / PERIOD  # smooth m/s²
+                    # Inertial reaction in kg-equivalent: F = M·a, plus a small
+                    # viscous (bearing-drag) term proportional to speed.
+                    target_kg = M * abs(fw_accel) / 9.81 + c_visc * speed_mps
+                    # Eccentric (cable retracting) carries the overload boost.
+                    is_ecc = spd_rpm < 0
+                    if is_ecc:
+                        target_kg *= 1.0 + cfg["eccentric_overload_pct"] / 100.0
+                    target_kg = min(target_kg, cfg.get("kg_limit", KG_LIMIT_DEFAULT))
                     new_phase = "return" if is_ecc else "resist"
                     if state.athletic_rep_stop_requested or (
                             rip is not None and rip.get("_left_start")
@@ -983,6 +1028,7 @@ async def _athletic_loop(state: "ServiceState"):
                     # rep start — consume the request, initialise the rep record.
                     state.athletic_rep_start_requested = False
                     state.athletic_rep_stop_requested = False
+                    state.flywheel_v = 0.0  # flywheel starts each rep at rest
                     rep_db_id = None
                     if (state.athletic_session_id is not None
                             and state.db is not None
@@ -1026,7 +1072,7 @@ async def _athletic_loop(state: "ServiceState"):
                     log.info("athletic rep %d started",
                              state._rep_in_progress["rep_idx"])
                 if new_phase == "ready" and state._rep_in_progress is not None:
-                    gym_autochain = (cfg.get("mode") == "gym"
+                    gym_autochain = (cfg.get("mode") in ("gym", "flywheel")
                                      and not state.athletic_rep_stop_requested)
                     # rep end — finalise aggregates + apply phantom filter + persist to DB
                     fin = _finalise_in_progress_rep(state._rep_in_progress, PERIOD)
@@ -1764,10 +1810,6 @@ PHASE_C_HTML = """<!doctype html>
   .sheet-actions{display:flex;gap:10px;margin-top:10px}
   .sheet-close{position:absolute;top:14px;right:14px;background:transparent;color:var(--muted);
                border:0;font-size:22px;cursor:pointer}
-  .sheet-setup-link{display:block;text-align:center;text-decoration:none;
-               padding:12px;border:1px solid var(--accent);border-radius:9px;
-               color:var(--accent);font-weight:600;font-size:14px;min-height:44px}
-  .sheet-setup-link:hover{background:var(--accent-soft)}
   /* Desktop: the sheet is open by default and gets its own column — the main
      content reflows into the space beside it instead of sitting underneath. */
   @media (min-width:1100px){
@@ -1824,6 +1866,7 @@ PHASE_C_HTML = """<!doctype html>
     <button class="mode-pill" data-mode="assisted" role="tab" aria-selected="false">Assisted</button>
     <button class="mode-pill" data-mode="cod" role="tab" aria-selected="false">Change of direction</button>
     <button class="mode-pill" data-mode="gym" role="tab" aria-selected="false">Gym</button>
+    <button class="mode-pill" data-mode="flywheel" role="tab" aria-selected="false">Flywheel</button>
   </div>
 
   <div class="profile-card" id="athlete-profile-card" hidden>
@@ -2089,7 +2132,7 @@ PHASE_C_HTML = """<!doctype html>
     <select id="cfg-drill-sel" aria-label="Drill"></select>
     <div class="drill-desc" id="cfg-drill-desc"></div>
   </div>
-  <div class="field">
+  <div class="field" data-modes="resisted assisted cod gym">
     <label id="cfg-resist-l">Working resistance (kg)</label>
     <div class="stepper">
       <button type="button" data-step="-1" data-target="cfg-resist" aria-label="Decrease">−</button>
@@ -2151,9 +2194,27 @@ PHASE_C_HTML = """<!doctype html>
     <label>Chains (kg/m) — 0 = off</label>
     <input type="number" id="cfg-chain" value="0" step="0.5" min="0" max="10">
   </div>
+  <div class="field" data-modes="flywheel">
+    <label>Virtual mass (kg)</label>
+    <div class="stepper">
+      <button type="button" data-step="-5" data-target="cfg-fw-mass" aria-label="Decrease">−</button>
+      <input type="number" id="cfg-fw-mass" value="25" step="5" min="1" max="100" inputmode="numeric">
+      <button type="button" data-step="5" data-target="cfg-fw-mass" aria-label="Increase">+</button>
+    </div>
+    <div class="meta" style="font-size:10px;margin-top:4px">Simulated flywheel inertia — heavier resists acceleration harder. Tune on the rig.</div>
+  </div>
+  <div class="field" data-modes="flywheel">
+    <label>Eccentric overload (%)</label>
+    <input type="number" id="cfg-fw-ecc-pct" value="0" step="5" min="0" max="100">
+    <div class="meta" style="font-size:10px;margin-top:4px">Extra resistance on the cable-in (eccentric) phase. 0 = matched.</div>
+  </div>
+  <div class="field" data-modes="flywheel">
+    <label>Viscous damping (kg per m/s)</label>
+    <input type="number" id="cfg-fw-visc" value="0" step="0.5" min="0" max="10">
+    <div class="meta" style="font-size:10px;margin-top:4px">Small speed-proportional drag — adds stability. 0 = off.</div>
+  </div>
 
   <div style="height:1px;background:var(--line);margin:6px 0"></div>
-  <a class="sheet-setup-link" href="/setup">⚙ Setup — athletes, templates, curve, audio…</a>
 
   <div class="sheet-actions">
     <button id="sheet-done" style="flex:1">Done</button>
@@ -2203,8 +2264,14 @@ function buildAthleticCfg(){
     resist_distance_m:parseFloat(document.getElementById('cfg-resist-dist').value),
     velocity_cap_mps:vcapOn?(parseFloat(document.getElementById('cfg-vcap').value)||0):0,
     chain_kg_per_m:parseFloat(document.getElementById('cfg-chain').value)||0,
-    eccentric_overload_pct:eccOverloadPct(),
+    // Eccentric overload: gym derives it from the concentric/eccentric kg pair;
+    // flywheel takes a direct percentage.
+    eccentric_overload_pct:(currentMode==='flywheel')
+      ?(parseFloat(document.getElementById('cfg-fw-ecc-pct').value)||0)
+      :eccOverloadPct(),
     concentric_dir:document.getElementById('cfg-condir').value,
+    virtual_mass_kg:parseFloat(document.getElementById('cfg-fw-mass').value)||25,
+    viscous_damping:parseFloat(document.getElementById('cfg-fw-visc').value)||0,
     drill:document.getElementById('cfg-drill').value,
     curve_axis:vrState.axis,
     curve_pct:vrState.pts,
@@ -2415,7 +2482,7 @@ async function refreshSuggestedLoad(){
 function updateResistSummary(){
   const el=document.getElementById('resist-pipeline-summary');
   if(!el) return;
-  if(currentMode==='gym'){ el.hidden=true; return; }
+  if(currentMode==='gym'||currentMode==='flywheel'){ el.hidden=true; return; }
   el.hidden=false;
   const kg=parseFloat(document.getElementById('cfg-resist').value)||0;
   const noun=(currentMode==='assisted')?'Assist':'Load';
@@ -2756,22 +2823,35 @@ let preRepLastConfig = null;     // detect parameter changes -> always show
 
 function configChanged(a, b){
   if(!a || !b) return true;
-  return ['resist_kg','resist_distance_m','velocity_cap_mps','chain_kg_per_m','eccentric_overload_pct','concentric_dir','return_kg','return_distance_m','return_speed_mps','slew_kg_per_s','drill','athlete_id']
+  return ['resist_kg','resist_distance_m','velocity_cap_mps','chain_kg_per_m','eccentric_overload_pct','concentric_dir','virtual_mass_kg','viscous_damping','return_kg','return_distance_m','return_speed_mps','slew_kg_per_s','drill','athlete_id']
     .some(k => a[k] !== b[k]);
 }
 
 function buildPreRepGrid(cfg, athleteName){
-  const rows = [
-    ['Mode',     'Sprint Mode'],
-    ['Athlete',  athleteName || '—'],
-    ['Exercise', cfg.drill],
-    ['Working resistance', cfg.resist_kg + ' kg'],
-    ['Resist distance',     cfg.resist_distance_m + ' m'],
-    ['Recovery resistance', cfg.return_kg + ' kg'],
-    ['Recovery distance',   cfg.return_distance_m + ' m'],
-    ['Return speed',        (cfg.return_speed_mps!=null?cfg.return_speed_mps:2) + ' m/s'],
-    ['Ease-in speed',       cfg.slew_kg_per_s + ' kg/s'],
-  ];
+  let rows;
+  if(cfg.mode === 'flywheel'){
+    rows = [
+      ['Mode',     'Flywheel'],
+      ['Athlete',  athleteName || '—'],
+      ['Exercise', cfg.drill],
+      ['Virtual mass',        (cfg.virtual_mass_kg!=null?cfg.virtual_mass_kg:25) + ' kg'],
+      ['Eccentric overload',  (cfg.eccentric_overload_pct||0) + ' %'],
+      ['Viscous damping',     (cfg.viscous_damping||0) + ' kg per m/s'],
+      ['Ease-in speed',       cfg.slew_kg_per_s + ' kg/s'],
+    ];
+  }else{
+    rows = [
+      ['Mode',     'Sprint Mode'],
+      ['Athlete',  athleteName || '—'],
+      ['Exercise', cfg.drill],
+      ['Working resistance', cfg.resist_kg + ' kg'],
+      ['Resist distance',     cfg.resist_distance_m + ' m'],
+      ['Recovery resistance', cfg.return_kg + ' kg'],
+      ['Recovery distance',   cfg.return_distance_m + ' m'],
+      ['Return speed',        (cfg.return_speed_mps!=null?cfg.return_speed_mps:2) + ' m/s'],
+      ['Ease-in speed',       cfg.slew_kg_per_s + ' kg/s'],
+    ];
+  }
   return rows.map(([l,v]) => '<div class="l">'+l+'</div><div class="v">'+v+'</div>').join('');
 }
 
@@ -3562,6 +3642,9 @@ document.getElementById('new-set-btn').onclick=async()=>{
     }
     set('cfg-chain',       cfg.chain_kg_per_m);
     set('cfg-ecc',         cfg.eccentric_overload_pct);
+    set('cfg-fw-mass',     cfg.virtual_mass_kg);
+    set('cfg-fw-ecc-pct',  cfg.eccentric_overload_pct);
+    set('cfg-fw-visc',     cfg.viscous_damping);
     // cfg-condir is fixed to "extend" (Cable OUT) — gym concentric is always cable-out.
     set('cfg-return',      cfg.return_kg);
     set('cfg-dist',        cfg.return_distance_m);
@@ -3630,6 +3713,7 @@ const DRILLS_BY_MODE = {
   assisted: ['Sprint','ApproachJump','SkippingJumps'],
   cod:      ['FreeTest'],
   gym:      ['FreeTest','HighKnee','FastLeg'],
+  flywheel: ['FreeTest','HighKnee','FastLeg'],
 };
 const cfgDrill = document.getElementById('cfg-drill');   // hidden input — backend value
 const drillSel = document.getElementById('cfg-drill-sel');
@@ -3664,7 +3748,7 @@ if(drillSel){
 // the new mode to the backend athletic config.
 function applyMode(mode, opts){
   opts = opts || {};
-  if(['resisted','assisted','cod','gym'].indexOf(mode) < 0) mode = 'resisted';
+  if(['resisted','assisted','cod','gym','flywheel'].indexOf(mode) < 0) mode = 'resisted';
   currentMode = mode;
   document.querySelectorAll('.mode-pill').forEach(p=>{
     const on = p.getAttribute('data-mode') === mode;
@@ -3857,6 +3941,18 @@ const MODE_INTRO = {
         '<path d="M118 2 l-5 9 h10 z" fill="#5aa86a"/>'+
         '<line x1="118" y1="46" x2="118" y2="54" stroke="#d4823a" stroke-width="3"/>'+
         '<path d="M118 58 l-5 -9 h10 z" fill="#d4823a"/></svg>'},
+  flywheel:{
+    title:'Flywheel',
+    text:'Static position. The cable spins up a simulated flywheel — resistance comes from accelerating the virtual mass, so steady pulling feels light and explosive effort feels heavy. The eccentric (cable-in) phase can be overloaded. Set Virtual mass in Adjust.',
+    svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<line x1="30" y1="30" x2="120" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
+        '<circle cx="150" cy="30" r="20" fill="none" stroke="#f0f0f3" stroke-width="3"/>'+
+        '<circle cx="150" cy="30" r="3" fill="#f0f0f3"/>'+
+        '<line x1="150" y1="10" x2="150" y2="16" stroke="#5aa86a" stroke-width="3"/>'+
+        '<line x1="170" y1="30" x2="164" y2="30" stroke="#5aa86a" stroke-width="3"/>'+
+        '<line x1="150" y1="50" x2="150" y2="44" stroke="#5aa86a" stroke-width="3"/>'+
+        '<line x1="130" y1="30" x2="136" y2="30" stroke="#5aa86a" stroke-width="3"/></svg>'},
 };
 const _introSeenSession = new Set();
 function maybeShowModeIntro(mode){
@@ -6086,6 +6182,14 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             if req.concentric_dir not in ("extend", "retract"):
                 raise HTTPException(400, "concentric_dir must be extend or retract")
             c["concentric_dir"] = req.concentric_dir
+        if req.virtual_mass_kg is not None:
+            if not 1.0 <= req.virtual_mass_kg <= 200.0:
+                raise HTTPException(400, "virtual_mass_kg out of range [1, 200]")
+            c["virtual_mass_kg"] = req.virtual_mass_kg
+        if req.viscous_damping is not None:
+            if not 0.0 <= req.viscous_damping <= 10.0:
+                raise HTTPException(400, "viscous_damping out of range [0, 10]")
+            c["viscous_damping"] = req.viscous_damping
         if req.curve_axis is not None:
             if req.curve_axis not in ("off", "distance", "velocity"):
                 raise HTTPException(400, "curve_axis must be off/distance/velocity")
@@ -6128,7 +6232,7 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                 raise HTTPException(400, "countdown_s out of range [0, 10]")
             c["countdown_s"] = req.countdown_s
         if req.mode is not None:
-            valid_modes = {"resisted", "assisted", "cod", "gym"}
+            valid_modes = {"resisted", "assisted", "cod", "gym", "flywheel"}
             if req.mode not in valid_modes:
                 raise HTTPException(400, f"mode must be one of {sorted(valid_modes)}")
             c["mode"] = req.mode
