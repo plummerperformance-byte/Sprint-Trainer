@@ -1310,7 +1310,7 @@ PHASE_C_HTML = """<!doctype html>
        min-height:100vh;display:flex;flex-direction:column}
   .wrap{flex:1;width:100%;max-width:1500px;margin:0 auto;padding:18px;
         display:flex;flex-direction:column}
-  /* Keep the topbar + mode bar clear of the fixed phase-pill / e-stop stack.
+  /* Keep the topbar + mode bar clear of the fixed e-stop button.
      Only needed when the sheet isn't open (an open desktop sheet already
      reserves its own column and shifts the e-stop left). */
   @media (max-width:1363px){
@@ -1443,11 +1443,6 @@ PHASE_C_HTML = """<!doctype html>
   .vr-preset.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
   .vr-preview{display:block;width:100%;height:90px;background:#0a0a0c;
              border:1px solid var(--line);border-radius:8px}
-  /* Gym direction toggle */
-  .dir-toggle{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-  .dir-btn{flex:1;padding:10px;font-size:13px;font-weight:600;background:#0a0a0c;
-           color:var(--muted);border:0;cursor:pointer;min-height:44px}
-  .dir-btn.active{background:var(--accent);color:#0a0a0c}
   .card{background:var(--card);border:1px solid var(--line);
         border-radius:14px;padding:18px;margin-bottom:14px}
   .meta{color:var(--muted);font-size:11px;letter-spacing:0.12em;text-transform:uppercase}
@@ -1609,14 +1604,6 @@ PHASE_C_HTML = """<!doctype html>
                      padding:0 4px;cursor:pointer;line-height:1}
   .rep-row .v-toggle:hover{color:var(--bad)}
   .rep-row .v-toggle.invalid{color:var(--bad)}
-
-  /* Phase pill (always visible top right of viewport) */
-  .phase-pill-fixed{position:fixed;top:14px;right:18px;padding:6px 14px;border-radius:999px;
-                    font-size:13px;font-weight:600;letter-spacing:0.08em;z-index:50}
-  .phase-pill-fixed.ready{background:rgba(212,161,58,0.18);color:var(--warn);border:1px solid rgba(212,161,58,0.35)}
-  .phase-pill-fixed.resist{background:rgba(232,90,90,0.18);color:var(--bad);border:1px solid rgba(232,90,90,0.35)}
-  .phase-pill-fixed.return{background:rgba(90,168,106,0.18);color:var(--good);border:1px solid rgba(90,168,106,0.35)}
-  .phase-pill-fixed.standby{background:rgba(138,138,150,0.12);color:var(--muted);border:1px solid rgba(138,138,150,0.25)}
 
   /* Run detail card */
   .rd-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px}
@@ -1786,8 +1773,7 @@ PHASE_C_HTML = """<!doctype html>
   @media (min-width:1100px){
     body.sheet-open .wrap{max-width:1500px;margin:0 auto;padding-right:418px}
     body.sheet-open .bottombar{padding-right:398px}
-    body.sheet-open #estop-btn,
-    body.sheet-open #phase-pill{right:398px}
+    body.sheet-open #estop-btn{right:398px}
   }
   @media (min-width:1280px){
     body.sheet-open .wrap{max-width:1800px}
@@ -1806,7 +1792,6 @@ PHASE_C_HTML = """<!doctype html>
 </style>
 </head><body>
 
-<div id="phase-pill" class="phase-pill-fixed standby">STANDBY</div>
 <button id="estop-btn" class="estop-btn" title="Emergency stop — one tap, no confirmation" aria-label="Emergency stop"><span>STOP</span></button>
 
 <div class="wrap">
@@ -2155,15 +2140,8 @@ PHASE_C_HTML = """<!doctype html>
     <div class="meta" id="vr-meta" style="font-size:10px;margin-top:4px"></div>
   </div>
   <div class="meta" id="resist-pipeline-summary" style="font-size:11px;margin:2px 0 6px;color:var(--accent)"></div>
-  <div class="field" data-modes="gym">
-    <label>Direction</label>
-    <div class="dir-toggle" id="dir-toggle">
-      <button type="button" class="dir-btn active" data-dir="extend">Cable OUT</button>
-      <button type="button" class="dir-btn" data-dir="retract">Cable IN</button>
-    </div>
-    <input type="hidden" id="cfg-condir" value="extend">
-    <div class="meta" style="font-size:10px;margin-top:4px">Which way the cable moves on the concentric (lifting) phase.</div>
-  </div>
+  <!-- Cable OUT is always the concentric (lifting) phase for gym movements. -->
+  <input type="hidden" id="cfg-condir" value="extend">
   <div class="field" data-modes="gym">
     <label>Eccentric weight (kg)</label>
     <input type="number" id="cfg-ecc-kg" value="5" step="0.5" min="0.5" max="20">
@@ -2184,7 +2162,6 @@ PHASE_C_HTML = """<!doctype html>
 
 <script>
 const stateTag=document.getElementById('state-tag');
-const phasePill=document.getElementById('phase-pill');
 const statSpeed=document.getElementById('stat-speed');
 const statForce=document.getElementById('stat-force');
 const statPower=document.getElementById('stat-power');
@@ -3585,7 +3562,7 @@ document.getElementById('new-set-btn').onclick=async()=>{
     }
     set('cfg-chain',       cfg.chain_kg_per_m);
     set('cfg-ecc',         cfg.eccentric_overload_pct);
-    set('cfg-condir',      cfg.concentric_dir);
+    // cfg-condir is fixed to "extend" (Cable OUT) — gym concentric is always cable-out.
     set('cfg-return',      cfg.return_kg);
     set('cfg-dist',        cfg.return_distance_m);
     set('cfg-slew',        cfg.slew_kg_per_s);
@@ -3723,18 +3700,6 @@ document.querySelectorAll('.mode-pill').forEach(p=>{
 });
 applyMode('resisted', {push:false});
 
-// Gym direction toggle — writes the hidden #cfg-condir input
-(function(){
-  const tog=document.getElementById('dir-toggle');
-  if(!tog) return;
-  const hidden=document.getElementById('cfg-condir');
-  tog.querySelectorAll('.dir-btn').forEach(b=>{
-    b.addEventListener('click',()=>{
-      if(hidden) hidden.value=b.getAttribute('data-dir');
-      tog.querySelectorAll('.dir-btn').forEach(x=>x.classList.toggle('active',x===b));
-    });
-  });
-})();
 // Eccentric-weight note — shows the implied overload % under the input
 function updateEccNote(){
   const note=document.getElementById('ecc-overload-note');
@@ -4020,13 +3985,6 @@ async function refresh(){
       primaryBtn.disabled=!(armed && c.athletic_mode);
     }
   }
-
-  // Phase pill (fixed top-right of viewport)
-  const ph=c.athletic_mode?c.athletic_phase:'off';
-  const phaseLabels={off:'STANDBY',ready:'READY',resist:'PULLING',return:'RECOVER'};
-  const phaseClass ={off:'standby',ready:'ready',resist:'resist',return:'return'};
-  phasePill.textContent=phaseLabels[ph]||'STANDBY';
-  phasePill.className='phase-pill-fixed '+(phaseClass[ph]||'standby');
 
   // Live big numbers — always live from instantaneous telemetry
   const rpm=Math.abs(s.speed_rpm||0);
