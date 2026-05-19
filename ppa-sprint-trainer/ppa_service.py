@@ -1321,6 +1321,7 @@ PHASE_C_HTML = """<!doctype html>
           gap:10px;flex-wrap:wrap}
   h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
   h1 .accent{color:var(--accent)}
+  .brand-logo{height:34px;width:auto;border-radius:5px;vertical-align:middle;margin-right:6px}
   .state-tag{font-size:13px;color:var(--muted)}
   .topbar-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
   .gear-toggle{padding:8px 12px;font-size:12px;font-weight:700;background:var(--card);
@@ -1811,7 +1812,7 @@ PHASE_C_HTML = """<!doctype html>
 <div class="wrap">
 
   <div class="topbar">
-    <h1>PPA <span class="accent">·</span> Sprint Trainer</h1>
+    <h1><img class="brand-logo" src="/static/ppa-logo.png" alt="Plummer Performance Academy"><span class="accent">·</span> Sprint Trainer</h1>
     <div class="topbar-right">
       <select id="rig-select" title="Active rig" style="padding:6px 10px;font-size:12px"></select>
       <button type="button" id="gear-toggle" class="gear-toggle">Gear 1</button>
@@ -4302,6 +4303,7 @@ SETUP_HTML = """<!doctype html>
           margin-bottom:18px;gap:12px;flex-wrap:wrap}
   h1{margin:0;font-size:22px;letter-spacing:0.05em;font-weight:700}
   h1 .accent{color:var(--accent)}
+  .brand-logo{height:34px;width:auto;border-radius:5px;vertical-align:middle;margin-right:6px}
   h1 .sub{color:var(--muted);font-weight:600;font-size:14px;letter-spacing:0.12em;
           text-transform:uppercase;margin-left:8px}
   a.livelink{display:inline-flex;align-items:center;gap:6px;text-decoration:none;
@@ -4376,7 +4378,7 @@ SETUP_HTML = """<!doctype html>
 
 <div class="wrap">
   <div class="topbar">
-    <h1>PPA <span class="accent">·</span> Sprint Trainer<span class="sub">Setup</span></h1>
+    <h1><img class="brand-logo" src="/static/ppa-logo.png" alt="Plummer Performance Academy"><span class="accent">·</span> Sprint Trainer<span class="sub">Setup</span></h1>
     <a class="livelink" href="/coach">&larr; Live session</a>
   </div>
 
