@@ -2145,6 +2145,7 @@ PHASE_C_HTML = """<!doctype html>
       <input type="number" id="cfg-vcap" value="6" step="0.5" min="0.5" max="15" inputmode="decimal">
       <button type="button" data-step="0.5" data-target="cfg-vcap" aria-label="Increase">+</button>
     </div>
+    <div class="meta" id="cfg-vcap-conflict" style="font-size:10px;margin-top:4px" hidden>Off — a velocity-axis variable-resistance curve is active, and that already shapes load by cable speed.</div>
   </div>
   <div class="field" data-modes="resisted assisted">
     <label>Variable resistance</label>
@@ -2152,6 +2153,7 @@ PHASE_C_HTML = """<!doctype html>
     <svg class="vr-preview" id="vr-preview" viewBox="0 0 300 90" preserveAspectRatio="none"></svg>
     <div class="meta" id="vr-meta" style="font-size:10px;margin-top:4px"></div>
   </div>
+  <div class="meta" id="resist-pipeline-summary" style="font-size:11px;margin:2px 0 6px;color:var(--accent)"></div>
   <div class="field" data-modes="gym">
     <label>Direction</label>
     <div class="dir-toggle" id="dir-toggle">
@@ -2394,11 +2396,68 @@ async function refreshSuggestedLoad(){
   });
   const vcapToggle=document.getElementById('cfg-vcap-toggle');
   const vcapStepper=document.getElementById('cfg-vcap-stepper');
+  const vcapConflict=document.getElementById('cfg-vcap-conflict');
   window._syncVcap=function(){
-    if(vcapStepper) vcapStepper.classList.toggle('off',!(vcapToggle&&vcapToggle.checked));
+    // Mutual exclusion: a velocity-axis variable-resistance curve already
+    // shapes load by cable speed. A velocity cap is a second speed-driven
+    // controller — run both and they fight. Velocity curve wins: the cap is
+    // forced off and locked out (and cleared on the backend if it was on,
+    // so a live session actually stops capping).
+    const velCurve=(vrState.axis==='velocity');
+    if(vcapToggle){
+      if(velCurve){
+        if(vcapToggle.checked){
+          vcapToggle.checked=false;
+          fetch('/api/c/athletic/config',{method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({velocity_cap_mps:0})}).catch(()=>{});
+        }
+        vcapToggle.disabled=true;
+      }else{
+        vcapToggle.disabled=false;
+      }
+    }
+    const on=vcapToggle&&vcapToggle.checked;
+    if(vcapStepper) vcapStepper.classList.toggle('off',!on);
+    if(vcapConflict) vcapConflict.hidden=!velCurve;
+    if(typeof updateResistSummary==='function') updateResistSummary();
   };
   if(vcapToggle) vcapToggle.addEventListener('change',window._syncVcap);
+  const vcapInput=document.getElementById('cfg-vcap');
+  if(vcapInput) vcapInput.addEventListener('input',function(){
+    if(typeof updateResistSummary==='function') updateResistSummary();
+  });
   window._syncVcap();
+})();
+
+// ---- Resistance pipeline summary (Adjust panel) ----
+// One-line readout of how working resistance, the variable-resistance curve
+// and the velocity cap compose into the commanded load — keeps the layering
+// visible so it never feels like a black box to the coach.
+function updateResistSummary(){
+  const el=document.getElementById('resist-pipeline-summary');
+  if(!el) return;
+  if(currentMode==='gym'){ el.hidden=true; return; }
+  el.hidden=false;
+  const kg=parseFloat(document.getElementById('cfg-resist').value)||0;
+  const noun=(currentMode==='assisted')?'Assist':'Load';
+  const chip=document.querySelector('#vr-presets .vr-preset.active');
+  const curveName=(chip&&chip.getAttribute('data-id')!=='off')?chip.textContent.trim():'';
+  const vcapOn=document.getElementById('cfg-vcap-toggle').checked;
+  const vcap=parseFloat(document.getElementById('cfg-vcap').value)||0;
+  let s=noun+' = '+kg+' kg';
+  if(curveName&&vrState.axis!=='off'){
+    s+=' × '+curveName+' curve'+(vrState.axis==='velocity'?' (by speed)':'');
+  }else{
+    s+=' flat';
+  }
+  if(vcapOn&&vcap>0) s+=' · capped at '+vcap+' m/s';
+  el.textContent=s+'.';
+}
+window.updateResistSummary=updateResistSummary;
+(function(){
+  const ri=document.getElementById('cfg-resist');
+  if(ri) ri.addEventListener('input',updateResistSummary);
 })();
 
 // ---- Variable resistance — curve-library picker + shape preview (Adjust panel) ----
@@ -2460,6 +2519,7 @@ async function refreshSuggestedLoad(){
     wrap.querySelectorAll('.vr-preset').forEach(b=>
       b.classList.toggle('active',b.getAttribute('data-id')===String(activeId)));
     setMeta(); renderPreview();
+    if(window._syncVcap) window._syncVcap();
     if(push!==false) postVr();
   }
   Promise.all([
@@ -2477,6 +2537,7 @@ async function refreshSuggestedLoad(){
       activeId=match?match.id:'custom';
     }
     renderChips(); setMeta(); renderPreview();
+    if(window._syncVcap) window._syncVcap();
   });
 })();
 
@@ -3650,6 +3711,7 @@ function applyMode(mode, opts){
       body:JSON.stringify({mode: mode})}).catch(()=>{});
   }
   if(typeof refreshSuggestedLoad==='function') refreshSuggestedLoad();
+  if(typeof updateResistSummary==='function') updateResistSummary();
 }
 document.querySelectorAll('.mode-pill').forEach(p=>{
   p.addEventListener('click', ()=>{
