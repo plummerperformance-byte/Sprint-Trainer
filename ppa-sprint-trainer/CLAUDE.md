@@ -6,14 +6,16 @@ Reverse-engineered control plane for an HCFA SV-X3E servo drive in a Land Fitnes
 End goal: PPA Sprint Trainer MVP — local FastAPI service captures live drive telemetry over Modbus, persists athlete sessions, surfaces sprint metrics (splits, phases, decel KPIs, stride mechanics) via a phone-friendly web UI.
 
 ## Architecture (current, working)
-- **Drive comms**: Mini-USB → CN3 → STM32 virtual COM port on **COM6**. Modbus RTU, 9600 8N1, slave ID 1.
+- **Drive comms**: USB-RS485 adapter (DSD TECH SH-U14, FTDI) → **CN4** RS485 port (pins 3/4/5 = 485A / 485B / SG, 220 Ω termination at the drive). Modbus RTU, 9600 8N1, slave ID 1. CN4/RS485 talks straight to the servo, **bypassing the PLC/HMI**. The service auto-detects the FTDI adapter by VID `0x0403`, else falls back to COM6. *(Earlier notes said CN3 — that was a labelling error: CN3 is the drive's USB port, CN4 is RS485.)*
 - **Addressing**: `P[group].[idx]` → register `(group << 8) | idx`. e.g. P21.01 → 0x1501.
 - **pymodbus 3.13**: use `device_id=`, NOT `slave=`.
-- **Service**: `ppa_service.py` — FastAPI on `127.0.0.1:8765`. Owns COM6, polls 10 Hz, exposes REST + WS.
+- **Service**: `ppa_service.py` — FastAPI on `127.0.0.1:8765`. Owns the drive serial port, polls ~10 Hz, exposes REST + WS.
 - **Drive wrapper**: `ppa_drive.py` — read methods + write methods gated by `armed=False`.
 - **UI**: `static/index.html` — vanilla JS dashboard, ARM gate.
 
 ## CRITICAL — CN3 vs HMI mutual exclusion (confirmed 2026-05-10)
+> **Status update:** this concerns the **CN3 USB** port. The project has since moved to **CN4/RS485** — a separate physical bus that bypasses the PLC/HMI. The exclusivity below most likely does **not** apply to the current CN4 path, which means Modbus during a live HMI session may be safe. Confirm on the rig before relying on it. History below stands for the CN3/USB path.
+
 **Plugging the mini-USB into CN3 destabilises the HMI's EtherCAT comms to the drive.** Symptom: HMI shows intermittent "Device No Response" pop-ups, reps fail to log to the datalog. With CN3 unplugged + drive restarted the HMI works perfectly. Confirmed by user: same rig worked fine the previous evening with CN3 unplugged, today's session was unstable until USB removed.
 
 Operational rule:
