@@ -4,3 +4,8 @@ __pycache__/
 *.db-shm
 *.db-wal
 C:\Users\trigo\
+
+# Service runtime artefacts (logs from pythonw launches, export dumps)
+_svc_*.log
+_exports/
+ppa-sprint-trainer/_exports/
