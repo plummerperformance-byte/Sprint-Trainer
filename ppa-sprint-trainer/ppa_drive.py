@@ -129,6 +129,25 @@ class PPADrive:
         """P21.41 — current fault code (0 = no fault)."""
         return self._read_u16(21, 41)
 
+    def read_p21_fast_block(self):
+        """One-shot read of the contiguous P21.00–P21.08 fast block.
+
+        Replaces 5 individual reads (status / speed / torque / bus_v / position)
+        with a single round-trip. P21.02, .03, .05 are undocumented on this drive
+        and discarded; the drive returns 0 for unmapped registers in a block read.
+
+        Raises IOError on Modbus failure — caller can fall back to per-field reads
+        if the drive ever rejects block reads over the unmapped gaps.
+        """
+        regs = self._read(21, 0, 9)  # P21.00..P21.08
+        return {
+            "status":          regs[0],
+            "speed_rpm":       self._s16(regs[1]),
+            "torque_pct":      self._s16(regs[4]) * TORQUE_PERCENT_PER_COUNT,
+            "bus_voltage_v":   regs[6] * BUS_VOLT_PER_COUNT,
+            "position_counts": self._s32(regs[7], regs[8]),
+        }
+
     # ---------- control mode ----------
     def get_control_mode(self):
         """P00.01 — current control-mode selection.

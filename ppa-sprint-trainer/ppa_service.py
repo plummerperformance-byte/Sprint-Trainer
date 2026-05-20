@@ -41,6 +41,7 @@ import collections
 import contextlib
 import json
 import logging
+import os
 import threading
 import time
 from datetime import datetime
@@ -64,6 +65,10 @@ POLL_HZ = 10
 PERIOD = 1.0 / POLL_HZ
 IDLE_POLL_HZ = 3  # slower drive polling when phase_c is idle (live view only)
 IDLE_PERIOD = 1.0 / IDLE_POLL_HZ
+COLD_REFRESH_EVERY = 10  # refresh slow-changing fields (temp/fault/mode/torque_limit) every Nth cycle
+# Drive serial baud — bumped from 9600 → 115200 on 2026-05-20 via P09.01 write.
+# Override at launch with PPA_DRIVE_BAUD env var if recovery is needed.
+DRIVE_BAUD = int(os.environ.get("PPA_DRIVE_BAUD", "115200"))
 RING_SIZE = 6000  # ~10 minutes at 10 Hz
 VELOCITY_CAP_GAIN = 10.0  # kg of extra resistance per m/s over the velocity cap
 CURVE_POINTS = 6          # resistance-curve control points (evenly spaced on x)
@@ -268,6 +273,17 @@ class ServiceState:
         self.stop_event = asyncio.Event()
         # ---- Modbus serialisation (shared by poll loop + Phase C heartbeat) ----
         self.modbus_lock = threading.Lock()
+        # ---- Cycle-time telemetry (added 2026-05-20 to measure FTDI 1ms latency) ----
+        self.last_lag_ms: float = 0.0
+        self._lag_ema_ms: float = 0.0
+        self.lag_min_ms: float = float("inf")
+        self.lag_max_ms: float = 0.0
+        self.lag_samples: int = 0
+        # ---- Cold-cache for slow-changing reads (refresh every COLD_REFRESH_EVERY cycles) ----
+        self._cold_cycle: int = 0
+        self._cold_cache: dict = {}
+        self._block_read_failures: int = 0
+        self._block_read_disabled: bool = False  # set True after persistent block-read errors
         # ---- persistence ----
         self.db_path = db_path
         self.db = None  # sqlite3.Connection
@@ -326,6 +342,13 @@ class ServiceState:
         self.athletic_peak_rpm: int = 0
         self.athletic_current_set: int = 1   # reps are grouped into sets
         self.athletic_task: Optional[asyncio.Task] = None
+        # ---- Athletic-loop diagnostics (added 2026-05-20 — start_rep bug hunt) ----
+        self.athletic_loop_ticks: int = 0
+        self.athletic_loop_last_exc: Optional[str] = None
+        self.athletic_loop_last_exc_at: Optional[float] = None
+        self.athletic_loop_exc_count: int = 0
+        self.athletic_loop_last_phase_seen: Optional[str] = None
+        self.athletic_loop_last_start_req_seen: Optional[bool] = None
         self.athletic_current_kg: float = 0.0  # current commanded kg (slew-limited)
         self.flywheel_v: float = 0.0  # flywheel mode: virtual wheel speed (m/s), reset per rep
         self._return_log_t: float = 0.0  # throttle for return-phase tuning logs
@@ -371,7 +394,7 @@ class ServiceState:
     async def connect_drive(self):
         # Open in a thread because pymodbus's serial open is blocking
         loop = asyncio.get_running_loop()
-        self.drive = PPADrive(port=self.port, armed=False)
+        self.drive = PPADrive(port=self.port, baudrate=DRIVE_BAUD, armed=False)
         await loop.run_in_executor(None, self.drive.connect)
         self.connected = True
         log.info("connected to drive on %s", self.port)
@@ -395,15 +418,55 @@ class ServiceState:
         try:
             d = self.drive
             with self.modbus_lock:
-                status = d.read_status()
-                speed = d.read_speed()
-                torque = d.read_torque()
-                pos = d.read_position()
-                bus = d.read_bus_voltage()
-                temp = d.read_temperature()
-                mode = d.get_control_mode()
-                fault = d.read_fault_code()
-                tl = d.get_torque_limit()
+                # ---- HOT block: 1 read replaces 5 individual round-trips ----
+                if not self._block_read_disabled:
+                    try:
+                        hot = d.read_p21_fast_block()
+                        status = hot["status"]
+                        speed = hot["speed_rpm"]
+                        torque = hot["torque_pct"]
+                        bus = hot["bus_voltage_v"]
+                        pos = hot["position_counts"]
+                    except IOError as be:
+                        self._block_read_failures += 1
+                        if self._block_read_failures >= 3:
+                            log.warning(
+                                "block read failed %d× — falling back to per-field reads: %s",
+                                self._block_read_failures, be)
+                            self._block_read_disabled = True
+                        # fall through to per-field path on this cycle
+                        status = d.read_status()
+                        speed = d.read_speed()
+                        torque = d.read_torque()
+                        bus = d.read_bus_voltage()
+                        pos = d.read_position()
+                else:
+                    status = d.read_status()
+                    speed = d.read_speed()
+                    torque = d.read_torque()
+                    bus = d.read_bus_voltage()
+                    pos = d.read_position()
+                # ---- COLD cache: refresh once per second at 10 Hz ----
+                if (self._cold_cycle % COLD_REFRESH_EVERY == 0) or not self._cold_cache:
+                    try:
+                        self._cold_cache = {
+                            "temp_c": d.read_temperature(),
+                            "fault_code": d.read_fault_code(),
+                            "control_mode": d.get_control_mode(),
+                            "torque_limit": d.get_torque_limit(),
+                        }
+                    except IOError as ce:
+                        # keep last good values; never let cold-read errors crash the loop
+                        log.warning("cold-cache refresh failed: %s", ce)
+                self._cold_cycle += 1
+                temp = self._cold_cache.get("temp_c")
+                fault = self._cold_cache.get("fault_code")
+                mode = self._cold_cache.get("control_mode")
+                tl = self._cold_cache.get("torque_limit") or {
+                    "source": None,
+                    "external_forward_pct": None,
+                    "external_reverse_pct": None,
+                }
             if self.baseline_pos is None:
                 self.baseline_pos = pos
             return DriveState(
@@ -683,6 +746,18 @@ class ServiceState:
                 if self.current_session_id is not None and state.connected and not state.error:
                     await self._handle_sample(state, t0)
                 lag = time.time() - t0
+                # cycle-time telemetry (FTDI 1ms-latency measurement, 2026-05-20)
+                lag_ms = lag * 1000.0
+                self.last_lag_ms = lag_ms
+                if self.lag_samples == 0:
+                    self._lag_ema_ms = lag_ms
+                else:
+                    self._lag_ema_ms = 0.9 * self._lag_ema_ms + 0.1 * lag_ms
+                if lag_ms < self.lag_min_ms:
+                    self.lag_min_ms = lag_ms
+                if lag_ms > self.lag_max_ms:
+                    self.lag_max_ms = lag_ms
+                self.lag_samples += 1
                 await asyncio.sleep(max(0.0, (IDLE_PERIOD if idle else PERIOD) - lag))
         except asyncio.CancelledError:
             pass
@@ -849,6 +924,9 @@ async def _athletic_loop(state: "ServiceState"):
     try:
         while not state.stop_event.is_set():
             await asyncio.sleep(PERIOD)
+            state.athletic_loop_ticks += 1
+            state.athletic_loop_last_phase_seen = state.athletic_phase
+            state.athletic_loop_last_start_req_seen = state.athletic_rep_start_requested
             if not state.athletic_mode or state.phase_c != "armed":
                 continue
             if state.latest is None or state.latest.position_counts is None:
@@ -991,26 +1069,36 @@ async def _athletic_loop(state: "ServiceState"):
                             else:
                                 target_kg = min(target_kg + over, kg_lim)
                     else:
-                        # Return zone — reel the cable in at the configured speed.
-                        # Closed loop: modulate retract load to chase the target
-                        # retract speed. Applies both in the recovery corridor and
-                        # after the rep completes past the resist band.
-                        ret_target = cfg.get("return_speed_mps", 2.0)
+                        # Outside the working band — gate on retract direction
+                        # rather than on band position:
+                        #   Outbound or stopped (spd_rpm >= 0): just hold the
+                        #     configured return_kg as a light pre-tension. This
+                        #     covers BOTH the pre-resist corridor (before the
+                        #     band) AND past-band (athlete coasting past their
+                        #     rep distance) — in neither case do we want to
+                        #     fight them with load while they're still going.
+                        #   Retracting (spd_rpm < 0): close the loop on retract
+                        #     speed so the line reels in at return_speed_mps.
                         spd_rpm = tel.speed_rpm or 0
-                        retract_mps = (-spd_rpm * MPS_PER_RPM) if spd_rpm < 0 else 0.0
-                        err = ret_target - retract_mps
-                        target_kg = cfg["return_kg"] + RETURN_SPEED_GAIN * err
-                        # Bound by RETURN_KG_MAX and the configured max resistance.
+                        retracting = spd_rpm < 0
                         ret_cap = min(RETURN_KG_MAX,
                                       cfg.get("kg_limit", KG_LIMIT_DEFAULT))
-                        target_kg = max(0.0, min(target_kg, ret_cap))
-                        # Throttled telemetry for tuning RETURN_SPEED_GAIN.
-                        _now = time.time()
-                        if _now - state._return_log_t >= 1.0:
-                            state._return_log_t = _now
-                            log.info("return: target=%.2f measured=%.2f m/s "
-                                     "-> load=%.1f kg", ret_target, retract_mps,
-                                     target_kg)
+                        if not retracting:
+                            target_kg = max(0.0,
+                                            min(cfg["return_kg"], ret_cap))
+                        else:
+                            ret_target = cfg.get("return_speed_mps", 2.0)
+                            retract_mps = -spd_rpm * MPS_PER_RPM
+                            err = ret_target - retract_mps
+                            target_kg = cfg["return_kg"] + RETURN_SPEED_GAIN * err
+                            target_kg = max(0.0, min(target_kg, ret_cap))
+                            # Throttled telemetry for tuning RETURN_SPEED_GAIN.
+                            _now = time.time()
+                            if _now - state._return_log_t >= 1.0:
+                                state._return_log_t = _now
+                                log.info("return: target=%.2f measured=%.2f m/s "
+                                         "-> load=%.1f kg", ret_target, retract_mps,
+                                         target_kg)
                     new_phase = "resist" if in_resist_band else "return"
                     if state.athletic_rep_stop_requested or auto_stop_now or (
                             rip is not None and rip.get("_left_start")
@@ -1186,8 +1274,16 @@ async def _athletic_loop(state: "ServiceState"):
                 log.warning("athletic setpoint write failed: %s", e)
     except asyncio.CancelledError:
         pass
+    except Exception as e:
+        # Added 2026-05-20: capture the exception that kills the loop instead of
+        # letting it disappear into the void. /api/diag/athletic surfaces this.
+        state.athletic_loop_exc_count += 1
+        state.athletic_loop_last_exc = f"{type(e).__name__}: {e}"
+        state.athletic_loop_last_exc_at = time.time()
+        log.exception("athletic loop died with exception: %s", e)
     finally:
-        log.info("athletic loop stopped")
+        log.info("athletic loop stopped (ticks=%d, exc_count=%d)",
+                 state.athletic_loop_ticks, state.athletic_loop_exc_count)
 
 
 ATHLETE_HTML = """<!doctype html>
@@ -6298,6 +6394,57 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         @app.get("/")
         async def root():
             return FileResponse(STATIC_DIR / "index.html")
+
+    @app.get("/api/diag/athletic")
+    async def diag_athletic():
+        """Athletic-loop diagnostics — added to hunt the 'Start rep does nothing' bug."""
+        t = state.athletic_task
+        return {
+            "task_exists": t is not None,
+            "task_done": t.done() if t is not None else None,
+            "task_cancelled": t.cancelled() if t is not None and t.done() else None,
+            "task_exception_repr": (repr(t.exception()) if t is not None and t.done()
+                                    and not t.cancelled() else None),
+            "ticks": state.athletic_loop_ticks,
+            "last_phase_seen": state.athletic_loop_last_phase_seen,
+            "last_start_req_seen": state.athletic_loop_last_start_req_seen,
+            "exc_count": state.athletic_loop_exc_count,
+            "last_exc": state.athletic_loop_last_exc,
+            "last_exc_at": state.athletic_loop_last_exc_at,
+            # live state for cross-reference
+            "athletic_mode": state.athletic_mode,
+            "athletic_phase": state.athletic_phase,
+            "phase_c": state.phase_c,
+            "rep_start_requested_now": state.athletic_rep_start_requested,
+        }
+
+    @app.get("/api/diag/cycle")
+    async def diag_cycle():
+        """Poll-loop cycle-time telemetry. Added 2026-05-20 to measure the
+        effect of dropping the FTDI USB-serial latency timer from 16 ms → 1 ms."""
+        idle = state.phase_c == "idle"
+        nominal_ms = (IDLE_PERIOD if idle else PERIOD) * 1000.0
+        headroom_ms = nominal_ms - state._lag_ema_ms
+        return {
+            "samples": state.lag_samples,
+            "phase_c_state": state.phase_c,
+            "nominal_period_ms": round(nominal_ms, 2),
+            "last_lag_ms": round(state.last_lag_ms, 2),
+            "ema_lag_ms": round(state._lag_ema_ms, 2),
+            "min_lag_ms": round(state.lag_min_ms, 2) if state.lag_samples else None,
+            "max_lag_ms": round(state.lag_max_ms, 2),
+            "headroom_ms": round(headroom_ms, 2),
+            "headroom_pct": round(100.0 * headroom_ms / nominal_ms, 1),
+            "ftdi_latency_note": "drive port FTDI latency timer set to 1 ms (was 16 ms default)",
+        }
+
+    @app.post("/api/diag/cycle/reset")
+    async def diag_cycle_reset():
+        state.lag_min_ms = float("inf")
+        state.lag_max_ms = 0.0
+        state.lag_samples = 0
+        state._lag_ema_ms = 0.0
+        return {"reset": True}
 
     @app.get("/api/info")
     async def info():

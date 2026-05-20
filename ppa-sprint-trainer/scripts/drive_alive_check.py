@@ -17,7 +17,7 @@ def s32(lo, hi):
     return v - (1 << 32) if v >= (1 << 31) else v
 
 
-c = ModbusSerialClient(port=PORT, baudrate=9600, parity="N", stopbits=1, bytesize=8, timeout=0.8)
+c = ModbusSerialClient(port=PORT, baudrate=115200, parity="N", stopbits=1, bytesize=8, timeout=0.8)
 if not c.connect():
     print(f"FAIL: cannot open {PORT}")
     raise SystemExit(2)
