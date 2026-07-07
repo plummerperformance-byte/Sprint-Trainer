@@ -1881,11 +1881,15 @@ PHASE_C_HTML = """<!doctype html>
                border-radius:7px;cursor:pointer;min-height:32px}
 
   /* Bottom bar (sticky — scrolls with content, rests at the viewport bottom) */
-  .bottombar{position:sticky;bottom:0;background:rgba(10,10,12,0.96);
-             border-top:1px solid var(--line);padding:12px 18px;z-index:40;
-             backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
-  /* Bottombar: Adjust · single phase-aware primary action */
-  .bottombar-inner{max-width:1200px;margin:0 auto;display:flex;align-items:center;gap:10px}
+  /* Primary control as a lifted, centred floating pill — off the bottom edge,
+     not full-width, still within thumb reach (per PPA HIG brief §5.2). */
+  .bottombar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);
+             width:auto;max-width:min(600px,calc(100vw - 36px));
+             background:rgba(18,26,51,0.94);border:1px solid var(--line-strong);
+             border-radius:16px;padding:10px;z-index:40;
+             box-shadow:0 20px 48px -22px rgba(3,7,18,0.9);
+             backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+  .bottombar-inner{margin:0;display:flex;align-items:center;gap:10px}
   #adjust-btn{flex:0 0 auto;min-height:56px;padding:0 16px;font-size:13px;font-weight:700;
               background:transparent;color:var(--fg);border:1px solid var(--line);
               border-radius:10px;cursor:pointer}
@@ -1911,7 +1915,7 @@ PHASE_C_HTML = """<!doctype html>
      content reflows into the space beside it instead of sitting underneath. */
   @media (min-width:1100px){
     body.sheet-open .wrap{max-width:1500px;margin:0 auto;padding-right:418px}
-    body.sheet-open .bottombar{padding-right:398px}
+    body.sheet-open .bottombar{transform:translateX(calc(-50% - 209px))}
     body.sheet-open #estop-btn{right:398px}
   }
   @media (min-width:1280px){
@@ -1943,6 +1947,8 @@ PHASE_C_HTML = """<!doctype html>
   .rd-row{border-bottom-color:var(--line)}
   .prerep-go:hover{background:#7ea6ff}
   .sheet{box-shadow:-24px 0 60px -30px rgba(3,7,18,.85)}
+  /* room under the floating primary-control pill so content isn't obscured */
+  .wrap{padding-bottom:118px}
 </style>
 </head><body>
 
