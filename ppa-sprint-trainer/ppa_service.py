@@ -1979,22 +1979,33 @@ PHASE_C_HTML = """<!doctype html>
     font-weight:700;padding:6px;border-radius:6px;cursor:pointer}
   .vr-axis button.on{background:var(--state);color:#08122a}
   .vr-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-  /* Few bullet-graph — load vs 53 kg cap. Greyscale bands (working <30 / high 30-45 /
-     near-cap 45-53 faint warn); accent measure bar carries the colour; red cap tick. */
-  .load-bullet{margin-top:12px}
-  .lb-track{position:relative;height:22px;border-radius:7px;border:1px solid var(--line);overflow:hidden;
-    background:linear-gradient(90deg,rgba(129,142,174,.13) 0 57%,rgba(129,142,174,.22) 57% 85%,
-      rgba(255,148,64,.20) 85% 100%)}
-  .lb-fill{position:absolute;left:0;top:6px;height:10px;width:9%;border-radius:5px;
-    background:var(--accent);box-shadow:0 0 0 2px var(--card);transition:width .15s ease}
-  .lb-cap{position:absolute;top:0;bottom:0;right:0;width:2px;background:var(--bad)}
-  .lb-scale{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;
-    color:var(--ink-faint);letter-spacing:.03em}
-  .lb-scale span:nth-child(2){color:var(--fg);font-weight:600}
+  /* load scrubber (mockup) — track carries working/high/near-cap bands + a warm fill */
+  .load-scrub{margin-top:14px}
+  #cfg-resist-scrub{-webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;cursor:pointer}
+  #cfg-resist-scrub:focus{outline:none}
+  #cfg-resist-scrub::-webkit-slider-runnable-track{height:12px;border-radius:999px;border:1px solid var(--line);
+    background:linear-gradient(90deg,var(--state) 0 var(--fill,9%),rgba(0,0,0,0) var(--fill,9%)),
+      linear-gradient(90deg,rgba(129,142,174,.14) 0 57%,rgba(129,142,174,.24) 57% 85%,rgba(255,148,64,.24) 85% 100%)}
+  #cfg-resist-scrub::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;margin-top:-6px;
+    border-radius:50%;background:var(--card);border:3px solid var(--state);box-shadow:0 2px 8px rgba(0,0,0,.5)}
+  #cfg-resist-scrub::-moz-range-track{height:12px;border-radius:999px;border:1px solid var(--line);
+    background:linear-gradient(90deg,rgba(129,142,174,.14) 0 57%,rgba(129,142,174,.24) 57% 85%,rgba(255,148,64,.24) 85% 100%)}
+  #cfg-resist-scrub::-moz-range-progress{height:12px;border-radius:999px;background:var(--state)}
+  #cfg-resist-scrub::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--card);border:3px solid var(--state)}
+  .ls-scale{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--ink-faint);letter-spacing:.03em}
+  /* dropdowns/inputs: navy well (not black) everywhere on the navy cards */
+  select,input[type=number],input[type=text]{background:#0e1626;border-color:var(--line)}
+  .stepper button{background:#0e1626}
+  .stepper input{background:#0e1626}
+  /* VR shape presets — one line, mockup chip background */
+  .vr-presets{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+  .vr-preset{background:#0e1626;border:1px solid var(--line);color:var(--muted);
+    padding:6px 4px;font-size:11px;font-weight:600;border-radius:9px;text-align:center;cursor:pointer}
+  .vr-preset:hover{border-color:var(--accent);color:var(--fg)}
   /* Hero emphasis (Few, Information Dashboard Design — mistake #10 "highlight the
      important data"; data-ink: enhance the hero, recede the rest). Speed is the
      one number; Force/Power/Cable-out stay readable but subordinate. */
-  .stat-line .v.primary{font-size:88px;font-weight:700;letter-spacing:-.02em;line-height:.92}
+  .stat-line .v.primary{font-size:88px;font-weight:800;letter-spacing:-.045em;line-height:.9}
   @media (max-width:767px){ .stat-line .v.primary{font-size:60px} }
   @media (max-width:414px){ .stat-line .v.primary{font-size:52px} }
   .stat-line .v.secondary{font-size:28px;font-weight:500}
@@ -2370,10 +2381,10 @@ PHASE_C_HTML = """<!doctype html>
       <input type="number" id="cfg-autoload-param" hidden step="1" min="1" max="100" placeholder="%">
       <div class="resist-suggest" id="cfg-resist-suggested"></div>
     </div>
-    <!-- Few bullet-graph: current load vs the 53 kg hard cap, against working/high/near-cap bands -->
-    <div class="load-bullet" aria-hidden="true">
-      <div class="lb-track"><div class="lb-fill" id="lb-fill"></div><div class="lb-cap" title="53 kg hard cap"></div></div>
-      <div class="lb-scale"><span>0</span><span id="lb-val">5 kg</span><span>53 kg cap</span></div>
+    <!-- load scrubber (mockup): drag to set; track carries working/high/near-cap bands + orange fill -->
+    <div class="load-scrub">
+      <input type="range" id="cfg-resist-scrub" min="0.5" max="53" step="0.5" value="5" aria-label="Working load (kg)">
+      <div class="ls-scale"><span>0.5</span><span>15</span><span>30</span><span>45</span><span>53 cap</span></div>
     </div>
   </div>
   <div class="field" data-modes="resisted assisted cod">
@@ -2676,16 +2687,23 @@ async function refreshSuggestedLoad(){
       inp.dispatchEvent(new Event('change',{bubbles:true}));
     });
   });
-  // Few bullet-graph — live load vs the 53 kg hard cap
+  // load scrubber — two-way bound to the working-resistance stepper; track carries cap bands
   window.updateLoadBullet=function(){
     var inp=document.getElementById('cfg-resist'); if(!inp) return;
-    var v=parseFloat(inp.value)||0, pct=Math.max(0,Math.min(100,v/53*100));
-    var f=document.getElementById('lb-fill'); if(f) f.style.width=pct.toFixed(1)+'%';
-    var l=document.getElementById('lb-val'); if(l) l.textContent=(Math.round(v*10)/10)+' kg';
+    var v=parseFloat(inp.value)||0, pct=Math.max(0,Math.min(100,(v-0.5)/(53-0.5)*100));
+    var s=document.getElementById('cfg-resist-scrub');
+    if(s){ if(document.activeElement!==s) s.value=v; s.style.setProperty('--fill',pct.toFixed(1)+'%'); }
   };
   var _lbInp=document.getElementById('cfg-resist');
   if(_lbInp){ _lbInp.addEventListener('input',window.updateLoadBullet);
               _lbInp.addEventListener('change',window.updateLoadBullet); }
+  var _scrub=document.getElementById('cfg-resist-scrub');
+  if(_scrub){ _scrub.addEventListener('input',function(){
+    var inp=document.getElementById('cfg-resist'); if(!inp) return;
+    inp.value=this.value;
+    inp.dispatchEvent(new Event('input',{bubbles:true}));
+    inp.dispatchEvent(new Event('change',{bubbles:true}));
+  }); }
   window.updateLoadBullet();
   const vcapToggle=document.getElementById('cfg-vcap-toggle');
   const vcapStepper=document.getElementById('cfg-vcap-stepper');
