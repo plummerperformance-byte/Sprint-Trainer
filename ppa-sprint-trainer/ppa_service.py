@@ -1447,7 +1447,10 @@ PHASE_C_HTML = """<!doctype html>
           --accent-soft:rgba(91,139,255,0.16);
           --bad:#ff5a5f; --good:#33d17a; --warn:#ff9440;
           --card:#121a33; --line:#243157;
-          --raised:#182244; --line-strong:#33436b; --ink-faint:#56618a; }
+          --raised:#182244; --line-strong:#33436b; --ink-faint:#56618a;
+          --warm:#ff9440; --warm-soft:rgba(255,148,64,.16);
+          --cool:#2bd0e2; --cool-soft:rgba(43,208,226,.16);
+          --state:var(--warm); --state-soft:var(--warm-soft); }
   *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;
        min-height:100vh;display:flex;flex-direction:column}
@@ -1941,6 +1944,9 @@ PHASE_C_HTML = """<!doctype html>
   .top-grid{gap:16px}
   .mode-bar,.preset-row{gap:10px}
   .mode-pill{border-radius:14px}
+  /* active mode = outlined warm/cool state accent (mockup), not a solid blue fill */
+  .mode-pill.active{background:var(--state-soft);color:var(--state);border-color:var(--state)}
+  .mode-pill:hover{border-color:var(--state)}
   .preset-btn{border-radius:12px}
   .rd-tab{border-radius:10px}
   .speed-toggle,.ins-view-toggle{background:rgba(4,8,20,.5)}
@@ -3915,6 +3921,10 @@ function applyMode(mode, opts){
   opts = opts || {};
   if(['resisted','assisted','cod','gym','flywheel'].indexOf(mode) < 0) mode = 'resisted';
   currentMode = mode;
+  // warm/cool state accent — resisting (resisted/cod/gym) warm; assist/flywheel cool
+  var _warm = !(mode==='assisted' || mode==='flywheel');
+  document.documentElement.style.setProperty('--state', _warm?'var(--warm)':'var(--cool)');
+  document.documentElement.style.setProperty('--state-soft', _warm?'var(--warm-soft)':'var(--cool-soft)');
   document.querySelectorAll('.mode-pill').forEach(p=>{
     const on = p.getAttribute('data-mode') === mode;
     p.classList.toggle('active', on);
@@ -4515,7 +4525,10 @@ SETUP_HTML = """<!doctype html>
           --accent-soft:rgba(91,139,255,0.16);
           --bad:#ff5a5f; --good:#33d17a; --warn:#ff9440;
           --card:#121a33; --line:#243157;
-          --raised:#182244; --line-strong:#33436b; --ink-faint:#56618a; }
+          --raised:#182244; --line-strong:#33436b; --ink-faint:#56618a;
+          --warm:#ff9440; --warm-soft:rgba(255,148,64,.16);
+          --cool:#2bd0e2; --cool-soft:rgba(43,208,226,.16);
+          --state:var(--warm); --state-soft:var(--warm-soft); }
   *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px}
   .wrap{max-width:1200px;margin:0 auto;padding:18px;padding-bottom:48px}
