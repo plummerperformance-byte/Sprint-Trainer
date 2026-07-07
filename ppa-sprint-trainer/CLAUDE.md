@@ -38,7 +38,7 @@ Operational rule:
 - **Torque scaling: 0.1% per count, confirmed.**
 - **HMI kg → drive P21.04 torque% = -5.64 %/kg** (4-point static sweep 2/5/10/15 kg, R²≈1.0). Static sweep with cable slack, HMI in active session, "Current Target" + "Variable Force" both ON. Session 3's 2.8 %/kg figure was wrong (different HMI mode/toggle state). 6.1 %/kg theoretical estimate from KB was actually closer to truth.
 - **Max usable HMI cable load = 300 / 5.64 ≈ 53 kg** before the 300% factory cap clips. Not 107 kg as previously stated.
-- **Position scaling: counts_per_metre = 379,288** (3-point sweep at 10/20/30 m vs HMI distance, variance <0.03%). Equivalent: metres_per_count = 2.636e-6.
+- **Position scaling: counts_per_metre = 27,917** (re-measured 2026-05-15, direct 10 m cable pull over CN4/RS485: 279,171 counts / 10.0 m). Equivalent metres_per_count = 3.582e-5. **Supersedes the earlier 379,288** (3-point HMI sweep), which was ~13.6× too large. Source of truth: `analytics.COUNTS_PER_METRE`; runtime-calibratable + persisted via the `/setup` Calibrate tab.
 - **Implied drum circumference ≈ 345.6 mm** (110 mm dia), assuming 17-bit encoder (131,072 cpr) direct on drum shaft (no gearing). Fits clean integer math.
 - **RPM → m/s ≈ RPM × 0.00576** (derived: drum_circ / 60). Not yet verified with live readings but consistent with the position fit.
 - P21.04 reports the EtherCAT setpoint, NOT measured force. Real-time force needs a load cell or P21.05 phase-current calibration.

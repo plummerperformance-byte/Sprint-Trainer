@@ -44,7 +44,7 @@ Then open:
 | Quantity | Value |
 |---|---|
 | kg → torque % | **5.64 %/kg** (4-point fit, R² ≈ 1.0) |
-| Encoder counts → metres | **379,288 c/m** (3-point sweep, variance < 0.03 %) |
+| Encoder counts → metres | **27,917 c/m** (re-measured 2026-05-15, direct 10 m cable pull over CN4/RS485; supersedes the earlier 379,288 HMI sweep, which was ~13.6× too large) |
 | RPM → m/s | **× 0.00576** (derived) |
 
 ## Safety
