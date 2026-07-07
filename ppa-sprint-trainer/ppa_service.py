@@ -1949,13 +1949,13 @@ PHASE_C_HTML = """<!doctype html>
   .mode-pill:hover{border-color:var(--state)}
   /* E-stop as a flat red pill matching the Arm/Adjust button family — still fixed
      top-right, always visible, red = danger (label carries the meaning) */
-  .estop-btn{width:auto;height:auto;min-height:52px;padding:0 26px;border-radius:14px;
-    display:inline-flex;background:var(--bad);border:1px solid var(--bad);
-    box-shadow:0 12px 26px -12px rgba(229,72,77,.75);font-size:15px;font-weight:800;
-    letter-spacing:.06em;text-shadow:none}
+  .estop-btn{position:static;top:auto;right:auto;flex:0 0 auto;width:auto;height:auto;
+    min-height:56px;padding:0 22px;border-radius:11px;display:inline-flex;align-items:center;
+    background:var(--bad);border:1px solid var(--bad);box-shadow:none;font-size:15px;
+    font-weight:800;letter-spacing:.06em;text-shadow:none}
   .estop-btn::before{display:none}
-  .estop-btn:hover,.estop-btn:active{transform:translateY(-1px);filter:brightness(1.08);
-    box-shadow:0 14px 30px -12px rgba(229,72,77,.85)}
+  .estop-btn:hover,.estop-btn:active{transform:none;filter:brightness(1.08)}
+  .bottombar{max-width:min(680px,calc(100vw - 36px))}
   .preset-btn{border-radius:12px}
   .rd-tab{border-radius:10px}
   .speed-toggle,.ins-view-toggle{background:rgba(4,8,20,.5)}
@@ -1971,6 +1971,14 @@ PHASE_C_HTML = """<!doctype html>
   /* Mode selector inside the Adjust panel (relocated from the top bar) */
   .sheet .mode-bar{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0}
   .sheet .mode-pill{flex:none;min-height:44px;font-size:13px;padding:9px 6px;letter-spacing:.02em}
+  /* Variable-resistance editor (mockup): draggable curve + axis toggle */
+  #vr-preview{height:110px;cursor:ns-resize;touch-action:none;border-radius:10px}
+  .vr-axis{display:flex;gap:4px;margin-bottom:8px;border:1px solid var(--line);border-radius:9px;
+    padding:3px;background:rgba(4,8,20,.5)}
+  .vr-axis button{flex:1;border:0;background:transparent;color:var(--muted);font-size:12px;
+    font-weight:700;padding:6px;border-radius:6px;cursor:pointer}
+  .vr-axis button.on{background:var(--state);color:#08122a}
+  .vr-presets{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
   /* Few bullet-graph — load vs 53 kg cap. Greyscale bands (working <30 / high 30-45 /
      near-cap 45-53 faint warn); accent measure bar carries the colour; red cap tick. */
   .load-bullet{margin-top:12px}
@@ -1995,7 +2003,7 @@ PHASE_C_HTML = """<!doctype html>
 </style>
 </head><body>
 
-<button id="estop-btn" class="estop-btn" title="Emergency stop — one tap, no confirmation" aria-label="Emergency stop"><span>STOP</span></button>
+<!-- e-stop relocated into the floating control pill (with Adjust + Arm rig) -->
 
 <div class="wrap">
 
@@ -2266,6 +2274,7 @@ PHASE_C_HTML = """<!doctype html>
   <div class="bottombar-inner" id="bottombar-inner">
     <button type="button" id="adjust-btn" title="Adjust drill settings">Adjust</button>
     <button id="primary-action">Arm rig</button>
+    <button id="estop-btn" class="estop-btn" title="Emergency stop — one tap, no confirmation" aria-label="Emergency stop"><span>STOP</span></button>
   </div>
 </div>
 
@@ -2355,9 +2364,20 @@ PHASE_C_HTML = """<!doctype html>
   </div>
   <div class="field" data-modes="resisted assisted">
     <label>Variable resistance</label>
-    <div class="vr-presets" id="vr-presets"></div>
-    <svg class="vr-preview" id="vr-preview" viewBox="0 0 300 90" preserveAspectRatio="none"></svg>
-    <div class="meta" id="vr-meta" style="font-size:10px;margin-top:4px"></div>
+    <div class="vr-axis" id="vr-axis">
+      <button type="button" data-axis="off" class="on">Off</button>
+      <button type="button" data-axis="distance">Distance</button>
+      <button type="button" data-axis="velocity">Velocity</button>
+    </div>
+    <svg class="vr-preview" id="vr-preview" viewBox="0 0 300 110" preserveAspectRatio="none"></svg>
+    <div class="vr-presets" id="vr-presets">
+      <button type="button" class="vr-preset" data-shape="flat">Flat</button>
+      <button type="button" class="vr-preset" data-shape="ascending">Ascending</button>
+      <button type="button" class="vr-preset" data-shape="descending">Descending</button>
+      <button type="button" class="vr-preset" data-shape="bell">Bell</button>
+      <button type="button" class="vr-preset" data-shape="steps">Steps</button>
+    </div>
+    <div class="meta" id="vr-meta" style="font-size:10px;margin-top:6px"></div>
   </div>
   <div class="meta" id="resist-pipeline-summary" style="font-size:11px;margin:2px 0 6px;color:var(--accent)"></div>
   <!-- Cable OUT is always the concentric (lifting) phase for gym movements. -->
@@ -2693,85 +2713,68 @@ window.updateResistSummary=updateResistSummary;
   if(ri) ri.addEventListener('input',updateResistSummary);
 })();
 
-// ---- Variable resistance — curve-library picker + shape preview (Adjust panel) ----
+// ---- Variable resistance — draggable curve editor + axis toggle (Adjust panel, mockup) ----
 (function(){
-  const wrap=document.getElementById('vr-presets');
   const svg=document.getElementById('vr-preview');
+  const axisWrap=document.getElementById('vr-axis');
+  const presetWrap=document.getElementById('vr-presets');
   const metaEl=document.getElementById('vr-meta');
-  if(!wrap||!svg) return;
-  const N=6;
-  let curves=[];
-  let activeId='off';   // 'off', a curve id, or 'custom'
-  function renderChips(){
-    let html='<button type="button" class="vr-preset" data-id="off">Off</button>';
-    curves.forEach(c=>{
-      html+='<button type="button" class="vr-preset" data-id="'+c.id+'">'+c.name+'</button>';
-    });
-    wrap.innerHTML=html;
-    wrap.querySelectorAll('.vr-preset').forEach(b=>{
-      b.classList.toggle('active',b.getAttribute('data-id')===String(activeId));
-      b.addEventListener('click',()=>pick(b.getAttribute('data-id'),true));
-    });
-  }
-  function renderPreview(){
-    const VW=300,VH=90,PL=6,PR=6,PT=10,PB=10,PW=VW-PL-PR,PH=VH-PT-PB;
-    const mx=Math.max.apply(null,vrState.pts.concat([10]));
-    const x=i=>PL+(i/(N-1))*PW;
-    const y=v=>PT+(1-v/mx)*PH;
-    const dim=(vrState.axis==='off');
-    const col=dim?'#4a4a52':'#5b8bff';
+  if(!svg||!axisWrap) return;
+  const N=6, MAXPCT=300;
+  const SHAPES={flat:[100,100,100,100,100,100],
+                ascending:[50,70,90,115,145,175],
+                descending:[175,145,115,90,70,50],
+                bell:[60,100,150,150,100,60],
+                steps:[60,60,110,110,160,160]};
+  const VW=300,VH=110,PL=8,PR=8,PT=10,PB=10,PW=VW-PL-PR,PH=VH-PT-PB;
+  const xOf=i=>PL+(i/(N-1))*PW;
+  const yOf=v=>PT+(1-Math.max(0,Math.min(MAXPCT,v))/MAXPCT)*PH;
+  function cssv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+  function render(){
+    const off=(vrState.axis==='off');
+    const col=off?'#4a5578':cssv('--state');
     let poly='';
-    for(let i=0;i<N;i++) poly+=x(i).toFixed(1)+','+y(vrState.pts[i]).toFixed(1)+' ';
-    let s='<polyline points="'+poly+'" fill="none" stroke="'+col+'" stroke-width="2"'+
-          (dim?' stroke-dasharray="4 3"':'')+'/>';
-    for(let j=0;j<N;j++)
-      s+='<circle cx="'+x(j).toFixed(1)+'" cy="'+y(vrState.pts[j]).toFixed(1)+'" r="3.5" fill="'+col+'"/>';
+    for(let i=0;i<N;i++) poly+=xOf(i).toFixed(1)+','+yOf(vrState.pts[i]).toFixed(1)+' ';
+    let s='<polyline points="'+poly+'" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linejoin="round"'+(off?' stroke-dasharray="4 3"':'')+'/>';
+    for(let j=0;j<N;j++) s+='<circle cx="'+xOf(j).toFixed(1)+'" cy="'+yOf(vrState.pts[j]).toFixed(1)+'" r="5" fill="'+cssv('--card')+'" stroke="'+col+'" stroke-width="2.5"/>';
     svg.innerHTML=s;
-    svg.style.opacity=dim?0.6:1;
+    svg.style.opacity=off?0.5:1;
+    axisWrap.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-axis')===vrState.axis));
+    if(metaEl) metaEl.textContent=off?'Flat working resistance — same load the whole rep.'
+      :('Load scales 0–300% of working load across '+(vrState.axis==='velocity'?'cable velocity.':'the resist distance.')+' Drag the 6 points.');
   }
-  function setMeta(){
-    if(metaEl) metaEl.textContent=(vrState.axis==='off')
-      ? 'Flat working resistance — same load the whole rep.'
-      : 'Working resistance shaped across the resist distance (% of the set load). Edit curves on /setup.';
-  }
-  function postVr(){
+  function post(){
     fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({curve_axis:vrState.axis,curve_pct:vrState.pts})}).catch(()=>{});
-  }
-  function pick(id,push){
-    activeId=id;
-    if(id==='off'){
-      vrState.axis='off';
-    }else{
-      const c=curves.find(x=>String(x.id)===String(id));
-      if(c&&c.points&&c.points.length===N){
-        vrState.pts=c.points.slice();
-        vrState.axis='distance';
-      }
-    }
-    wrap.querySelectorAll('.vr-preset').forEach(b=>
-      b.classList.toggle('active',b.getAttribute('data-id')===String(activeId)));
-    setMeta(); renderPreview();
     if(window._syncVcap) window._syncVcap();
-    if(push!==false) postVr();
   }
-  Promise.all([
-    fetch('/api/curves').then(r=>r.json()).catch(()=>[]),
-    fetch('/api/c/state').then(r=>r.json()).catch(()=>({})),
-  ]).then(([list,st])=>{
-    curves=Array.isArray(list)?list:[];
+  let dragIdx=-1;
+  function evVal(e){
+    const r=svg.getBoundingClientRect();
+    const nx=(e.clientX-r.left)/r.width, ny=(e.clientY-r.top)/r.height;
+    const idx=Math.max(0,Math.min(N-1,Math.round(nx*(N-1))));
+    let v=(1-((ny*VH)-PT)/PH)*MAXPCT;
+    v=Math.max(0,Math.min(MAXPCT,Math.round(v/5)*5));
+    return {idx:idx,v:v};
+  }
+  svg.addEventListener('pointerdown',e=>{const p=evVal(e);dragIdx=p.idx;
+    try{svg.setPointerCapture(e.pointerId);}catch(_){}
+    if(vrState.axis==='off') vrState.axis='distance';
+    vrState.pts[dragIdx]=p.v; render();});
+  svg.addEventListener('pointermove',e=>{if(dragIdx<0)return;const p=evVal(e);vrState.pts[dragIdx]=p.v;render();});
+  svg.addEventListener('pointerup',()=>{if(dragIdx>=0){dragIdx=-1;post();}});
+  svg.addEventListener('pointercancel',()=>{dragIdx=-1;});
+  axisWrap.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+    vrState.axis=b.getAttribute('data-axis'); render(); post();}));
+  if(presetWrap) presetWrap.querySelectorAll('.vr-preset').forEach(b=>b.addEventListener('click',()=>{
+    const sh=SHAPES[b.getAttribute('data-shape')]; if(!sh) return;
+    vrState.pts=sh.slice(); if(vrState.axis==='off') vrState.axis='distance'; render(); post();}));
+  fetch('/api/c/state').then(r=>r.json()).then(st=>{
     const cfg=st.config||{};
     if(cfg.curve_pct&&cfg.curve_pct.length===N) vrState.pts=cfg.curve_pct.slice();
     if(cfg.curve_axis) vrState.axis=cfg.curve_axis;
-    activeId='off';
-    if(vrState.axis!=='off'){
-      const match=curves.find(c=>c.points&&c.points.length===N&&
-        c.points.every((p,i)=>Math.abs(p-vrState.pts[i])<0.01));
-      activeId=match?match.id:'custom';
-    }
-    renderChips(); setMeta(); renderPreview();
-    if(window._syncVcap) window._syncVcap();
-  });
+    render();
+  }).catch(()=>render());
 })();
 
 // ---- Gear toggle (header) ----
