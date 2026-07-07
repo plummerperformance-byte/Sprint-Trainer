@@ -2000,6 +2000,24 @@ PHASE_C_HTML = """<!doctype html>
   .stat-line .v.secondary{font-size:28px;font-weight:500}
   .stat-line[data-tile]:not([data-tile="speed"]) .l{color:var(--ink-faint)}
   .stat-line[data-tile]:not([data-tile="speed"]) .v.secondary{opacity:.82}
+  /* Hero merge — one card: header · number · live trace · tiles · session */
+  .top-grid{grid-template-columns:1fr}
+  .hero-card{display:flex;flex-direction:column;gap:12px}
+  .hero-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:2px}
+  .phase-badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:800;
+    letter-spacing:.09em;text-transform:uppercase;color:var(--state);background:var(--state-soft);
+    padding:6px 13px;border-radius:999px}
+  .phase-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--state)}
+  .hero-speed{margin:2px 0}
+  .hero-chart{position:relative}
+  .hero-chart .chart-empty{padding:16px 0;font-size:13px}
+  .hero-chart #live-chart{min-height:150px}
+  .hero-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+    border-top:1px solid var(--line);padding-top:14px}
+  .hero-tiles .stat-line{flex-direction:column;align-items:flex-start;gap:3px;margin:0;padding:8px 10px;border-radius:10px}
+  .hero-tiles .stat-line .l{font-size:10px}
+  .hero-tiles .stat-line .v{justify-content:flex-start}
+  .hero-tiles .stat-line .v.secondary{font-size:26px;opacity:1}
 </style>
 </head><body>
 
@@ -2041,30 +2059,34 @@ PHASE_C_HTML = """<!doctype html>
        live screen to one hero + minimal chrome (Few #11; HIG progressive disclosure) -->
 
   <div class="top-grid">
-    <div class="chart-card" id="chart-card">
-      <div class="chart-empty" id="chart-empty">No rep yet — start a drill to see live data here.</div>
-      <svg id="live-chart" viewBox="0 0 600 240" preserveAspectRatio="none" style="display:none"></svg>
-      <div class="mode-intro" id="mode-intro" hidden>
-        <div class="mi-title" id="mi-title"></div>
-        <div class="mi-diagram" id="mi-diagram"></div>
-        <div class="mi-text" id="mi-text"></div>
-        <div class="mi-actions">
-          <button type="button" class="mi-got" id="mi-got">Got it</button>
-          <button type="button" class="mi-never" id="mi-never">Don't show again</button>
+    <div class="stats-card hero-card">
+      <div class="hero-head">
+        <span class="phase-badge" id="phase-badge">Resist</span>
+        <div class="speed-toggle" id="speed-toggle" role="group" aria-label="Speed metric">
+          <button class="sp-tog active" data-idx="0" aria-pressed="true">Current</button>
+          <button class="sp-tog" data-idx="1" aria-pressed="false">Peak</button>
+          <button class="sp-tog" data-idx="2" aria-pressed="false">Avg</button>
         </div>
       </div>
-    </div>
-
-    <div class="stats-card">
-      <div class="speed-toggle" id="speed-toggle" role="group" aria-label="Speed metric">
-        <button class="sp-tog active" data-idx="0" aria-pressed="true">Current</button>
-        <button class="sp-tog" data-idx="1" aria-pressed="false">Peak</button>
-        <button class="sp-tog" data-idx="2" aria-pressed="false">Avg</button>
+      <div class="stat-line tappable hero-speed" data-tile="speed" title="Tap to cycle metric"><span class="l" id="stat-speed-l">Speed</span><span class="v primary" id="stat-speed"><span class="num">0.00</span><span class="unit">m/s</span></span></div>
+      <div class="hero-chart">
+        <div class="chart-empty" id="chart-empty">Start a drill to see the live trace</div>
+        <svg id="live-chart" viewBox="0 0 600 240" preserveAspectRatio="none" style="display:none"></svg>
+        <div class="mode-intro" id="mode-intro" hidden>
+          <div class="mi-title" id="mi-title"></div>
+          <div class="mi-diagram" id="mi-diagram"></div>
+          <div class="mi-text" id="mi-text"></div>
+          <div class="mi-actions">
+            <button type="button" class="mi-got" id="mi-got">Got it</button>
+            <button type="button" class="mi-never" id="mi-never">Don't show again</button>
+          </div>
+        </div>
       </div>
-      <div class="stat-line tappable" data-tile="speed" title="Tap to cycle metric"><span class="l" id="stat-speed-l">Speed</span><span class="v primary" id="stat-speed"><span class="num">0.00</span><span class="unit">m/s</span></span></div>
-      <div class="stat-line tappable" data-tile="force" title="Tap to cycle metric"><span class="l" id="stat-force-l">Force</span><span class="v secondary" id="stat-force"><span class="num">0</span><span class="unit">N</span></span></div>
-      <div class="stat-line tappable" data-tile="power" title="Tap to cycle metric"><span class="l" id="stat-power-l">Power</span><span class="v secondary" id="stat-power"><span class="num">0</span><span class="unit">W</span></span></div>
-      <div class="stat-line tappable" data-tile="ext" title="Tap to cycle metric"><span class="l" id="stat-ext-l">Cable out</span><span class="v secondary" id="stat-ext"><span class="num">0.00</span><span class="unit">m</span></span></div>
+      <div class="hero-tiles">
+        <div class="stat-line tappable" data-tile="force" title="Tap to cycle metric"><span class="l" id="stat-force-l">Force</span><span class="v secondary" id="stat-force"><span class="num">0</span><span class="unit">N</span></span></div>
+        <div class="stat-line tappable" data-tile="power" title="Tap to cycle metric"><span class="l" id="stat-power-l">Power</span><span class="v secondary" id="stat-power"><span class="num">0</span><span class="unit">W</span></span></div>
+        <div class="stat-line tappable" data-tile="ext" title="Tap to cycle metric"><span class="l" id="stat-ext-l">Cable out</span><span class="v secondary" id="stat-ext"><span class="num">0.00</span><span class="unit">m</span></span></div>
+      </div>
       <div class="stats-foot">
         <div class="session-stats" id="session-stats">
           <div><div class="ss-l">REPS</div><div class="ss-v" id="ss-reps">0</div></div>
@@ -3945,6 +3967,8 @@ function applyMode(mode, opts){
   var _warm = !(mode==='assisted' || mode==='flywheel');
   document.documentElement.style.setProperty('--state', _warm?'var(--warm)':'var(--cool)');
   document.documentElement.style.setProperty('--state-soft', _warm?'var(--warm-soft)':'var(--cool-soft)');
+  var _pb=document.getElementById('phase-badge');
+  if(_pb) _pb.textContent=(mode==='assisted')?'Assist':(mode==='gym')?'Gym':(mode==='flywheel')?'Flywheel':(mode==='cod')?'C.O.D.':'Resist';
   document.querySelectorAll('.mode-pill').forEach(p=>{
     const on = p.getAttribute('data-mode') === mode;
     p.classList.toggle('active', on);
