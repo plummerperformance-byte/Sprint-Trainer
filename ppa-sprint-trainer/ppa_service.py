@@ -1953,6 +1953,18 @@ PHASE_C_HTML = """<!doctype html>
   .sheet-presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .sheet-presets .preset-btn{flex:none;min-height:44px;font-size:12.5px;padding:8px 10px;
     text-align:center;line-height:1.15}
+  /* Few bullet-graph — load vs 53 kg cap. Greyscale bands (working <30 / high 30-45 /
+     near-cap 45-53 faint warn); accent measure bar carries the colour; red cap tick. */
+  .load-bullet{margin-top:12px}
+  .lb-track{position:relative;height:22px;border-radius:7px;border:1px solid var(--line);overflow:hidden;
+    background:linear-gradient(90deg,rgba(129,142,174,.13) 0 57%,rgba(129,142,174,.22) 57% 85%,
+      rgba(255,148,64,.20) 85% 100%)}
+  .lb-fill{position:absolute;left:0;top:6px;height:10px;width:9%;border-radius:5px;
+    background:var(--accent);box-shadow:0 0 0 2px var(--card);transition:width .15s ease}
+  .lb-cap{position:absolute;top:0;bottom:0;right:0;width:2px;background:var(--bad)}
+  .lb-scale{display:flex;justify-content:space-between;margin-top:5px;font-size:10px;
+    color:var(--ink-faint);letter-spacing:.03em}
+  .lb-scale span:nth-child(2){color:var(--fg);font-weight:600}
   /* Hero emphasis (Few, Information Dashboard Design — mistake #10 "highlight the
      important data"; data-ink: enhance the hero, recede the rest). Speed is the
      one number; Force/Power/Cable-out stay readable but subordinate. */
@@ -2289,6 +2301,11 @@ PHASE_C_HTML = """<!doctype html>
       <input type="number" id="cfg-autoload-param" hidden step="1" min="1" max="100" placeholder="%">
       <div class="resist-suggest" id="cfg-resist-suggested"></div>
     </div>
+    <!-- Few bullet-graph: current load vs the 53 kg hard cap, against working/high/near-cap bands -->
+    <div class="load-bullet" aria-hidden="true">
+      <div class="lb-track"><div class="lb-fill" id="lb-fill"></div><div class="lb-cap" title="53 kg hard cap"></div></div>
+      <div class="lb-scale"><span>0</span><span id="lb-val">5 kg</span><span>53 kg cap</span></div>
+    </div>
   </div>
   <div class="field" data-modes="resisted assisted cod">
     <label id="cfg-resist-dist-l">Resist distance (m)</label>
@@ -2576,6 +2593,17 @@ async function refreshSuggestedLoad(){
       inp.dispatchEvent(new Event('change',{bubbles:true}));
     });
   });
+  // Few bullet-graph — live load vs the 53 kg hard cap
+  window.updateLoadBullet=function(){
+    var inp=document.getElementById('cfg-resist'); if(!inp) return;
+    var v=parseFloat(inp.value)||0, pct=Math.max(0,Math.min(100,v/53*100));
+    var f=document.getElementById('lb-fill'); if(f) f.style.width=pct.toFixed(1)+'%';
+    var l=document.getElementById('lb-val'); if(l) l.textContent=(Math.round(v*10)/10)+' kg';
+  };
+  var _lbInp=document.getElementById('cfg-resist');
+  if(_lbInp){ _lbInp.addEventListener('input',window.updateLoadBullet);
+              _lbInp.addEventListener('change',window.updateLoadBullet); }
+  window.updateLoadBullet();
   const vcapToggle=document.getElementById('cfg-vcap-toggle');
   const vcapStepper=document.getElementById('cfg-vcap-stepper');
   const vcapConflict=document.getElementById('cfg-vcap-conflict');
