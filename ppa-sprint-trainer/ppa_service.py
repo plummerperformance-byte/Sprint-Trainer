@@ -2018,6 +2018,23 @@ PHASE_C_HTML = """<!doctype html>
   .hero-tiles .stat-line .l{font-size:10px}
   .hero-tiles .stat-line .v{justify-content:flex-start}
   .hero-tiles .stat-line .v.secondary{font-size:26px;opacity:1}
+  /* Analysis card — Compare / F-V as tabs (replaces two stacked accordions) */
+  .an-tabs{display:flex;gap:6px;margin-bottom:14px}
+  .an-tab{padding:8px 16px;font-size:13px;font-weight:700;background:transparent;color:var(--muted);
+    border:1px solid var(--line);border-radius:10px;cursor:pointer}
+  .an-tab:hover{color:var(--fg);border-color:var(--line-strong)}
+  .an-tab.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .an-panel[hidden]{display:none}
+  /* Adjust panel: each control section wrapped in its own subtle card (mockup rail) */
+  .sheet .field{background:var(--raised);border:1px solid var(--line);border-radius:14px;
+    padding:13px 14px;gap:8px}
+  .sheet .field > label{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--muted);font-weight:700}
+  /* Variable-resistance canvas: blue-tinted well; axis + shape are BLUE (interactive),
+     the curve line + area-glow are WARM (data) — drawn in JS */
+  #vr-preview{background:rgba(18,26,51,.55);border:1px solid var(--line-strong)}
+  .vr-axis button.on{background:var(--accent);color:#fff}
+  .vr-preset.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 </style>
 </head><body>
 
@@ -2237,26 +2254,29 @@ PHASE_C_HTML = """<!doctype html>
     <div class="reps-list" id="reps-list"></div>
   </div>
 
-  <details class="report" id="cmp-card">
-    <summary>Compare two reps</summary>
-    <div class="meta" style="margin-top:8px">Speed (orange) + force (blue) overlaid</div>
-    <div class="row">
-      <select id="cmp-a" style="flex:1"><option value="">Rep A</option></select>
-      <select id="cmp-b" style="flex:1"><option value="">Rep B</option></select>
-      <button id="cmp-go" class="secondary">Compare</button>
+  <div class="card analysis-card" id="analysis-card">
+    <div class="an-tabs" role="tablist" aria-label="Rep analysis">
+      <button type="button" class="an-tab active" data-an="compare" role="tab">Compare reps</button>
+      <button type="button" class="an-tab" data-an="fv" role="tab">Force–Velocity</button>
     </div>
-    <svg id="cmp-chart" viewBox="0 0 600 140" preserveAspectRatio="none" height="140"></svg>
-  </details>
-
-  <details class="report" id="fv-card">
-    <summary>Force-Velocity profile</summary>
-    <div class="meta" style="margin-top:8px">All reps in current session</div>
-    <div class="row">
-      <button id="fv-go" class="secondary">Build F-V profile</button>
+    <div class="an-panel" data-an="compare">
+      <div class="meta">Speed + force overlaid across the two reps.</div>
+      <div class="row">
+        <select id="cmp-a" style="flex:1"><option value="">Rep A</option></select>
+        <select id="cmp-b" style="flex:1"><option value="">Rep B</option></select>
+        <button id="cmp-go" class="secondary">Compare</button>
+      </div>
+      <svg id="cmp-chart" viewBox="0 0 600 140" preserveAspectRatio="none" height="140"></svg>
     </div>
-    <div id="fv-result" class="meta" style="margin-top:8px">Need at least 2 reps at different loads</div>
-    <svg id="fv-chart" viewBox="0 0 600 200" preserveAspectRatio="none" height="200"></svg>
-  </details>
+    <div class="an-panel" data-an="fv" hidden>
+      <div class="meta">All reps in the current session.</div>
+      <div class="row">
+        <button id="fv-go" class="secondary">Build F-V profile</button>
+      </div>
+      <div id="fv-result" class="meta" style="margin-top:8px">Need at least 2 reps at different loads</div>
+      <svg id="fv-chart" viewBox="0 0 600 200" preserveAspectRatio="none" height="200"></svg>
+    </div>
+  </div>
 
 </div>
 
@@ -2746,9 +2766,17 @@ window.updateResistSummary=updateResistSummary;
   function render(){
     const off=(vrState.axis==='off');
     const col=off?'#4a5578':cssv('--state');
-    let poly='';
-    for(let i=0;i<N;i++) poly+=xOf(i).toFixed(1)+','+yOf(vrState.pts[i]).toFixed(1)+' ';
-    let s='<polyline points="'+poly+'" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linejoin="round"'+(off?' stroke-dasharray="4 3"':'')+'/>';
+    const bottom=VH-PB;
+    let poly='', area='M'+xOf(0).toFixed(1)+','+bottom;
+    for(let i=0;i<N;i++){ poly+=xOf(i).toFixed(1)+','+yOf(vrState.pts[i]).toFixed(1)+' ';
+      area+=' L'+xOf(i).toFixed(1)+','+yOf(vrState.pts[i]).toFixed(1); }
+    area+=' L'+xOf(N-1).toFixed(1)+','+bottom+' Z';
+    let s='';
+    if(!off) s+='<defs><linearGradient id="vrg" x1="0" y1="0" x2="0" y2="1">'+
+      '<stop offset="0" stop-color="'+col+'" stop-opacity="0.32"/>'+
+      '<stop offset="1" stop-color="'+col+'" stop-opacity="0"/></linearGradient></defs>'+
+      '<path d="'+area+'" fill="url(#vrg)"/>';
+    s+='<polyline points="'+poly+'" fill="none" stroke="'+col+'" stroke-width="2.5" stroke-linejoin="round"'+(off?' stroke-dasharray="4 3"':'')+'/>';
     for(let j=0;j<N;j++) s+='<circle cx="'+xOf(j).toFixed(1)+'" cy="'+yOf(vrState.pts[j]).toFixed(1)+'" r="5" fill="'+cssv('--card')+'" stroke="'+col+'" stroke-width="2.5"/>';
     svg.innerHTML=s;
     svg.style.opacity=off?0.5:1;
@@ -2773,6 +2801,7 @@ window.updateResistSummary=updateResistSummary;
   svg.addEventListener('pointerdown',e=>{const p=evVal(e);dragIdx=p.idx;
     try{svg.setPointerCapture(e.pointerId);}catch(_){}
     if(vrState.axis==='off') vrState.axis='distance';
+    if(presetWrap) presetWrap.querySelectorAll('.vr-preset').forEach(x=>x.classList.remove('active'));
     vrState.pts[dragIdx]=p.v; render();});
   svg.addEventListener('pointermove',e=>{if(dragIdx<0)return;const p=evVal(e);vrState.pts[dragIdx]=p.v;render();});
   svg.addEventListener('pointerup',()=>{if(dragIdx>=0){dragIdx=-1;post();}});
@@ -2781,7 +2810,9 @@ window.updateResistSummary=updateResistSummary;
     vrState.axis=b.getAttribute('data-axis'); render(); post();}));
   if(presetWrap) presetWrap.querySelectorAll('.vr-preset').forEach(b=>b.addEventListener('click',()=>{
     const sh=SHAPES[b.getAttribute('data-shape')]; if(!sh) return;
-    vrState.pts=sh.slice(); if(vrState.axis==='off') vrState.axis='distance'; render(); post();}));
+    vrState.pts=sh.slice(); if(vrState.axis==='off') vrState.axis='distance';
+    presetWrap.querySelectorAll('.vr-preset').forEach(x=>x.classList.toggle('active',x===b));
+    render(); post();}));
   fetch('/api/c/state').then(r=>r.json()).then(st=>{
     const cfg=st.config||{};
     if(cfg.curve_pct&&cfg.curve_pct.length===N) vrState.pts=cfg.curve_pct.slice();
@@ -3154,6 +3185,17 @@ function populateRepSelects(reps){
     if(cur)sel.value=cur;
   }
 }
+// Analysis card — tab switching (Compare / Force-Velocity)
+(function(){
+  var card=document.getElementById('analysis-card'); if(!card) return;
+  card.querySelectorAll('.an-tab').forEach(function(t){
+    t.addEventListener('click',function(){
+      var k=t.getAttribute('data-an');
+      card.querySelectorAll('.an-tab').forEach(function(x){x.classList.toggle('active',x===t);});
+      card.querySelectorAll('.an-panel').forEach(function(p){p.hidden=(p.getAttribute('data-an')!==k);});
+    });
+  });
+})();
 document.getElementById('cmp-go').onclick=async()=>{
   const a=document.getElementById('cmp-a').value;
   const b=document.getElementById('cmp-b').value;
