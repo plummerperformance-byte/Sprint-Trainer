@@ -1451,7 +1451,7 @@ PHASE_C_HTML = """<!doctype html>
           --warm:#ff9440; --warm-soft:rgba(255,148,64,.16);
           --cool:#2bd0e2; --cool-soft:rgba(43,208,226,.16);
           --state:var(--warm); --state-soft:var(--warm-soft); }
-  *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
+  *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,"Helvetica Neue",Arial,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;
        min-height:100vh;display:flex;flex-direction:column}
   .wrap{flex:1;width:100%;max-width:1500px;margin:0 auto;padding:18px;
@@ -2035,6 +2035,10 @@ PHASE_C_HTML = """<!doctype html>
   #vr-preview{background:rgba(18,26,51,.55);border:1px solid var(--line-strong)}
   .vr-axis button.on{background:var(--accent);color:#fff}
   .vr-preset.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+  .vr-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+  .vr-head label{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:700}
+  .vr-shape{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--state);background:var(--state-soft);padding:4px 10px;border-radius:999px}
 </style>
 </head><body>
 
@@ -2396,7 +2400,10 @@ PHASE_C_HTML = """<!doctype html>
     <div class="meta" id="cfg-vcap-conflict" style="font-size:10px;margin-top:4px" hidden>Off — a velocity-axis variable-resistance curve is active, and that already shapes load by cable speed.</div>
   </div>
   <div class="field" data-modes="resisted assisted">
-    <label>Variable resistance</label>
+    <div class="vr-head">
+      <label>Variable resistance</label>
+      <span class="vr-shape" id="vr-shape">Flat</span>
+    </div>
     <div class="vr-axis" id="vr-axis">
       <button type="button" data-axis="off" class="on">Off</button>
       <button type="button" data-axis="distance">Distance</button>
@@ -2759,6 +2766,7 @@ window.updateResistSummary=updateResistSummary;
                 descending:[175,145,115,90,70,50],
                 bell:[60,100,150,150,100,60],
                 steps:[60,60,110,110,160,160]};
+  var shapeName='Flat';
   const VW=300,VH=110,PL=8,PR=8,PT=10,PB=10,PW=VW-PL-PR,PH=VH-PT-PB;
   const xOf=i=>PL+(i/(N-1))*PW;
   const yOf=v=>PT+(1-Math.max(0,Math.min(MAXPCT,v))/MAXPCT)*PH;
@@ -2772,6 +2780,9 @@ window.updateResistSummary=updateResistSummary;
       area+=' L'+xOf(i).toFixed(1)+','+yOf(vrState.pts[i]).toFixed(1); }
     area+=' L'+xOf(N-1).toFixed(1)+','+bottom+' Z';
     let s='';
+    const gl=cssv('--line');
+    for(let g=0;g<N;g++) s+='<line x1="'+xOf(g).toFixed(1)+'" y1="'+PT+'" x2="'+xOf(g).toFixed(1)+'" y2="'+bottom+'" stroke="'+gl+'" stroke-width="1" opacity="0.55"/>';
+    for(let g=0;g<=2;g++){var gy=PT+g*(bottom-PT)/2; s+='<line x1="'+xOf(0).toFixed(1)+'" y1="'+gy.toFixed(1)+'" x2="'+xOf(N-1).toFixed(1)+'" y2="'+gy.toFixed(1)+'" stroke="'+gl+'" stroke-width="1" opacity="0.45"/>';}
     if(!off) s+='<defs><linearGradient id="vrg" x1="0" y1="0" x2="0" y2="1">'+
       '<stop offset="0" stop-color="'+col+'" stop-opacity="0.32"/>'+
       '<stop offset="1" stop-color="'+col+'" stop-opacity="0"/></linearGradient></defs>'+
@@ -2781,6 +2792,7 @@ window.updateResistSummary=updateResistSummary;
     svg.innerHTML=s;
     svg.style.opacity=off?0.5:1;
     axisWrap.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.getAttribute('data-axis')===vrState.axis));
+    var sb=document.getElementById('vr-shape'); if(sb) sb.textContent=off?'Flat':shapeName;
     if(metaEl) metaEl.textContent=off?'Flat working resistance — same load the whole rep.'
       :('Load scales 0–300% of working load across '+(vrState.axis==='velocity'?'cable velocity.':'the resist distance.')+' Drag the 6 points.');
   }
@@ -2802,6 +2814,7 @@ window.updateResistSummary=updateResistSummary;
     try{svg.setPointerCapture(e.pointerId);}catch(_){}
     if(vrState.axis==='off') vrState.axis='distance';
     if(presetWrap) presetWrap.querySelectorAll('.vr-preset').forEach(x=>x.classList.remove('active'));
+    shapeName='Custom';
     vrState.pts[dragIdx]=p.v; render();});
   svg.addEventListener('pointermove',e=>{if(dragIdx<0)return;const p=evVal(e);vrState.pts[dragIdx]=p.v;render();});
   svg.addEventListener('pointerup',()=>{if(dragIdx>=0){dragIdx=-1;post();}});
@@ -2812,11 +2825,13 @@ window.updateResistSummary=updateResistSummary;
     const sh=SHAPES[b.getAttribute('data-shape')]; if(!sh) return;
     vrState.pts=sh.slice(); if(vrState.axis==='off') vrState.axis='distance';
     presetWrap.querySelectorAll('.vr-preset').forEach(x=>x.classList.toggle('active',x===b));
+    shapeName=b.textContent.trim();
     render(); post();}));
   fetch('/api/c/state').then(r=>r.json()).then(st=>{
     const cfg=st.config||{};
     if(cfg.curve_pct&&cfg.curve_pct.length===N) vrState.pts=cfg.curve_pct.slice();
     if(cfg.curve_axis) vrState.axis=cfg.curve_axis;
+    if(vrState.axis!=='off') shapeName='Custom';
     render();
   }).catch(()=>render());
 })();
@@ -4606,7 +4621,7 @@ SETUP_HTML = """<!doctype html>
           --warm:#ff9440; --warm-soft:rgba(255,148,64,.16);
           --cool:#2bd0e2; --cool-soft:rgba(43,208,226,.16);
           --state:var(--warm); --state-soft:var(--warm-soft); }
-  *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
+  *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,"Helvetica Neue",Arial,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px}
   .wrap{max-width:1200px;margin:0 auto;padding:18px;padding-bottom:48px}
   .topbar{display:flex;align-items:center;justify-content:space-between;
