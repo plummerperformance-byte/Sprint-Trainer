@@ -1292,7 +1292,7 @@ ATHLETE_HTML = """<!doctype html>
 <meta name=viewport content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
 <title>PPA · Athlete</title>
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#d4823a">
+<meta name="theme-color" content="#5b8bff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PPA">
@@ -1302,19 +1302,19 @@ ATHLETE_HTML = """<!doctype html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
-          --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
-          --card:#16161a; --line:#2c2c34; }
+  :root { --bg:#0a1020; --fg:#eef2fb; --muted:#818eae; --accent:#5b8bff;
+          --bad:#ff5a5f; --good:#33d17a; --warn:#ff9440;
+          --card:#121a33; --line:#243157; }
   *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;padding:0;height:100%;width:100%;background:var(--bg);color:var(--fg);overflow:hidden}
   body{display:flex;flex-direction:column;justify-content:center;align-items:center;padding:24px}
   .pill{position:fixed;top:18px;right:18px;padding:8px 18px;border-radius:999px;
         font-size:14px;font-weight:600;letter-spacing:0.08em;z-index:10}
-  .pill.ready{background:rgba(212,161,58,0.18);color:var(--warn);border:1px solid rgba(212,161,58,0.35)}
-  .pill.resist{background:rgba(232,90,90,0.18);color:var(--bad);border:1px solid rgba(232,90,90,0.35)}
-  .pill.return{background:rgba(90,168,106,0.18);color:var(--good);border:1px solid rgba(90,168,106,0.35)}
-  .pill.standby{background:rgba(138,138,150,0.12);color:var(--muted);border:1px solid rgba(138,138,150,0.25)}
+  .pill.ready{background:rgba(255,148,64,0.16);color:var(--warn);border:1px solid rgba(255,148,64,0.35)}
+  .pill.resist{background:rgba(255,90,95,0.16);color:var(--bad);border:1px solid rgba(255,90,95,0.35)}
+  .pill.return{background:rgba(51,209,122,0.16);color:var(--good);border:1px solid rgba(51,209,122,0.35)}
+  .pill.standby{background:rgba(129,142,174,0.12);color:var(--muted);border:1px solid rgba(129,142,174,0.28)}
   .head-num{font-size:28vw;font-weight:700;line-height:1;text-align:center;font-variant-numeric:tabular-nums}
   .head-unit{font-size:7vw;font-weight:600;color:var(--muted);text-align:center;margin-top:-4px}
   .secondary{display:flex;gap:36px;margin-top:34px;justify-content:center}
@@ -1433,7 +1433,7 @@ PHASE_C_HTML = """<!doctype html>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>PPA · Sprint Trainer</title>
 <link rel="manifest" href="/static/manifest.json">
-<meta name="theme-color" content="#d4823a">
+<meta name="theme-color" content="#5b8bff">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PPA Coach">
@@ -1443,10 +1443,11 @@ PHASE_C_HTML = """<!doctype html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
-          --accent-soft:rgba(212,130,58,0.14);
-          --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
-          --card:#16161a; --line:#2c2c34; }
+  :root { --bg:#0a1020; --fg:#eef2fb; --muted:#818eae; --accent:#5b8bff;
+          --accent-soft:rgba(91,139,255,0.16);
+          --bad:#ff5a5f; --good:#33d17a; --warn:#ff9440;
+          --card:#121a33; --line:#243157;
+          --raised:#182244; --line-strong:#33436b; --ink-faint:#56618a; }
   *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px;
        min-height:100vh;display:flex;flex-direction:column}
@@ -1666,7 +1667,7 @@ PHASE_C_HTML = """<!doctype html>
               display:none;flex-direction:column;justify-content:center;align-items:center}
   .cd-overlay.show{display:flex}
   .cd-num{font-size:38vw;font-weight:800;line-height:1;color:var(--accent);
-          font-variant-numeric:tabular-nums;text-shadow:0 0 60px rgba(212,130,58,0.5)}
+          font-variant-numeric:tabular-nums;text-shadow:0 0 60px rgba(91,139,255,0.5)}
   .cd-num.go{color:var(--good);font-size:30vw}
   .cd-label{font-size:18px;letter-spacing:0.16em;text-transform:uppercase;color:var(--muted);margin-top:24px}
 
@@ -1687,7 +1688,7 @@ PHASE_C_HTML = """<!doctype html>
   /* Tap-to-cycle metric tiles (§16.7) */
   .stat-line.tappable{cursor:pointer;border-radius:6px;padding:4px 6px;margin:0 -6px;
                       transition:background 120ms}
-  .stat-line.tappable:hover{background:rgba(212,130,58,0.08)}
+  .stat-line.tappable:hover{background:rgba(91,139,255,0.08)}
   .stat-line.tappable .l::after{content:"  ⇄";color:var(--muted);opacity:0;transition:opacity 120ms}
   .stat-line.tappable:hover .l::after{opacity:0.5}
 
@@ -1853,8 +1854,8 @@ PHASE_C_HTML = """<!doctype html>
            font-size:15px;font-variant-numeric:tabular-nums;
            transition:background 120ms,border-color 120ms;-webkit-tap-highlight-color:transparent}
   .rep-row:hover,.rep-row:focus-visible{border-left-color:var(--accent);
-           background:rgba(212,130,58,0.07);outline:none}
-  .rep-row.active{border-left-color:var(--accent);background:rgba(212,130,58,0.05)}
+           background:rgba(91,139,255,0.07);outline:none}
+  .rep-row.active{border-left-color:var(--accent);background:rgba(91,139,255,0.05)}
   .rep-row .num{color:var(--muted);font-weight:600}
   .rep-row .stats{color:var(--fg);font-weight:500}
   .rep-row .stats .sep{color:#3a3a44;margin:0 8px}
@@ -2627,7 +2628,7 @@ window.updateResistSummary=updateResistSummary;
     const x=i=>PL+(i/(N-1))*PW;
     const y=v=>PT+(1-v/mx)*PH;
     const dim=(vrState.axis==='off');
-    const col=dim?'#4a4a52':'#d4823a';
+    const col=dim?'#4a4a52':'#5b8bff';
     let poly='';
     for(let i=0;i<N;i++) poly+=x(i).toFixed(1)+','+y(vrState.pts[i]).toFixed(1)+' ';
     let s='<polyline points="'+poly+'" fill="none" stroke="'+col+'" stroke-width="2"'+
@@ -3069,11 +3070,11 @@ function renderCompare(sa,sb,la,lb){
   const yF=f=>H-PAD-(f/fMax)*(H-2*PAD);
   function path(samples,getter){return samples.map((s,i)=>(i?'L':'M')+xs(s.t_ms).toFixed(1)+','+getter(s).toFixed(1)).join(' ');}
   svg.innerHTML=
-    '<path d="'+path(sa,s=>yV(s.v_mps))+'" stroke="#d4823a" stroke-width="2" fill="none"/>'+
-    '<path d="'+path(sb,s=>yV(s.v_mps))+'" stroke="#d4823a" stroke-width="2" stroke-dasharray="4,3" fill="none"/>'+
+    '<path d="'+path(sa,s=>yV(s.v_mps))+'" stroke="#5b8bff" stroke-width="2" fill="none"/>'+
+    '<path d="'+path(sb,s=>yV(s.v_mps))+'" stroke="#5b8bff" stroke-width="2" stroke-dasharray="4,3" fill="none"/>'+
     '<path d="'+path(sa,s=>yF(s.F_N))+'" stroke="#58a6ff" stroke-width="2" fill="none"/>'+
     '<path d="'+path(sb,s=>yF(s.F_N))+'" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4,3" fill="none"/>'+
-    '<text x="6" y="14" fill="#d4823a" font-size="10">speed · Rep '+la+' solid · Rep '+lb+' dashed</text>'+
+    '<text x="6" y="14" fill="#5b8bff" font-size="10">speed · Rep '+la+' solid · Rep '+lb+' dashed</text>'+
     '<text x="6" y="26" fill="#58a6ff" font-size="10">force · same lines</text>'+
     '<text x="'+(W-6)+'" y="'+(H-4)+'" fill="#5a5a64" font-size="10" text-anchor="end">'+(tMax/1000).toFixed(1)+' s</text>';
 }
@@ -3099,7 +3100,7 @@ function renderFV(j){
   const xs=v=>PAD+(v/vMax)*(W-2*PAD);
   const ys=f=>H-PAD-(f/fMax)*(H-2*PAD);
   const line='M'+xs(0).toFixed(1)+','+ys(j.F0_n).toFixed(1)+' L'+xs(j.V0_mps).toFixed(1)+','+ys(0).toFixed(1);
-  const dots=pts.map(p=>'<circle cx="'+xs(p.v).toFixed(1)+'" cy="'+ys(p.F).toFixed(1)+'" r="4" fill="#d4823a"/>').join('');
+  const dots=pts.map(p=>'<circle cx="'+xs(p.v).toFixed(1)+'" cy="'+ys(p.F).toFixed(1)+'" r="4" fill="#5b8bff"/>').join('');
   svg.innerHTML=
     '<line x1="'+PAD+'" y1="'+(H-PAD)+'" x2="'+(W-PAD)+'" y2="'+(H-PAD)+'" stroke="#3a3a44"/>'+
     '<line x1="'+PAD+'" y1="'+PAD+'" x2="'+PAD+'" y2="'+(H-PAD)+'" stroke="#3a3a44"/>'+
@@ -3136,7 +3137,7 @@ function renderLiveChart(samples, opts){
     const v=vAxMax*(1-i/4);
     const f=fAxMax*(1-i/4);
     grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26" stroke-width="1"/>';
-    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#d4823a" font-size="10" text-anchor="end" opacity="0.7">'+v.toFixed(v<10?1:0)+'</text>';
+    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#5b8bff" font-size="10" text-anchor="end" opacity="0.7">'+v.toFixed(v<10?1:0)+'</text>';
     grid+='<text x="'+(W-PADR+6)+'" y="'+(y+3)+'" fill="#58a6ff" font-size="10" opacity="0.7">'+f.toFixed(0)+'</text>';
   }
   // X ticks (4 divisions)
@@ -3147,12 +3148,12 @@ function renderLiveChart(samples, opts){
     grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="#5a5a64" font-size="10" text-anchor="middle">'+t.toFixed(1)+'s</text>';
   }
   // Axis labels
-  grid+='<text x="'+(PADL-30)+'" y="'+(PADT-8)+'" fill="#d4823a" font-size="10" font-weight="600">m/s</text>';
+  grid+='<text x="'+(PADL-30)+'" y="'+(PADT-8)+'" fill="#5b8bff" font-size="10" font-weight="600">m/s</text>';
   grid+='<text x="'+(W-PADR+10)+'" y="'+(PADT-8)+'" fill="#58a6ff" font-size="10" font-weight="600">N</text>';
 
   // Phase-coloured velocity polyline: orange while above corridor (engaged), muted otherwise
   const corridorM = (opts.corridor_m != null) ? opts.corridor_m : 0;
-  function segColor(s){ return (s.pos_m != null && s.pos_m >= corridorM && corridorM > 0) ? '#d4823a' : '#8a6d4a'; }
+  function segColor(s){ return (s.pos_m != null && s.pos_m >= corridorM && corridorM > 0) ? '#5b8bff' : '#8a6d4a'; }
   let velSegments='';
   for(let i=1;i<samples.length;i++){
     const a=samples[i-1], b=samples[i];
@@ -3169,9 +3170,9 @@ function renderLiveChart(samples, opts){
     grid+
     '<path d="'+pathF+'" stroke="#58a6ff" stroke-width="1.8" fill="none" opacity="0.9"/>'+
     velSegments+
-    '<circle cx="'+xs(peakV.t_ms).toFixed(1)+'" cy="'+yV(peakV.v_mps).toFixed(1)+'" r="3.5" fill="#d4823a"/>'+
+    '<circle cx="'+xs(peakV.t_ms).toFixed(1)+'" cy="'+yV(peakV.v_mps).toFixed(1)+'" r="3.5" fill="#5b8bff"/>'+
     '<circle cx="'+xs(peakF.t_ms).toFixed(1)+'" cy="'+yF(peakF.F_N).toFixed(1)+'" r="3.5" fill="#58a6ff"/>'+
-    '<text x="'+(xs(peakV.t_ms)+8).toFixed(1)+'" y="'+(yV(peakV.v_mps)-4).toFixed(1)+'" fill="#d4823a" font-size="10" font-weight="600">'+peakV.v_mps.toFixed(2)+' m/s</text>'+
+    '<text x="'+(xs(peakV.t_ms)+8).toFixed(1)+'" y="'+(yV(peakV.v_mps)-4).toFixed(1)+'" fill="#5b8bff" font-size="10" font-weight="600">'+peakV.v_mps.toFixed(2)+' m/s</text>'+
     '<text x="'+(xs(peakF.t_ms)+8).toFixed(1)+'" y="'+(yF(peakF.F_N)-4).toFixed(1)+'" fill="#58a6ff" font-size="10" font-weight="600">'+peakF.F_N.toFixed(0)+' N</text>';
 }
 function hideChart(){chartEmpty.style.display='block'; liveChart.style.display='none';}
@@ -3380,10 +3381,10 @@ function renderStepsTab(rep){
   for(let i=0;i<=4;i++){
     const y=PADT+i*(H-PADT-PADB)/4;
     grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26"/>';
-    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#d4823a" font-size="10" text-anchor="end" opacity="0.7">'+(lenAxMax*(1-i/4)).toFixed(1)+'</text>';
+    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#5b8bff" font-size="10" text-anchor="end" opacity="0.7">'+(lenAxMax*(1-i/4)).toFixed(1)+'</text>';
     grid+='<text x="'+(W-PADR+6)+'" y="'+(y+3)+'" fill="#58a6ff" font-size="10" opacity="0.7">'+(velAxMax*(1-i/4)).toFixed(1)+'</text>';
   }
-  grid+='<text x="'+(PADL-30)+'" y="'+(PADT-4)+'" fill="#d4823a" font-size="10" font-weight="600">m</text>';
+  grid+='<text x="'+(PADL-30)+'" y="'+(PADT-4)+'" fill="#5b8bff" font-size="10" font-weight="600">m</text>';
   grid+='<text x="'+(W-PADR+10)+'" y="'+(PADT-4)+'" fill="#58a6ff" font-size="10" font-weight="600">m/s</text>';
   // Stride number labels along X
   for(let i=0;i<valid.length;i++){
@@ -3396,7 +3397,7 @@ function renderStepsTab(rep){
     const x=xs(i)-barWidth/2;
     const y=yL(valid[i].step_length_m);
     const h=H-PADB-y;
-    bars+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barWidth.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="#d4823a" opacity="0.75" rx="2"/>';
+    bars+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barWidth.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="#5b8bff" opacity="0.75" rx="2"/>';
   }
   // Velocity overlay line
   let velPath='';
@@ -3482,7 +3483,7 @@ function renderFVRepTab(rep){
     grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="#5a5a64" font-size="10" text-anchor="middle">'+(vAx*(i/4)).toFixed(1)+'</text>';
   }
   grid+='<text x="'+(PADL-32)+'" y="'+(PADT-4)+'" fill="#58a6ff" font-size="10" font-weight="600">F (N)</text>';
-  grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="#d4823a" font-size="10" font-weight="600" text-anchor="end">v (m/s)</text>';
+  grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="#5b8bff" font-size="10" font-weight="600" text-anchor="end">v (m/s)</text>';
 
   // Per-sample cloud — colour by time (start = warm orange, end = cool blue)
   let dots='';
@@ -3536,7 +3537,7 @@ function renderFVRepTab(rep){
   // Legend
   const legend = '<g transform="translate('+(W-160)+','+(PADT)+')">'+
     '<rect x="0" y="0" width="155" height="48" fill="#0a0a0c" stroke="#1f1f26" rx="4"/>'+
-    '<circle cx="10" cy="12" r="3" fill="#d4823a"/><text x="18" y="16" fill="#8a8a96" font-size="10">samples (start → end)</text>'+
+    '<circle cx="10" cy="12" r="3" fill="#5b8bff"/><text x="18" y="16" fill="#8a8a96" font-size="10">samples (start → end)</text>'+
     (rep && rep.step_events && rep.step_events.length>1 ?
       '<circle cx="10" cy="26" r="4" fill="#f0f0f3" stroke="#0a0a0c"/><text x="18" y="30" fill="#8a8a96" font-size="10">per-stride avg</text>' : '')+
     (f0 && v0 ?
@@ -3574,7 +3575,7 @@ document.querySelectorAll('.rd-tab').forEach(btn=>{
   });
 });
 
-const REP_COLORS=['', '#d4823a', '#5aa86a', '#e85a5a', '#4a90d4'];
+const REP_COLORS=['', '#5b8bff', '#5aa86a', '#e85a5a', '#4a90d4'];
 function repEsc(s){ return String(s).replace(/[&<>"]/g,
   c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 async function patchRepAnnotation(idx, body){
@@ -4001,7 +4002,7 @@ const MODE_INTRO = {
     title:'Resisted Sprint',
     text:'Athlete starts about 1 m in front of the rig. On Start rep the motor applies the working load — the athlete sprints away from the rig.',
     svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
-        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#5b8bff"/>'+
         '<line x1="30" y1="30" x2="116" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
         '<circle cx="124" cy="30" r="9" fill="#f0f0f3"/>'+
         '<line x1="138" y1="30" x2="178" y2="30" stroke="#5aa86a" stroke-width="3"/>'+
@@ -4010,7 +4011,7 @@ const MODE_INTRO = {
     title:'Assisted Sprint',
     text:'Walk the cable out so the athlete is past the end zone. On Start rep the motor tows the athlete back toward the rig — an overspeed run.',
     svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
-        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#5b8bff"/>'+
         '<line x1="30" y1="30" x2="158" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
         '<circle cx="166" cy="30" r="9" fill="#f0f0f3"/>'+
         '<line x1="150" y1="30" x2="40" y2="30" stroke="#5aa86a" stroke-width="3"/>'+
@@ -4019,29 +4020,29 @@ const MODE_INTRO = {
     title:'Change of Direction',
     text:'Set the zero point at least 0.15 m from the start. The athlete sprints out and returns — the motor resists both the way out and the way back (eccentric load on the return).',
     svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
-        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#5b8bff"/>'+
         '<line x1="30" y1="30" x2="118" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
         '<circle cx="124" cy="30" r="9" fill="#f0f0f3"/>'+
-        '<line x1="138" y1="22" x2="178" y2="22" stroke="#d4823a" stroke-width="3"/>'+
-        '<path d="M184 22 l-10 -5 v10 z" fill="#d4823a"/>'+
+        '<line x1="138" y1="22" x2="178" y2="22" stroke="#5b8bff" stroke-width="3"/>'+
+        '<path d="M184 22 l-10 -5 v10 z" fill="#5b8bff"/>'+
         '<line x1="178" y1="38" x2="138" y2="38" stroke="#5aa86a" stroke-width="3"/>'+
         '<path d="M132 38 l10 -5 v10 z" fill="#5aa86a"/></svg>'},
   gym:{
     title:'Gym',
     text:'Static position. Direction OUT = the cable extends on the concentric (lifting) phase; Direction IN = it retracts. Set concentric and eccentric weights separately.',
     svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
-        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#5b8bff"/>'+
         '<line x1="30" y1="30" x2="110" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
         '<circle cx="118" cy="30" r="9" fill="#f0f0f3"/>'+
         '<line x1="118" y1="14" x2="118" y2="6" stroke="#5aa86a" stroke-width="3"/>'+
         '<path d="M118 2 l-5 9 h10 z" fill="#5aa86a"/>'+
-        '<line x1="118" y1="46" x2="118" y2="54" stroke="#d4823a" stroke-width="3"/>'+
-        '<path d="M118 58 l-5 -9 h10 z" fill="#d4823a"/></svg>'},
+        '<line x1="118" y1="46" x2="118" y2="54" stroke="#5b8bff" stroke-width="3"/>'+
+        '<path d="M118 58 l-5 -9 h10 z" fill="#5b8bff"/></svg>'},
   flywheel:{
     title:'Flywheel',
     text:'Static position. The cable spins up a simulated flywheel — resistance comes from accelerating the virtual mass, so steady pulling feels light and explosive effort feels heavy. The eccentric (cable-in) phase can be overloaded. Set Virtual mass in Adjust.',
     svg:'<svg viewBox="0 0 200 60" width="184" height="55" aria-hidden="true">'+
-        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#d4823a"/>'+
+        '<rect x="8" y="14" width="22" height="32" rx="3" fill="#5b8bff"/>'+
         '<line x1="30" y1="30" x2="120" y2="30" stroke="#3a3a44" stroke-width="2" stroke-dasharray="4 3"/>'+
         '<circle cx="150" cy="30" r="20" fill="none" stroke="#f0f0f3" stroke-width="3"/>'+
         '<circle cx="150" cy="30" r="3" fill="#f0f0f3"/>'+
@@ -4362,9 +4363,9 @@ async function refresh(){
     s+='<text x="'+(PL+PW/2)+'" y="'+(VH-7)+'" fill="#8a8a96" font-size="9" text-anchor="middle">'+xl+'</text>';
     var poly='';
     for(var i=0;i<N;i++){ poly+=ptx(i)+','+pty(kg[i])+' '; }
-    s+='<polyline points="'+poly+'" fill="none" stroke="#d4823a" stroke-width="2"/>';
+    s+='<polyline points="'+poly+'" fill="none" stroke="#5b8bff" stroke-width="2"/>';
     for(var j=0;j<N;j++){
-      s+='<circle cx="'+ptx(j)+'" cy="'+pty(kg[j])+'" r="7" fill="#d4823a" stroke="#0a0a0c" stroke-width="1.5"/>';
+      s+='<circle cx="'+ptx(j)+'" cy="'+pty(kg[j])+'" r="7" fill="#5b8bff" stroke="#0a0a0c" stroke-width="1.5"/>';
       s+='<text x="'+ptx(j)+'" y="'+(pty(kg[j])-10)+'" fill="#f0f0f3" font-size="9" text-anchor="middle">'+kg[j].toFixed(1)+'</text>';
     }
     svg.innerHTML=s;
@@ -4397,7 +4398,7 @@ async function refresh(){
     var bs=document.querySelectorAll('.curve-axis-btn');
     for(var i=0;i<bs.length;i++){
       var on=bs[i].getAttribute('data-axis')===axis;
-      bs[i].style.background=on?'#d4823a':'#16161a';
+      bs[i].style.background=on?'#5b8bff':'#16161a';
       bs[i].style.color=on?'#fff':'#8a8a96';
     }
     if(meta){
@@ -4442,10 +4443,11 @@ SETUP_HTML = """<!doctype html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#0a0a0c; --fg:#f0f0f3; --muted:#8a8a96; --accent:#d4823a;
-          --accent-soft:rgba(212,130,58,0.14);
-          --bad:#e85a5a; --good:#5aa86a; --warn:#d4a13a;
-          --card:#16161a; --line:#2c2c34; }
+  :root { --bg:#0a1020; --fg:#eef2fb; --muted:#818eae; --accent:#5b8bff;
+          --accent-soft:rgba(91,139,255,0.16);
+          --bad:#ff5a5f; --good:#33d17a; --warn:#ff9440;
+          --card:#121a33; --line:#243157;
+          --raised:#182244; --line-strong:#33436b; --ink-faint:#56618a; }
   *{box-sizing:border-box;font-family:Inter,-apple-system,Segoe UI,Roboto,sans-serif}
   body{margin:0;background:var(--bg);color:var(--fg);font-size:16px}
   .wrap{max-width:1200px;margin:0 auto;padding:18px;padding-bottom:48px}
@@ -4896,8 +4898,8 @@ async function loadProgressionChart(aid){
     grid+='<text x="'+(PADL-4)+'" y="'+(y+3)+'" fill="#5a5a64" font-size="9" text-anchor="end">'+v.toFixed(2)+'</text>';
   }
   const path=points.map((pt,i)=>(i?'L':'M')+xs(i).toFixed(1)+','+ys(pt.value).toFixed(1)).join(' ');
-  const dots=points.map((pt,i)=>'<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(pt.value).toFixed(1)+'" r="3" fill="#d4823a"/>').join('');
-  svg.innerHTML=grid+'<path d="'+path+'" stroke="#d4823a" stroke-width="2" fill="none"/>'+dots;
+  const dots=points.map((pt,i)=>'<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(pt.value).toFixed(1)+'" r="3" fill="#5b8bff"/>').join('');
+  svg.innerHTML=grid+'<path d="'+path+'" stroke="#5b8bff" stroke-width="2" fill="none"/>'+dots;
   const first=points[0].value,last=points[points.length-1].value;
   const delta=last-first;
   const pct=first!==0?(delta/Math.abs(first)*100):0;
@@ -5031,9 +5033,9 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
     s+='<text x="'+(PL+PW/2)+'" y="'+(VH-7)+'" fill="#8a8a96" font-size="9" text-anchor="middle">'+xl+'</text>';
     var poly='';
     for(var i=0;i<N;i++){ poly+=ptx(i)+','+pty(pts[i])+' '; }
-    s+='<polyline points="'+poly+'" fill="none" stroke="#d4823a" stroke-width="2"/>';
+    s+='<polyline points="'+poly+'" fill="none" stroke="#5b8bff" stroke-width="2"/>';
     for(var j=0;j<N;j++){
-      s+='<circle cx="'+ptx(j)+'" cy="'+pty(pts[j])+'" r="7" fill="#d4823a" stroke="#0a0a0c" stroke-width="1.5"/>';
+      s+='<circle cx="'+ptx(j)+'" cy="'+pty(pts[j])+'" r="7" fill="#5b8bff" stroke="#0a0a0c" stroke-width="1.5"/>';
       s+='<text x="'+ptx(j)+'" y="'+(pty(pts[j])-10)+'" fill="#f0f0f3" font-size="9" text-anchor="middle">'+Math.round(pts[j])+'%</text>';
     }
     svg.innerHTML=s;
@@ -5066,7 +5068,7 @@ document.getElementById('cfg-auto-stop').addEventListener('change',e=>
     var bs=document.querySelectorAll('.curve-axis-btn');
     for(var i=0;i<bs.length;i++){
       var on=bs[i].getAttribute('data-axis')===axis;
-      bs[i].style.background=on?'#d4823a':'#16161a';
+      bs[i].style.background=on?'#5b8bff':'#16161a';
       bs[i].style.color=on?'#fff':'#8a8a96';
     }
     if(meta){
