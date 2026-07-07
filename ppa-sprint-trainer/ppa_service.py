@@ -1949,6 +1949,10 @@ PHASE_C_HTML = """<!doctype html>
   .sheet{box-shadow:-24px 0 60px -30px rgba(3,7,18,.85)}
   /* room under the floating primary-control pill so content isn't obscured */
   .wrap{padding-bottom:118px}
+  /* relocated session presets — compact 2-col grid inside the Adjust sheet */
+  .sheet-presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .sheet-presets .preset-btn{flex:none;min-height:44px;font-size:12.5px;padding:8px 10px;
+    text-align:center;line-height:1.15}
   /* Hero emphasis (Few, Information Dashboard Design — mistake #10 "highlight the
      important data"; data-ink: enhance the hero, recede the rest). Speed is the
      one number; Force/Power/Cable-out stay readable but subordinate. */
@@ -2001,14 +2005,8 @@ PHASE_C_HTML = """<!doctype html>
     <div class="pc-meta" id="pc-meta"></div>
   </div>
 
-  <div class="preset-row" id="preset-row" role="group" aria-label="Session presets">
-    <button type="button" class="preset-btn" data-preset="match_prep">🏉 Match-prep accel</button>
-    <button type="button" class="preset-btn" data-preset="top_end">⚡ Top-end speed</button>
-    <button type="button" class="preset-btn" data-preset="decel">🛡️ Decel mechanics</button>
-    <button type="button" class="preset-btn" data-preset="overspeed">🪂 Overspeed</button>
-    <button type="button" class="preset-btn" data-preset="power_gym">🏋️ Power gym</button>
-    <button type="button" class="preset-btn" data-preset="fv_test">📊 FV profile</button>
-  </div>
+  <!-- session presets relocated into the Adjust sheet ("Quick start") to keep the
+       live screen to one hero + minimal chrome (Few #11; HIG progressive disclosure) -->
 
   <div class="top-grid">
     <div class="chart-card" id="chart-card">
@@ -2252,6 +2250,18 @@ PHASE_C_HTML = """<!doctype html>
 <aside class="sheet" id="sheet">
   <button class="sheet-close" id="sheet-close" aria-label="Close">×</button>
   <h2>Adjust</h2>
+
+  <div class="field">
+    <label>Quick start</label>
+    <div class="sheet-presets" id="preset-row" role="group" aria-label="Session presets">
+      <button type="button" class="preset-btn" data-preset="match_prep">🏉 Match-prep accel</button>
+      <button type="button" class="preset-btn" data-preset="top_end">⚡ Top-end speed</button>
+      <button type="button" class="preset-btn" data-preset="decel">🛡️ Decel mechanics</button>
+      <button type="button" class="preset-btn" data-preset="overspeed">🪂 Overspeed</button>
+      <button type="button" class="preset-btn" data-preset="power_gym">🏋️ Power gym</button>
+      <button type="button" class="preset-btn" data-preset="fv_test">📊 FV profile</button>
+    </div>
+  </div>
 
   <div class="field">
     <label>Drill</label>
