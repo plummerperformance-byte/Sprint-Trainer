@@ -1928,6 +1928,21 @@ PHASE_C_HTML = """<!doctype html>
   details.report .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
   details.report .row select,details.report .row button{}
   #cmp-chart,#fv-chart{width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:8px}
+
+  /* ===== Visual calm pass — rounder cards, soft depth, more air (2026-07) ===== */
+  .chart-card,.stats-card{border-radius:20px;padding:22px}
+  .card,#run-detail,.profile-card,.rest-timer,.prerep-card{border-radius:18px}
+  .chart-card,.stats-card,.card,#run-detail{
+    box-shadow:0 1px 2px rgba(3,7,18,.4), 0 20px 46px -28px rgba(3,7,18,.75)}
+  .top-grid{gap:16px}
+  .mode-bar,.preset-row{gap:10px}
+  .mode-pill{border-radius:14px}
+  .preset-btn{border-radius:12px}
+  .rd-tab{border-radius:10px}
+  .speed-toggle,.ins-view-toggle{background:rgba(4,8,20,.5)}
+  .rd-row{border-bottom-color:var(--line)}
+  .prerep-go:hover{background:#7ea6ff}
+  .sheet{box-shadow:-24px 0 60px -30px rgba(3,7,18,.85)}
 </style>
 </head><body>
 
