@@ -1947,6 +1947,15 @@ PHASE_C_HTML = """<!doctype html>
   /* active mode = outlined warm/cool state accent (mockup), not a solid blue fill */
   .mode-pill.active{background:var(--state-soft);color:var(--state);border-color:var(--state)}
   .mode-pill:hover{border-color:var(--state)}
+  /* E-stop as a flat red pill matching the Arm/Adjust button family — still fixed
+     top-right, always visible, red = danger (label carries the meaning) */
+  .estop-btn{width:auto;height:auto;min-height:52px;padding:0 26px;border-radius:14px;
+    display:inline-flex;background:var(--bad);border:1px solid var(--bad);
+    box-shadow:0 12px 26px -12px rgba(229,72,77,.75);font-size:15px;font-weight:800;
+    letter-spacing:.06em;text-shadow:none}
+  .estop-btn::before{display:none}
+  .estop-btn:hover,.estop-btn:active{transform:translateY(-1px);filter:brightness(1.08);
+    box-shadow:0 14px 30px -12px rgba(229,72,77,.85)}
   .preset-btn{border-radius:12px}
   .rd-tab{border-radius:10px}
   .speed-toggle,.ins-view-toggle{background:rgba(4,8,20,.5)}
@@ -1959,6 +1968,9 @@ PHASE_C_HTML = """<!doctype html>
   .sheet-presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .sheet-presets .preset-btn{flex:none;min-height:44px;font-size:12.5px;padding:8px 10px;
     text-align:center;line-height:1.15}
+  /* Mode selector inside the Adjust panel (relocated from the top bar) */
+  .sheet .mode-bar{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0}
+  .sheet .mode-pill{flex:none;min-height:44px;font-size:13px;padding:9px 6px;letter-spacing:.02em}
   /* Few bullet-graph — load vs 53 kg cap. Greyscale bands (working <30 / high 30-45 /
      near-cap 45-53 faint warn); accent measure bar carries the colour; red cap tick. */
   .load-bullet{margin-top:12px}
@@ -2010,13 +2022,7 @@ PHASE_C_HTML = """<!doctype html>
     </div>
   </div>
 
-  <div class="mode-bar" id="mode-bar" role="tablist" aria-label="Training mode">
-    <button class="mode-pill active" data-mode="resisted" role="tab" aria-selected="true">Resisted</button>
-    <button class="mode-pill" data-mode="assisted" role="tab" aria-selected="false">Assisted</button>
-    <button class="mode-pill" data-mode="cod" role="tab" aria-selected="false">Change of direction</button>
-    <button class="mode-pill" data-mode="gym" role="tab" aria-selected="false">Gym</button>
-    <button class="mode-pill" data-mode="flywheel" role="tab" aria-selected="false">Flywheel</button>
-  </div>
+  <!-- mode selector relocated into the Adjust panel (per mockup) -->
 
   <div class="profile-card" id="athlete-profile-card" hidden>
     <div class="pc-stats" id="pc-stats"></div>
@@ -2270,14 +2276,25 @@ PHASE_C_HTML = """<!doctype html>
   <h2>Adjust</h2>
 
   <div class="field">
+    <label>Mode</label>
+    <div class="mode-bar" id="mode-bar" role="tablist" aria-label="Training mode">
+      <button class="mode-pill active" data-mode="resisted" role="tab" aria-selected="true">Resisted</button>
+      <button class="mode-pill" data-mode="assisted" role="tab" aria-selected="false">Assisted</button>
+      <button class="mode-pill" data-mode="cod" role="tab" aria-selected="false">C.O.D.</button>
+      <button class="mode-pill" data-mode="gym" role="tab" aria-selected="false">Gym</button>
+      <button class="mode-pill" data-mode="flywheel" role="tab" aria-selected="false">Flywheel</button>
+    </div>
+  </div>
+
+  <div class="field">
     <label>Quick start</label>
     <div class="sheet-presets" id="preset-row" role="group" aria-label="Session presets">
-      <button type="button" class="preset-btn" data-preset="match_prep">🏉 Match-prep accel</button>
-      <button type="button" class="preset-btn" data-preset="top_end">⚡ Top-end speed</button>
-      <button type="button" class="preset-btn" data-preset="decel">🛡️ Decel mechanics</button>
-      <button type="button" class="preset-btn" data-preset="overspeed">🪂 Overspeed</button>
-      <button type="button" class="preset-btn" data-preset="power_gym">🏋️ Power gym</button>
-      <button type="button" class="preset-btn" data-preset="fv_test">📊 FV profile</button>
+      <button type="button" class="preset-btn" data-preset="match_prep">Match-prep</button>
+      <button type="button" class="preset-btn" data-preset="top_end">Top-end speed</button>
+      <button type="button" class="preset-btn" data-preset="decel">Decel</button>
+      <button type="button" class="preset-btn" data-preset="overspeed">Overspeed</button>
+      <button type="button" class="preset-btn" data-preset="power_gym">Power gym</button>
+      <button type="button" class="preset-btn" data-preset="fv_test">F·V test</button>
     </div>
   </div>
 
