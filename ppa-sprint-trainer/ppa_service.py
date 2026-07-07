@@ -1949,6 +1949,15 @@ PHASE_C_HTML = """<!doctype html>
   .sheet{box-shadow:-24px 0 60px -30px rgba(3,7,18,.85)}
   /* room under the floating primary-control pill so content isn't obscured */
   .wrap{padding-bottom:118px}
+  /* Hero emphasis (Few, Information Dashboard Design — mistake #10 "highlight the
+     important data"; data-ink: enhance the hero, recede the rest). Speed is the
+     one number; Force/Power/Cable-out stay readable but subordinate. */
+  .stat-line .v.primary{font-size:88px;font-weight:700;letter-spacing:-.02em;line-height:.92}
+  @media (max-width:767px){ .stat-line .v.primary{font-size:60px} }
+  @media (max-width:414px){ .stat-line .v.primary{font-size:52px} }
+  .stat-line .v.secondary{font-size:28px;font-weight:500}
+  .stat-line[data-tile]:not([data-tile="speed"]) .l{color:var(--ink-faint)}
+  .stat-line[data-tile]:not([data-tile="speed"]) .v.secondary{opacity:.82}
 </style>
 </head><body>
 
