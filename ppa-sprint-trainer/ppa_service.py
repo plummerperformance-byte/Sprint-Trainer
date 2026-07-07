@@ -2317,17 +2317,8 @@ PHASE_C_HTML = """<!doctype html>
     </div>
   </div>
 
-  <div class="field">
-    <label>Quick start</label>
-    <div class="sheet-presets" id="preset-row" role="group" aria-label="Session presets">
-      <button type="button" class="preset-btn" data-preset="match_prep">Match-prep</button>
-      <button type="button" class="preset-btn" data-preset="top_end">Top-end speed</button>
-      <button type="button" class="preset-btn" data-preset="decel">Decel</button>
-      <button type="button" class="preset-btn" data-preset="overspeed">Overspeed</button>
-      <button type="button" class="preset-btn" data-preset="power_gym">Power gym</button>
-      <button type="button" class="preset-btn" data-preset="fv_test">F·V test</button>
-    </div>
-  </div>
+  <!-- Quick-start presets cut (Purpose/Simplicity: Mode + Drill + Load already cover
+       setup; presets overlapped both). applyPreset() kept dormant for easy restore. -->
 
   <div class="field">
     <label>Drill</label>
