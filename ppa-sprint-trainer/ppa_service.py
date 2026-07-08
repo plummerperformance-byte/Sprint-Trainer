@@ -1879,6 +1879,16 @@ PHASE_C_HTML = """<!doctype html>
   .set-head:first-child{margin-top:0;padding-top:0;border-top:0}
   .set-sum{color:var(--muted);font-weight:600;letter-spacing:0.04em;text-transform:none}
   .reps-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  /* past-sessions list (coach review of stored/imported reps) */
+  .past-sessions{margin-top:10px;border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:5px}
+  .past-sessions .ps-head{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-faint);font-weight:700;margin-bottom:2px}
+  .ps-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 11px;background:var(--raised);
+    border:1px solid var(--line);border-radius:10px;color:var(--fg);cursor:pointer}
+  .ps-row:hover{border-color:var(--accent);background:var(--accent-soft)}
+  .ps-row .ps-date{font-weight:700;font-size:13px;font-variant-numeric:tabular-nums}
+  .ps-row .ps-sum{font-size:12px;color:var(--muted)}
+  .ps-row .ps-src{margin-left:auto;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);font-weight:700}
+  .ps-row .chev{color:var(--muted);font-size:16px}
   #new-set-btn{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:0.04em;
                background:transparent;color:var(--accent);border:1px solid var(--accent);
                border-radius:7px;cursor:pointer;min-height:32px}
@@ -2404,6 +2414,7 @@ PHASE_C_HTML = """<!doctype html>
     </div>
     <div class="preset-target" id="preset-target" hidden></div>
     <div class="reps-list" id="reps-list"></div>
+    <div class="past-sessions" id="past-sessions" style="display:none"></div>
   </div>
 
   <div class="card analysis-card" id="analysis-card">
@@ -2748,7 +2759,7 @@ function _pfNum(v,d){ return (v==null)?'–':Number(v).toFixed(d==null?1:d); }
 async function loadAthleteProfile(aid){
   const card=document.getElementById('athlete-profile-card');
   if(!card) return;
-  if(!aid){ card.hidden=true; window._athleteProfile=null; refreshSuggestedLoad(); return; }
+  if(!aid){ card.hidden=true; window._athleteProfile=null; if(typeof showPastSessions==='function') showPastSessions(null); refreshSuggestedLoad(); return; }
   try{
     const r=await fetch('/api/athletes/'+encodeURIComponent(aid)+'/profile');
     if(!r.ok){ card.hidden=true; window._athleteProfile=null; refreshSuggestedLoad(); return; }
@@ -2770,11 +2781,50 @@ async function loadAthleteProfile(aid){
     meta.push((p.session_count||0)+' sessions');
     document.getElementById('pc-meta').innerHTML=meta.join(' · ');
     card.hidden=false;
+    if(typeof showPastSessions==='function') showPastSessions(aid);
     // Velocity-decrement auto-loading needs a sufficient L-V profile.
     const vopt=document.querySelector('#cfg-autoload option[value="vdec"]');
     if(vopt) vopt.disabled=(p.lv_profile_quality!=='ok');
   }catch(e){ card.hidden=true; }
   refreshSuggestedLoad();
+}
+// Past-sessions list on the coach view — lets a coach open a stored/imported
+// rep (e.g. a 1080 xlsx import) into the review view. Wires the pre-existing
+// /api/sessions/{id}/load endpoint to a clickable UI (it had none).
+async function showPastSessions(aid){
+  const box=document.getElementById('past-sessions'); if(!box) return;
+  if(!aid){ box.innerHTML=''; box.style.display='none'; return; }
+  let h; try{ h=await fetch('/api/athletes/'+encodeURIComponent(aid)+'/history').then(function(r){return r.json();}); }
+  catch(e){ box.style.display='none'; return; }
+  const sess=(h&&h.sessions)||[];
+  if(!sess.length){ box.innerHTML=''; box.style.display='none'; return; }
+  box.style.display='block';
+  box.innerHTML='<div class="ps-head">Past sessions · tap to review</div>'+
+    sess.slice(0,10).map(function(s){
+      const date=(s.started_at||'').split('T')[0];
+      const src=((s.notes||'').indexOf('xlsx')>=0)?'import':(s.drill||'session');
+      const v=(s.best_speed_mps!=null)?s.best_speed_mps.toFixed(2)+' m/s':'–';
+      return '<button type="button" class="ps-row" data-sid="'+s.id+'">'+
+        '<span class="ps-date">'+date+'</span>'+
+        '<span class="ps-sum">'+v+' · '+s.rep_count+' rep'+(s.rep_count===1?'':'s')+'</span>'+
+        '<span class="ps-src">'+src+'</span><span class="chev">›</span></button>';
+    }).join('');
+  box.querySelectorAll('.ps-row').forEach(function(b){ b.onclick=function(){ loadSessionIntoView(parseInt(b.getAttribute('data-sid'),10)); }; });
+}
+async function loadSessionIntoView(sid){
+  try{
+    await fetch('/api/sessions/'+sid+'/load',{method:'POST'});
+    const d=await fetch('/api/c/athletic/reps').then(function(r){return r.json();});
+    const reps=Array.isArray(d)?d:(d.reps||[]);
+    window._lastReps=reps;
+    if(typeof renderRepsList==='function') renderRepsList(reps);
+    if(reps.length===1){   // single rep (e.g. an import) — open it straight away
+      const idx=reps[0].rep_idx;
+      try{ const sj=await fetch('/api/c/athletic/rep/'+idx+'/samples').then(function(r){return r.json();}); cachedSamples=sj.samples||[]; window._lastSamples=cachedSamples; }catch(e){}
+      if(typeof renderRunDetail==='function') renderRunDetail(reps[0]);
+    }
+    const box=document.getElementById('past-sessions'); if(box) box.style.display='none';
+  }catch(e){ alert('Could not load that session'); }
 }
 async function refreshSuggestedLoad(){
   const out=document.getElementById('cfg-resist-suggested');
