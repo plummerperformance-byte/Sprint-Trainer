@@ -3776,8 +3776,15 @@ function renderStepsTab(rep){
   s+='<text x="'+(W-PADR)+'" y="'+(H-6)+'" fill="'+mut+'" font-size="9" text-anchor="end">Position (m)</text>';
   // speed trace (the step oscillations live in this line) + soft area
   if(samples.length){
+    // Smooth the DISPLAY trace only (~90 ms moving average) so the line reads
+    // clean like the 1080 app's default view — detection still runs on the raw
+    // signal. 1080 hides the jagged raw data behind an "overlay raw" toggle.
+    const dtms=Math.max(1, samples[1]?(samples[1].t_ms-samples[0].t_ms):10);
+    const sw=Math.max(1, Math.round(90/dtms));
+    const sv=(function(a,w){const h=(w-1)>>1,nn=a.length,o=new Array(nn);
+      for(let i=0;i<nn;i++){let acc2=0,c=0;for(let j=Math.max(0,i-h);j<=Math.min(nn-1,i+h);j++){acc2+=a[j];c++;}o[i]=acc2/c;}return o;})(samples.map(s2=>s2.v_mps), sw);
     let line='',area='M'+X(samples[0].pos_m).toFixed(1)+','+plotB;
-    samples.forEach((sm,i)=>{ const x=X(sm.pos_m).toFixed(1),y=Y(sm.v_mps).toFixed(1); line+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
+    samples.forEach((sm,i)=>{ const x=X(sm.pos_m).toFixed(1),y=Y(sv[i]).toFixed(1); line+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
     area+=' L'+X(samples[samples.length-1].pos_m).toFixed(1)+','+plotB+' Z';
     s+='<defs><linearGradient id="spg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+acc+'" stop-opacity="0.18"/><stop offset="1" stop-color="'+acc+'" stop-opacity="0"/></linearGradient></defs>';
     s+='<path d="'+area+'" fill="url(#spg)"/><path d="'+line+'" fill="none" stroke="'+acc+'" stroke-width="1.6" stroke-linejoin="round"/>';
