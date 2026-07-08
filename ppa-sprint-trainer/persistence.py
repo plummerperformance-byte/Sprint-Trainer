@@ -170,6 +170,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
         ("step_freq_hz", "step_freq_hz REAL"),
         ("avg_step_length_m", "avg_step_length_m REAL"),
         ("step_length_std_m", "step_length_std_m REAL"),
+        ("flagged_steps", "flagged_steps INTEGER"),
+        ("step_confidence", "step_confidence REAL"),
+        # Foot-labelled L/R asymmetry block (global/pairwise/zone). Experimental
+        # — declared feet, not measured — but persisted so the Steps tab can show it.
+        ("asymmetry_json", "asymmetry_json TEXT"),
         # Full in-memory sample list, preserved as JSON so we can rehydrate
         # the rich chart curves (with F_N / pos_m / a_mps2) when reloading a
         # session into the coach view. Live reps store this; xlsx imports too.
@@ -722,6 +727,7 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
         # Splits + step events + full sample curve as JSON blobs
         splits_json = _json.dumps(rep.get("splits_s_extended") or rep.get("splits_s") or {})
         step_events_json = _json.dumps(rep.get("step_events") or [])
+        asymmetry_json = _json.dumps(rep.get("asymmetry")) if rep.get("asymmetry") else None
         samples_json = _json.dumps(samples) if samples else None
 
         conn.execute(
@@ -740,6 +746,7 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                   time_to_max_v_s = ?, dist_to_max_v_m = ?, v_dropoff_pct = ?,
                   total_steps = ?, step_freq_hz = ?,
                   avg_step_length_m = ?, step_length_std_m = ?,
+                  flagged_steps = ?, step_confidence = ?, asymmetry_json = ?,
                   step_events_json = ?, samples_json = ?, source = ?
                WHERE id = ?""",
             (
@@ -757,6 +764,7 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                 rep.get("time_to_max_v_s"), rep.get("dist_to_max_v_m"), rep.get("v_dropoff_pct"),
                 rep.get("total_steps"), rep.get("step_freq_hz"),
                 rep.get("avg_step_length_m"), rep.get("step_length_std_m"),
+                rep.get("flagged_steps"), rep.get("step_confidence"), asymmetry_json,
                 step_events_json, samples_json, source,
                 rep_id,
             ),
@@ -950,6 +958,7 @@ def load_session_reps(conn: sqlite3.Connection, session_id: int) -> dict:
         # Hydrate JSON blobs
         for json_col, target_key in [("splits_s_json", "splits_s"),
                                       ("step_events_json", "step_events"),
+                                      ("asymmetry_json", "asymmetry"),
                                       ("samples_json", "samples")]:
             raw = d.pop(json_col, None)
             if raw:
