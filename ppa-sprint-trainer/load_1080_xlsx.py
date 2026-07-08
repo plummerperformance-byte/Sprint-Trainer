@@ -191,6 +191,7 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
     # right rhythm). The force detector stays available for heavy-resisted sprints
     # where cable tension may carry a cleaner per-step signal — worth re-checking.
     step_events = detect_steps_speed_residual(times_s, speeds_mps, pos_m)
+    step_events = annotate_steps(step_events, times_s, forces_n)
     step_events = label_feet(step_events, start_foot)
     step_aggs = compute_step_aggregates(step_events)
     asymmetry = compute_asymmetry(step_events)
@@ -505,6 +506,24 @@ def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
             "flags": _step_flags(period_ms, length_m),
         })
     return steps
+
+
+def annotate_steps(step_events, t_s, f_n):
+    """Add the two per-step columns the 1080 table shows that the speed-residual
+    detector doesn't produce itself: same-foot stride length and peak cable force."""
+    import bisect
+    for i, e in enumerate(step_events):
+        # stride = same foot to same foot = this step + the previous one
+        e["stride_length_m"] = round(e["pos_m"] - step_events[i - 2]["pos_m"], 3) if i >= 2 else None
+        # peak cable force within this step's interval
+        if i == 0:
+            e["peak_force_n"] = None
+        else:
+            lo = bisect.bisect_left(t_s, step_events[i - 1]["t_strike_s"])
+            hi = bisect.bisect_right(t_s, e["t_strike_s"])
+            seg = f_n[lo:hi]
+            e["peak_force_n"] = round(max(seg), 1) if seg else None
+    return step_events
 
 
 def compute_step_aggregates(steps):

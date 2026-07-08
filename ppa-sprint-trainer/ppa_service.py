@@ -2154,6 +2154,7 @@ PHASE_C_HTML = """<!doctype html>
   .asym-row .k{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
   .asym-row .v{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
   .asym-row .v small{font-size:10px;color:var(--muted);font-weight:600;margin-left:2px}
+  .asym-summary{font-size:12px;color:var(--muted);margin-bottom:10px;font-variant-numeric:tabular-nums}
   .asym-delta{margin-top:10px;font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .dchip{font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.05)}
   .dchip.pos{color:var(--warm)} .dchip.neg{color:var(--cool)} .dchip.zero{color:var(--muted)}
@@ -3814,15 +3815,17 @@ function renderStepsTab(rep){
     +(rep.flagged_steps?(' · '+rep.flagged_steps+' flagged'):'');
 
   // Per-step table (all events, including the un-paired first strike)
-  let rows='<tr><th>#</th><th>Foot</th><th>Pos</th><th>Length</th><th>Period</th><th>Freq</th><th>Flags</th></tr>';
+  let rows='<tr><th>#</th><th>Foot</th><th>Pos</th><th>Length</th><th>Stride</th><th>Period</th><th>Freq</th><th>Force</th><th>Flags</th></tr>';
   for(const e of events){
     const foot=e.foot?('<span class="foot-chip '+e.foot+'">'+e.foot.charAt(0).toUpperCase()+'</span>'):'–';
     rows+='<tr'+((e.flags&&e.flags.length)?' class="flagged"':'')+'>'
       +'<td>'+e.step_number+'</td><td>'+foot+'</td>'
       +'<td>'+(e.pos_m!=null?e.pos_m.toFixed(1)+' m':'–')+'</td>'
       +'<td>'+(e.step_length_m!=null?e.step_length_m.toFixed(2)+' m':'–')+'</td>'
+      +'<td>'+(e.stride_length_m!=null?e.stride_length_m.toFixed(2)+' m':'–')+'</td>'
       +'<td>'+(e.step_period_ms!=null?e.step_period_ms.toFixed(0)+' ms':'–')+'</td>'
       +'<td>'+(e.step_frequency_hz!=null?e.step_frequency_hz.toFixed(2):'–')+'</td>'
+      +'<td>'+(e.peak_force_n!=null?e.peak_force_n.toFixed(0)+' N':'–')+'</td>'
       +'<td class="muted">'+((e.flags&&e.flags.length)?e.flags.join(', '):'')+'</td></tr>';
   }
   document.getElementById('steps-table').innerHTML=rows;
@@ -3842,9 +3845,11 @@ function renderAsymCards(rep, lastN){
   if(all.length<2){ asymEl.style.display='none'; return; }
   const sel = lastN ? all.slice(-lastN) : all;
   const L=sel.filter(s=>s.foot==='left'), R=sel.filter(s=>s.foot==='right');
+  const totDist=sel.reduce((a,s)=>a+(s.step_length_m||0),0);
+  const fVals=sel.map(s=>s.peak_force_n).filter(x=>x!=null); const avgF=fVals.length?fVals.reduce((a,b)=>a+b,0)/fVals.length:null;
   const mean=(arr,k)=>{const v=arr.map(s=>s[k]).filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const asym=(l,r)=>(l==null||r==null||(l+r)===0)?null:Math.round(2000*(l-r)/(l+r))/10;
-  const METRICS=[['step_length_m','Length','m',2],['step_frequency_hz','Freq','Hz',1],['step_speed_mps','Speed','m/s',2]];
+  const METRICS=[['step_length_m','Length','m',2],['step_frequency_hz','Freq','Hz',1],['peak_force_n','Force','N',0],['step_speed_mps','Speed','m/s',2]];
   const fmt=(v,d)=>v==null?'–':v.toFixed(d);
   const card=(side,arr)=>{
     let h='<div class="asym-card '+side+'"><div class="side-h">'+side+'<span class="side-n">'+arr.length+' steps</span></div>';
@@ -3861,6 +3866,7 @@ function renderAsymCards(rep, lastN){
     '<div class="asym-head">L/R asymmetry <span class="exp-badge">experimental</span></div>'
     +'<div class="asym-note">Declared start foot <b>'+startFoot+'</b>, alternated — the tether cannot verify which foot struck, so magnitudes are indicative. Select the steady-state steps (Last 10/6) to cut the acceleration bias.</div>'
     +'<div class="asym-select">'+buttons+'</div>'
+    +'<div class="asym-summary">'+sel.length+' steps · '+totDist.toFixed(1)+' m · avg force '+(avgF!=null?avgF.toFixed(0)+' N':'–')+'</div>'
     +'<div class="asym-cards">'+card('left',L)+card('right',R)+'</div>'
     +'<div class="asym-delta">L vs R: '+deltas+' <span class="muted">(+ = left larger)</span></div>';
   asymEl.style.display='block';
