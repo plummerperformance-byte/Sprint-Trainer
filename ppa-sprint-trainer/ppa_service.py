@@ -1442,6 +1442,8 @@ PHASE_C_HTML = """<!doctype html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/uPlot.min.css">
+<script src="/static/uPlot.iife.min.js"></script>
 <style>
   :root { --bg:#0a1020; --fg:#eef2fb; --muted:#818eae; --accent:#5b8bff;
           --accent-soft:rgba(91,139,255,0.16);
@@ -2128,6 +2130,11 @@ PHASE_C_HTML = """<!doctype html>
   .steps-table-details[open] > summary::before{transform:rotate(90deg)}
   .steps-table-details .st-count{color:var(--muted);font-weight:600;font-size:11px}
   .steps-table-scroll{max-height:300px;overflow:auto;padding:0 12px 12px}
+  /* uPlot dark theme (Steps speed-vs-position chart) */
+  #steps-chart .u-legend{color:var(--fg);font-size:12px;margin-top:2px}
+  #steps-chart .u-legend th{color:var(--muted);font-weight:600}
+  #steps-chart .u-legend .u-value{color:var(--fg);font-variant-numeric:tabular-nums}
+  #steps-chart .uplot,#steps-chart .u-wrap{margin:0 auto}
   .foot-chip{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:5px;
     font-weight:800;font-size:11px;color:#08122a}
   .foot-chip.left{background:var(--warm)} .foot-chip.right{background:var(--cool)}
@@ -2393,8 +2400,8 @@ PHASE_C_HTML = """<!doctype html>
         <span class="sl-item"><i class="sl-dot sl-flag"></i>Flagged</span>
         <span id="st-conf" class="sl-conf"></span>
       </div>
-      <svg id="steps-chart" viewBox="0 0 600 250"
-           style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px"></svg>
+      <div id="steps-chart"
+           style="width:100%;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px;padding:8px 6px 2px"></div>
       <div id="steps-empty" class="meta" style="display:none;text-align:center;padding:30px 0">No step data — needs a 1 kHz xlsx import (tether speed/force)</div>
       <details id="steps-table-wrap" class="steps-table-details" style="display:none">
         <summary>Per-step table <span class="st-count" id="st-tbl-count"></span></summary>
@@ -3762,51 +3769,43 @@ function renderStepsTab(rep){
   }
   svg.style.display='block'; empty.style.display='none';
 
-  // ---- Speed vs Position, with foot-coloured step markers (1080 "Movement Analysis" style) ----
-  const W=600,H=250,PADL=40,PADR=16,PADT=22,PADB=58;
+  // ---- Speed vs Position via uPlot: crisp canvas + hover crosshair + drag-zoom ----
+  const gl=cssv('--line')||'#243157', mut=cssv('--ink-3')||'#818eae', acc=cssv('--accent')||'#5b8bff', bad=cssv('--bad')||'#ff5a5f';
   const samples=(window._lastSamples||[]).filter(s=>s.pos_m!=null&&s.v_mps!=null);
-  const maxPos=Math.max(...events.map(e=>e.pos_m||0),...samples.map(s=>s.pos_m),1);
-  const maxV=Math.max(...samples.map(s=>s.v_mps),...events.map(e=>e.peak_speed_mps||0),1);
-  // nice speed axis on round gridlines (0, 5, 10, 15 …)
-  const rawStep=maxV/4, se=Math.pow(10,Math.floor(Math.log10(rawStep))), sm=rawStep/se;
-  const vStep=se*(sm<=1?1:sm<=2?2:sm<=2.5?2.5:sm<=5?5:10);
-  const vTop=Math.max(vStep, Math.ceil(maxV*1.05/vStep)*vStep);
-  const plotB=H-PADB;
-  const X=p=>PADL+(p/maxPos)*(W-PADL-PADR);
-  const Y=v=>plotB-(v/vTop)*(plotB-PADT);
-  const gl=cssv('--line')||'#243157', faint=cssv('--ink-faint')||'#56618a', mut=cssv('--ink-3')||'#818eae', acc=cssv('--accent')||'#5b8bff';
-  const dec=vStep<1?1:0;
-  let s='';
-  for(let v=0; v<=vTop+1e-6; v+=vStep){ const gy=Y(v);
-    s+='<line x1="'+PADL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+gy.toFixed(1)+'" stroke="'+gl+'" opacity="0.4"/>';
-    s+='<text x="'+(PADL-6)+'" y="'+(gy+3).toFixed(1)+'" fill="'+faint+'" font-size="9" text-anchor="end">'+v.toFixed(dec)+'</text>'; }
-  s+='<text x="3" y="'+(PADT-6)+'" fill="'+mut+'" font-size="9" font-weight="700">m/s</text>';
-  // x position ticks
-  const tk=maxPos>30?10:5;
-  for(let p=0;p<=maxPos+0.01;p+=tk){ const gx=X(p);
-    s+='<line x1="'+gx.toFixed(1)+'" y1="'+PADT+'" x2="'+gx.toFixed(1)+'" y2="'+plotB+'" stroke="'+gl+'" opacity="0.25"/>';
-    s+='<text x="'+gx.toFixed(1)+'" y="'+(H-6)+'" fill="'+faint+'" font-size="9" text-anchor="middle">'+p+'</text>'; }
-  s+='<text x="'+(W-PADR)+'" y="'+(H-6)+'" fill="'+mut+'" font-size="9" text-anchor="end">Position (m)</text>';
-  // speed trace (the step oscillations live in this line) + soft area
-  if(samples.length){
-    // Smooth the DISPLAY trace only (~90 ms moving average) so the line reads
-    // clean like the 1080 app's default view — detection still runs on the raw
-    // signal. 1080 hides the jagged raw data behind an "overlay raw" toggle.
+  if(window._stepsU){ try{window._stepsU.destroy();}catch(e){} window._stepsU=null; }
+  svg.innerHTML='';
+  if(samples.length && typeof uPlot!=='undefined'){
+    // strictly-ascending x + ~90 ms display smooth (detection ran on the raw signal)
+    let mxp=-1e9; const xs=[],ys=[];
+    for(const d of samples){ const p=Math.max(mxp+1e-4,d.pos_m); mxp=p; xs.push(p); ys.push(d.v_mps); }
     const dtms=Math.max(1, samples[1]?(samples[1].t_ms-samples[0].t_ms):10);
     const sw=Math.max(1, Math.round(90/dtms));
     const sv=(function(a,w){const h=(w-1)>>1,nn=a.length,o=new Array(nn);
-      for(let i=0;i<nn;i++){let acc2=0,c=0;for(let j=Math.max(0,i-h);j<=Math.min(nn-1,i+h);j++){acc2+=a[j];c++;}o[i]=acc2/c;}return o;})(samples.map(s2=>s2.v_mps), sw);
-    let line='',area='M'+X(samples[0].pos_m).toFixed(1)+','+plotB;
-    samples.forEach((sm,i)=>{ const x=X(sm.pos_m).toFixed(1),y=Y(sv[i]).toFixed(1); line+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
-    area+=' L'+X(samples[samples.length-1].pos_m).toFixed(1)+','+plotB+' Z';
-    s+='<defs><linearGradient id="spg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+acc+'" stop-opacity="0.18"/><stop offset="1" stop-color="'+acc+'" stop-opacity="0"/></linearGradient></defs>';
-    s+='<path d="'+area+'" fill="url(#spg)"/><path d="'+line+'" fill="none" stroke="'+acc+'" stroke-width="1.6" stroke-linejoin="round"/>';
+      for(let i=0;i<nn;i++){let ac=0,c=0;for(let j=Math.max(0,i-h);j<=Math.min(nn-1,i+h);j++){ac+=a[j];c++;}o[i]=ac/c;}return o;})(ys, sw);
+    const dpr=(uPlot.pxRatio||window.devicePixelRatio||1);
+    const markers={hooks:{draw:u=>{const c=u.ctx,yb=u.bbox.top+u.bbox.height;c.save();
+      for(const e of events){ if(e.pos_m==null) continue; const x=u.valToPos(e.pos_m,'x',true);
+        const col=e.foot==='left'?warm:e.foot==='right'?cool:'#5b8bff';
+        c.beginPath();c.arc(x,yb+9*dpr,4*dpr,0,7);c.fillStyle=col;c.fill();
+        if(e.flags&&e.flags.length){c.lineWidth=2*dpr;c.strokeStyle=bad;c.stroke();} }
+      c.restore();}}};
+    window._stepsU=new uPlot({
+      width:(svg.clientWidth||600), height:300, padding:[10,10,24,6],
+      scales:{x:{time:false},y:{range:(u,mn,mxx)=>[0,Math.max(5,Math.ceil((mxx||1)*1.05/5)*5)]}},
+      axes:[
+        {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+' m')},
+        {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},size:46,font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+' m/s')},
+      ],
+      series:[{label:'Pos (m)'},{label:'Speed (m/s)',stroke:acc,width:1.8,fill:'rgba(91,139,255,0.14)'}],
+      cursor:{x:true,y:true},
+      plugins:[markers],
+    },[xs,sv],svg);
+    if(!window._stepsUResizeHooked){ window._stepsUResizeHooked=true;
+      window.addEventListener('resize',function(){ const el=document.getElementById('steps-chart');
+        if(window._stepsU&&el&&el.clientWidth) window._stepsU.setSize({width:el.clientWidth,height:300}); }); }
+  } else if(!samples.length){
+    svg.innerHTML='<div class="meta" style="padding:24px 0;text-align:center">No sample trace for this rep</div>';
   }
-  // step markers along the baseline: dot (foot colour) + number; flagged = red ring
-  events.forEach(e=>{ if(e.pos_m==null) return; const x=X(e.pos_m), col=e.foot==='left'?warm:e.foot==='right'?cool:'#5b8bff', my=plotB+14;
-    s+='<circle cx="'+x.toFixed(1)+'" cy="'+my+'" r="4" fill="'+col+'"'+((e.flags&&e.flags.length)?' stroke="'+(cssv('--bad')||'#ff5a5f')+'" stroke-width="2"':'')+'/>';
-    s+='<text x="'+x.toFixed(1)+'" y="'+(my+15)+'" fill="'+col+'" font-size="8.5" font-weight="700" text-anchor="middle">'+e.step_number+'</text>'; });
-  svg.innerHTML=s;
 
   // Legend + confidence
   legend.style.display='flex';
