@@ -2044,12 +2044,139 @@ PHASE_C_HTML = """<!doctype html>
   /* Variable-resistance canvas: blue-tinted well; axis + shape are BLUE (interactive),
      the curve line + area-glow are WARM (data) — drawn in JS */
   #vr-preview{background:rgba(18,26,51,.55);border:1px solid var(--line-strong)}
+  /* y-axis gutter: 0–300% ticks (100% = full working load) sit OUTSIDE the SVG so
+     preserveAspectRatio="none" can't stretch the labels; aligned to the gridlines */
+  .vr-plot{position:relative;display:flex;align-items:stretch;gap:6px}
+  .vr-plot #vr-preview{flex:1 1 auto;width:auto;min-width:0}
+  .vr-yaxis{position:relative;flex:0 0 34px;width:34px}
+  .vr-yaxis span{position:absolute;right:4px;transform:translateY(-50%);font-size:9px;font-weight:600;
+    color:var(--ink-faint);font-variant-numeric:tabular-nums;letter-spacing:.02em;white-space:nowrap}
   .vr-axis button.on{background:var(--accent);color:#fff}
   .vr-preset.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
   .vr-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
   .vr-head label{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:700}
   .vr-shape{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
     color:var(--state);background:var(--state-soft);padding:4px 10px;border-radius:999px}
+
+  /* ===== Contained load tile (mockup): hero number + scrubber + split stepper, with a
+     gym-only sub-grid (concentric/eccentric/chain/dir) so gym stays in one tile ===== */
+  .load-field .lf-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .load-field .lf-head > label{margin:0;font-size:10.5px;text-transform:uppercase;
+    letter-spacing:.09em;color:var(--muted);font-weight:700}
+  .load-tag{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;
+    color:var(--state);background:var(--state-soft);padding:4px 10px;border-radius:999px}
+  .load-field .load-src{display:none !important}
+  .load-hero{display:flex;align-items:baseline;gap:6px;margin:2px 0 2px}
+  #cfg-load-hero{font-size:42px;font-weight:800;letter-spacing:-.03em;line-height:1;
+    font-variant-numeric:tabular-nums;color:var(--fg)}
+  .load-hero .lh-u{font-size:16px;font-weight:700;color:var(--muted)}
+  .load-field .load-scrub{margin-top:2px;margin-bottom:2px}
+  .stepper-split{display:flex;gap:8px}
+  .stepper-split button{flex:1 1 0;min-height:46px;font-size:24px}
+  .sheet[data-mode="gym"] .load-field .autoload{display:none}
+  .load-subgrid{display:none}
+  .sheet[data-mode="gym"] .load-subgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+  /* raised sub-tile: a touch LIGHTER than the --raised card behind it (mockup),
+     not a dark well — a translucent light overlay keeps it above whatever's behind */
+  .load-subgrid .subtile{background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-radius:11px;
+    padding:9px 11px;display:flex;flex-direction:column;gap:3px}
+  .load-subgrid .subtile .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--muted);font-weight:700;display:flex;align-items:center;gap:6px}
+  .load-subgrid .subtile .k .dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+  .load-subgrid .subtile .k .dot.warm{background:var(--warm)}
+  .load-subgrid .subtile .k .dot.cool{background:var(--cool)}
+  .load-subgrid .subtile .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;
+    display:flex;align-items:baseline;gap:3px;color:var(--fg)}
+  .load-subgrid .subtile .v.vsm{font-size:15px}
+  .load-subgrid .subtile .v .u{font-size:11px;color:var(--muted);font-weight:600}
+  .load-subgrid .subtile .v input{width:2.8em;background:transparent;border:0;color:var(--fg);
+    font-size:19px;font-weight:800;padding:0;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+  .load-subgrid .subtile .v input:focus{outline:none;color:var(--accent)}
+  .load-subgrid .subtile .v input::-webkit-inner-spin-button,
+  .load-subgrid .subtile .v input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+  .load-subgrid .subtile-wide{grid-column:1 / -1}
+  .load-subgrid .subgrid-note{grid-column:1 / -1;font-size:10px;margin:0;
+    text-transform:none;letter-spacing:normal;color:var(--muted)}
+
+  /* ===== Steps tab — per-step table, foot legend, experimental asymmetry ===== */
+  .steps-legend{display:flex;gap:14px;align-items:center;margin-top:10px;font-size:12px;color:var(--muted)}
+  .steps-legend .sl-item{display:flex;align-items:center;gap:6px}
+  .steps-legend .sl-dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .steps-legend .sl-dot.sl-flag{background:var(--bad);border-radius:50%}
+  .steps-legend .sl-conf{margin-left:auto;font-weight:700;color:var(--fg)}
+  .steps-table{width:100%;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+  .steps-table th{text-align:left;color:var(--muted);font-weight:700;font-size:9.5px;text-transform:uppercase;
+    letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card)}
+  .steps-table td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .steps-table tr.flagged td{background:rgba(255,90,95,.08)}
+  .foot-chip{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:5px;
+    font-weight:800;font-size:11px;color:#08122a}
+  .foot-chip.left{background:var(--warm)} .foot-chip.right{background:var(--cool)}
+  .steps-asym{margin-top:16px}
+  .asym-head{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;margin-bottom:4px}
+  .exp-badge{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--warn);background:rgba(255,148,64,.16);padding:2px 7px;border-radius:999px}
+  .asym-note{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:8px}
+  .asym-pair{font-size:13px;font-weight:600;margin-bottom:8px}
+  .asym-table{margin-top:4px}
+  /* selectable L/R asymmetry cards (1080 movement-analysis style) */
+  .asym-select{display:flex;gap:6px;margin:8px 0 12px}
+  .asym-select button{padding:6px 13px;font-size:12px;font-weight:700;background:transparent;color:var(--muted);
+    border:1px solid var(--line);border-radius:8px;cursor:pointer}
+  .asym-select button:hover{border-color:var(--line-strong);color:var(--fg)}
+  .asym-select button.on{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .asym-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .asym-card{background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-radius:12px;padding:12px 14px}
+  .asym-card .side-h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;
+    display:flex;justify-content:space-between;align-items:baseline}
+  .asym-card.left .side-h{color:var(--warm)} .asym-card.right .side-h{color:var(--cool)}
+  .asym-card .side-n{font-size:9.5px;font-weight:600;color:var(--muted);letter-spacing:.03em}
+  .asym-row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0}
+  .asym-row .k{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+  .asym-row .v{font-size:17px;font-weight:800;font-variant-numeric:tabular-nums}
+  .asym-row .v small{font-size:10px;color:var(--muted);font-weight:600;margin-left:2px}
+  .asym-delta{margin-top:10px;font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .dchip{font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.05)}
+  .dchip.pos{color:var(--warm)} .dchip.neg{color:var(--cool)} .dchip.zero{color:var(--muted)}
+
+  /* ===== Phone port — 1080-Go-style control + display (approved mockup) =====
+     Full-bleed app: the hero fills the screen and the live trace grows into the
+     space; ARM/STOP + Adjust sit in the thumb zone; the Adjust panel becomes a
+     slide-up bottom-sheet. Pure reshape — every element id and JS hook is
+     unchanged, so all live-data + control wiring is preserved (HIG §5.2: one
+     hero, controls off the far edge; 1080 Go: phone as live remote). */
+  @media (max-width:560px){
+    /* full-bleed — reclaim desktop chrome/padding, clear the thumb bar */
+    .wrap{padding:12px 12px 172px}
+    body:not(.sheet-open) .topbar,
+    body:not(.sheet-open) .mode-bar{padding-right:0}
+    .topbar{gap:8px;margin-bottom:10px}
+    .brand-logo{height:34px;margin-right:8px}
+    h1{font-size:16px}
+    /* hero fills the viewport; the live trace grows to fill the middle */
+    .top-grid{flex:1 1 auto;min-height:0;max-height:none;grid-template-rows:1fr}
+    .hero-card{flex:1 1 auto;min-height:0;padding:16px}
+    .hero-chart{flex:1 1 auto;min-height:130px;display:flex;flex-direction:column}
+    .hero-chart #live-chart{flex:1 1 auto;height:auto;min-height:130px}
+    .stat-line .v.primary{font-size:min(88px,22vw);line-height:.85}
+    .hero-tiles{padding-top:12px}
+    /* thumb control bar — full width, flush to the bottom edge, STOP its own row */
+    .bottombar{left:0;right:0;bottom:0;top:auto;transform:none;width:100%;max-width:none;
+      border-radius:16px 16px 0 0;border-left:0;border-right:0;border-bottom:0;
+      padding:12px 14px calc(12px + env(safe-area-inset-bottom))}
+    .bottombar-inner{flex-wrap:wrap;gap:10px}
+    #adjust-btn{flex:0 0 84px;min-height:58px}
+    #primary-action{flex:1 1 auto;min-height:58px}
+    #estop-btn{flex:1 1 100%;min-height:56px;justify-content:center}
+    /* Adjust panel → bottom-sheet (slides up), not a right-edge drawer */
+    .sheet{top:auto;bottom:0;left:0;right:0;width:100%;max-width:none;height:auto;
+      max-height:88vh;border-left:0;border-top:1px solid var(--line-strong);
+      border-radius:22px 22px 0 0;transform:translateY(100%);
+      box-shadow:0 -24px 60px -30px rgba(3,7,18,.9);padding-top:26px}
+    .sheet.show{transform:translateY(0)}
+    .sheet::before{content:"";position:absolute;top:9px;left:50%;transform:translateX(-50%);
+      width:42px;height:4px;border-radius:2px;background:var(--line-strong)}
+  }
 </style>
 </head><body>
 
@@ -2235,14 +2362,24 @@ PHASE_C_HTML = """<!doctype html>
     <!-- Steps tab -->
     <div class="rd-panel" data-tab="steps" style="display:none">
       <div class="rd-meta-strip">
-        <div><span class="rd-l">Strides</span><span class="rd-v" id="st-strides">–</span></div>
-        <div><span class="rd-l">Stride freq</span><span class="rd-v" id="st-sf">–</span></div>
+        <div><span class="rd-l">Steps</span><span class="rd-v" id="st-strides">–</span></div>
+        <div><span class="rd-l">Step freq</span><span class="rd-v" id="st-sf">–</span></div>
         <div><span class="rd-l">Avg length</span><span class="rd-v" id="st-sl">–</span></div>
-        <div><span class="rd-l">Length consistency</span><span class="rd-v" id="st-slstd">–</span></div>
+        <div><span class="rd-l">Consistency</span><span class="rd-v" id="st-slstd">–</span></div>
       </div>
-      <svg id="steps-chart" viewBox="0 0 600 220" preserveAspectRatio="none" height="220"
-           style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:10px"></svg>
-      <div id="steps-empty" class="meta" style="display:none;text-align:center;padding:30px 0">No stride data — needs cable-force peaks (1 kHz xlsx import)</div>
+      <div id="steps-legend" class="steps-legend" style="display:none">
+        <span class="sl-item"><i class="sl-dot" style="background:var(--warm)"></i>Left</span>
+        <span class="sl-item"><i class="sl-dot" style="background:var(--cool)"></i>Right</span>
+        <span class="sl-item"><i class="sl-dot sl-flag"></i>Flagged</span>
+        <span id="st-conf" class="sl-conf"></span>
+      </div>
+      <svg id="steps-chart" viewBox="0 0 600 250"
+           style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px"></svg>
+      <div id="steps-empty" class="meta" style="display:none;text-align:center;padding:30px 0">No step data — needs a 1 kHz xlsx import (tether speed/force)</div>
+      <div id="steps-table-wrap" style="display:none;overflow-x:auto;margin-top:12px">
+        <table class="steps-table" id="steps-table"></table>
+      </div>
+      <div id="steps-asym" class="steps-asym" style="display:none"></div>
     </div>
 
     <!-- Splits tab -->
@@ -2361,12 +2498,23 @@ PHASE_C_HTML = """<!doctype html>
     <select id="cfg-drill-sel" aria-label="Drill"></select>
     <div class="drill-desc" id="cfg-drill-desc"></div>
   </div>
-  <div class="field" data-modes="resisted assisted cod gym">
-    <label id="cfg-resist-l">Working resistance (kg)</label>
-    <div class="stepper">
-      <button type="button" data-step="-1" data-target="cfg-resist" aria-label="Decrease">−</button>
-      <input type="number" id="cfg-resist" value="5" step="0.5" min="0.5" max="53" inputmode="decimal">
-      <button type="button" data-step="1" data-target="cfg-resist" aria-label="Increase">+</button>
+  <div class="field load-field" data-modes="resisted assisted cod gym">
+    <div class="lf-head">
+      <label id="cfg-resist-l">Working resistance (kg)</label>
+      <span class="load-tag" id="cfg-load-tag">Resisting</span>
+    </div>
+    <!-- cfg-resist stays the source of truth (read on arm); shown big via the hero,
+         driven by the −/+ stepper and the scrubber -->
+    <input type="number" id="cfg-resist" value="5" step="0.5" min="0.5" max="53" inputmode="decimal" class="load-src" aria-hidden="true" tabindex="-1">
+    <div class="load-hero"><span id="cfg-load-hero">5.0</span><span class="lh-u">kg</span></div>
+    <!-- load scrubber (mockup): drag to set; track carries working/high/near-cap bands + orange fill -->
+    <div class="load-scrub">
+      <input type="range" id="cfg-resist-scrub" min="0.5" max="53" step="0.5" value="5" aria-label="Working load (kg)">
+      <div class="ls-scale"><span>0.5</span><span>15</span><span>30</span><span>45</span><span>53 cap</span></div>
+    </div>
+    <div class="stepper stepper-split">
+      <button type="button" data-step="-1" data-target="cfg-resist" aria-label="Decrease load">−</button>
+      <button type="button" data-step="1" data-target="cfg-resist" aria-label="Increase load">+</button>
     </div>
     <div class="autoload">
       <label class="switch">
@@ -2381,10 +2529,12 @@ PHASE_C_HTML = """<!doctype html>
       <input type="number" id="cfg-autoload-param" hidden step="1" min="1" max="100" placeholder="%">
       <div class="resist-suggest" id="cfg-resist-suggested"></div>
     </div>
-    <!-- load scrubber (mockup): drag to set; track carries working/high/near-cap bands + orange fill -->
-    <div class="load-scrub">
-      <input type="range" id="cfg-resist-scrub" min="0.5" max="53" step="0.5" value="5" aria-label="Working load (kg)">
-      <div class="ls-scale"><span>0.5</span><span>15</span><span>30</span><span>45</span><span>53 cap</span></div>
+    <!-- Gym: concentric (=load) / eccentric / chains / dir kept in the one tile (mockup) -->
+    <div class="load-subgrid">
+      <div class="subtile"><div class="k"><i class="dot warm"></i>Concentric</div><div class="v"><span id="gym-con-v">5.0</span><span class="u">kg</span></div></div>
+      <div class="subtile"><div class="k"><i class="dot cool"></i>Eccentric</div><div class="v"><input type="number" id="cfg-ecc-kg" value="5" step="0.5" min="0.5" max="20" aria-label="Eccentric weight (kg)"><span class="u">kg</span></div></div>
+      <div class="subtile subtile-wide"><div class="k">Chain load</div><div class="v"><input type="number" id="cfg-chain" value="0" step="0.5" min="0" max="10" aria-label="Chain load (kg/m)"><span class="u">kg/m</span></div></div>
+      <div class="meta subgrid-note" id="ecc-overload-note"></div>
     </div>
   </div>
   <div class="field" data-modes="resisted assisted cod">
@@ -2420,7 +2570,15 @@ PHASE_C_HTML = """<!doctype html>
       <button type="button" data-axis="distance">Distance</button>
       <button type="button" data-axis="velocity">Velocity</button>
     </div>
-    <svg class="vr-preview" id="vr-preview" viewBox="0 0 300 110" preserveAspectRatio="none"></svg>
+    <div class="vr-plot">
+      <div class="vr-yaxis" aria-hidden="true">
+        <span style="top:9.1%">300%</span>
+        <span style="top:36.4%">200%</span>
+        <span style="top:63.6%">100%</span>
+        <span style="top:90.9%">0%</span>
+      </div>
+      <svg class="vr-preview" id="vr-preview" viewBox="0 0 300 110" preserveAspectRatio="none"></svg>
+    </div>
     <div class="vr-presets" id="vr-presets">
       <button type="button" class="vr-preset" data-shape="flat">Flat</button>
       <button type="button" class="vr-preset" data-shape="ascending">Ascending</button>
@@ -2433,15 +2591,8 @@ PHASE_C_HTML = """<!doctype html>
   <div class="meta" id="resist-pipeline-summary" style="font-size:11px;margin:2px 0 6px;color:var(--accent)"></div>
   <!-- Cable OUT is always the concentric (lifting) phase for gym movements. -->
   <input type="hidden" id="cfg-condir" value="extend">
-  <div class="field" data-modes="gym">
-    <label>Eccentric weight (kg)</label>
-    <input type="number" id="cfg-ecc-kg" value="5" step="0.5" min="0.5" max="20">
-    <div class="meta" id="ecc-overload-note" style="font-size:10px;margin-top:4px"></div>
-  </div>
-  <div class="field" data-modes="gym">
-    <label>Chains (kg/m) — 0 = off</label>
-    <input type="number" id="cfg-chain" value="0" step="0.5" min="0" max="10">
-  </div>
+  <!-- Eccentric weight + Chains relocated into the Working-load tile's gym sub-grid above -->
+
   <div class="field" data-modes="flywheel">
     <label>Virtual mass (kg)</label>
     <div class="stepper">
@@ -2693,6 +2844,8 @@ async function refreshSuggestedLoad(){
     var v=parseFloat(inp.value)||0, pct=Math.max(0,Math.min(100,(v-0.5)/(53-0.5)*100));
     var s=document.getElementById('cfg-resist-scrub');
     if(s){ if(document.activeElement!==s) s.value=v; s.style.setProperty('--fill',pct.toFixed(1)+'%'); }
+    var _hero=document.getElementById('cfg-load-hero'); if(_hero) _hero.textContent=(Math.round(v*10)/10).toFixed(1);
+    var _gc=document.getElementById('gym-con-v'); if(_gc) _gc.textContent=(Math.round(v*10)/10).toFixed(1);
   };
   var _lbInp=document.getElementById('cfg-resist');
   if(_lbInp){ _lbInp.addEventListener('input',window.updateLoadBullet);
@@ -2800,7 +2953,8 @@ window.updateResistSummary=updateResistSummary;
     let s='';
     const gl=cssv('--line');
     for(let g=0;g<N;g++) s+='<line x1="'+xOf(g).toFixed(1)+'" y1="'+PT+'" x2="'+xOf(g).toFixed(1)+'" y2="'+bottom+'" stroke="'+gl+'" stroke-width="1" opacity="0.55"/>';
-    for(let g=0;g<=2;g++){var gy=PT+g*(bottom-PT)/2; s+='<line x1="'+xOf(0).toFixed(1)+'" y1="'+gy.toFixed(1)+'" x2="'+xOf(N-1).toFixed(1)+'" y2="'+gy.toFixed(1)+'" stroke="'+gl+'" stroke-width="1" opacity="0.45"/>';}
+    const gls=cssv('--line-strong');
+    for(const hv of [0,100,200,300]){var gy=yOf(hv),em=(hv===100); s+='<line x1="'+xOf(0).toFixed(1)+'" y1="'+gy.toFixed(1)+'" x2="'+xOf(N-1).toFixed(1)+'" y2="'+gy.toFixed(1)+'" stroke="'+(em?gls:gl)+'" stroke-width="1" opacity="'+(em?0.85:0.4)+'"'+(em?' stroke-dasharray="3 2"':'')+'/>';}
     if(!off) s+='<defs><linearGradient id="vrg" x1="0" y1="0" x2="0" y2="1">'+
       '<stop offset="0" stop-color="'+col+'" stop-opacity="0.32"/>'+
       '<stop offset="1" stop-color="'+col+'" stop-opacity="0"/></linearGradient></defs>'+
@@ -3402,7 +3556,7 @@ function renderRunDetail(rep){
   // Note
   const note=document.getElementById('rd-note');
   if(rep.total_steps){
-    note.textContent='Cadence from cable-force peaks (≈ stride rate; true step rate ≈ 2× this). GCT, flight time and L/R asymmetry need a foot sensor.';
+    note.textContent='Steps from tether speed-residual peaks. Foot labels are declared + alternated (not measured); L/R asymmetry is experimental until strikes are validated by video or manual correction. GCT / flight time still need a foot sensor.';
   } else { note.textContent=''; }
 
   // Render the active tab's content (lazy — only what's visible)
@@ -3532,66 +3686,115 @@ document.querySelectorAll('.ins-view-btn').forEach(btn=>{
 function renderStepsTab(rep){
   const svg=document.getElementById('steps-chart');
   const empty=document.getElementById('steps-empty');
+  const legend=document.getElementById('steps-legend');
+  const twrap=document.getElementById('steps-table-wrap');
+  const asymEl=document.getElementById('steps-asym');
   const events=rep.step_events||[];
+  const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const warm=cssv('--warm')||'#ff9440', cool=cssv('--cool')||'#2bd0e2';
   if(!events.length || events.length<2){
-    svg.style.display='none'; empty.style.display='block'; return;
+    svg.style.display='none'; empty.style.display='block';
+    legend.style.display='none'; twrap.style.display='none'; asymEl.style.display='none';
+    return;
   }
   svg.style.display='block'; empty.style.display='none';
-  const W=600,H=220,PADL=42,PADR=42,PADT=18,PADB=36;
-  const valid=events.filter(e=>e.step_length_m!=null);
-  const maxLen=Math.max(...valid.map(e=>e.step_length_m||0),0.1);
-  // Velocity at strike — use the time-aligned chart sample, or fall back to NaN
-  const samples=window._lastSamples||[];
-  function velAt(t_s){
-    if(!samples.length) return null;
-    const t_ms=t_s*1000;
-    let best=samples[0],dBest=Math.abs(samples[0].t_ms-t_ms);
-    for(const s of samples){const d=Math.abs(s.t_ms-t_ms); if(d<dBest){best=s;dBest=d;}}
-    return best.v_mps;
+
+  // ---- Speed vs Position, with foot-coloured step markers (1080 "Movement Analysis" style) ----
+  const W=600,H=250,PADL=40,PADR=16,PADT=22,PADB=58;
+  const samples=(window._lastSamples||[]).filter(s=>s.pos_m!=null&&s.v_mps!=null);
+  const maxPos=Math.max(...events.map(e=>e.pos_m||0),...samples.map(s=>s.pos_m),1);
+  const maxV=Math.max(...samples.map(s=>s.v_mps),...events.map(e=>e.peak_speed_mps||0),1);
+  // nice speed axis on round gridlines (0, 5, 10, 15 …)
+  const rawStep=maxV/4, se=Math.pow(10,Math.floor(Math.log10(rawStep))), sm=rawStep/se;
+  const vStep=se*(sm<=1?1:sm<=2?2:sm<=2.5?2.5:sm<=5?5:10);
+  const vTop=Math.max(vStep, Math.ceil(maxV*1.05/vStep)*vStep);
+  const plotB=H-PADB;
+  const X=p=>PADL+(p/maxPos)*(W-PADL-PADR);
+  const Y=v=>plotB-(v/vTop)*(plotB-PADT);
+  const gl=cssv('--line')||'#243157', faint=cssv('--ink-faint')||'#56618a', mut=cssv('--ink-3')||'#818eae', acc=cssv('--accent')||'#5b8bff';
+  const dec=vStep<1?1:0;
+  let s='';
+  for(let v=0; v<=vTop+1e-6; v+=vStep){ const gy=Y(v);
+    s+='<line x1="'+PADL+'" y1="'+gy.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+gy.toFixed(1)+'" stroke="'+gl+'" opacity="0.4"/>';
+    s+='<text x="'+(PADL-6)+'" y="'+(gy+3).toFixed(1)+'" fill="'+faint+'" font-size="9" text-anchor="end">'+v.toFixed(dec)+'</text>'; }
+  s+='<text x="3" y="'+(PADT-6)+'" fill="'+mut+'" font-size="9" font-weight="700">m/s</text>';
+  // x position ticks
+  const tk=maxPos>30?10:5;
+  for(let p=0;p<=maxPos+0.01;p+=tk){ const gx=X(p);
+    s+='<line x1="'+gx.toFixed(1)+'" y1="'+PADT+'" x2="'+gx.toFixed(1)+'" y2="'+plotB+'" stroke="'+gl+'" opacity="0.25"/>';
+    s+='<text x="'+gx.toFixed(1)+'" y="'+(H-6)+'" fill="'+faint+'" font-size="9" text-anchor="middle">'+p+'</text>'; }
+  s+='<text x="'+(W-PADR)+'" y="'+(H-6)+'" fill="'+mut+'" font-size="9" text-anchor="end">Position (m)</text>';
+  // speed trace (the step oscillations live in this line) + soft area
+  if(samples.length){
+    let line='',area='M'+X(samples[0].pos_m).toFixed(1)+','+plotB;
+    samples.forEach((sm,i)=>{ const x=X(sm.pos_m).toFixed(1),y=Y(sm.v_mps).toFixed(1); line+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
+    area+=' L'+X(samples[samples.length-1].pos_m).toFixed(1)+','+plotB+' Z';
+    s+='<defs><linearGradient id="spg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+acc+'" stop-opacity="0.18"/><stop offset="1" stop-color="'+acc+'" stop-opacity="0"/></linearGradient></defs>';
+    s+='<path d="'+area+'" fill="url(#spg)"/><path d="'+line+'" fill="none" stroke="'+acc+'" stroke-width="1.6" stroke-linejoin="round"/>';
   }
-  const vels=valid.map(e=>velAt(e.t_strike_s)).map(v=>v||0);
-  const maxV=Math.max(...vels,0.1);
-  const niceMax=v=>{const e=Math.pow(10,Math.floor(Math.log10(v)));const m=v/e;return e*(m<=1?1:m<=2?2:m<=5?5:10);};
-  const lenAxMax=niceMax(maxLen*1.15);
-  const velAxMax=niceMax(maxV*1.15);
-  const barWidth=(W-PADL-PADR)/valid.length*0.7;
-  const xs=i=>PADL+(i+0.5)*((W-PADL-PADR)/valid.length);
-  const yL=v=>H-PADB-(v/lenAxMax)*(H-PADT-PADB);
-  const yV=v=>H-PADB-(v/velAxMax)*(H-PADT-PADB);
-  // Gridlines + axis labels
-  let grid='';
-  for(let i=0;i<=4;i++){
-    const y=PADT+i*(H-PADT-PADB)/4;
-    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26"/>';
-    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#5b8bff" font-size="10" text-anchor="end" opacity="0.7">'+(lenAxMax*(1-i/4)).toFixed(1)+'</text>';
-    grid+='<text x="'+(W-PADR+6)+'" y="'+(y+3)+'" fill="#58a6ff" font-size="10" opacity="0.7">'+(velAxMax*(1-i/4)).toFixed(1)+'</text>';
+  // step markers along the baseline: dot (foot colour) + number; flagged = red ring
+  events.forEach(e=>{ if(e.pos_m==null) return; const x=X(e.pos_m), col=e.foot==='left'?warm:e.foot==='right'?cool:'#5b8bff', my=plotB+14;
+    s+='<circle cx="'+x.toFixed(1)+'" cy="'+my+'" r="4" fill="'+col+'"'+((e.flags&&e.flags.length)?' stroke="'+(cssv('--bad')||'#ff5a5f')+'" stroke-width="2"':'')+'/>';
+    s+='<text x="'+x.toFixed(1)+'" y="'+(my+15)+'" fill="'+col+'" font-size="8.5" font-weight="700" text-anchor="middle">'+e.step_number+'</text>'; });
+  svg.innerHTML=s;
+
+  // Legend + confidence
+  legend.style.display='flex';
+  document.getElementById('st-conf').textContent=
+    (rep.step_confidence!=null?('confidence '+rep.step_confidence):'')
+    +(rep.flagged_steps?(' · '+rep.flagged_steps+' flagged'):'');
+
+  // Per-step table (all events, including the un-paired first strike)
+  let rows='<tr><th>#</th><th>Foot</th><th>Pos</th><th>Length</th><th>Period</th><th>Freq</th><th>Flags</th></tr>';
+  for(const e of events){
+    const foot=e.foot?('<span class="foot-chip '+e.foot+'">'+e.foot.charAt(0).toUpperCase()+'</span>'):'–';
+    rows+='<tr'+((e.flags&&e.flags.length)?' class="flagged"':'')+'>'
+      +'<td>'+e.step_number+'</td><td>'+foot+'</td>'
+      +'<td>'+(e.pos_m!=null?e.pos_m.toFixed(1)+' m':'–')+'</td>'
+      +'<td>'+(e.step_length_m!=null?e.step_length_m.toFixed(2)+' m':'–')+'</td>'
+      +'<td>'+(e.step_period_ms!=null?e.step_period_ms.toFixed(0)+' ms':'–')+'</td>'
+      +'<td>'+(e.step_frequency_hz!=null?e.step_frequency_hz.toFixed(2):'–')+'</td>'
+      +'<td class="muted">'+((e.flags&&e.flags.length)?e.flags.join(', '):'')+'</td></tr>';
   }
-  grid+='<text x="'+(PADL-30)+'" y="'+(PADT-4)+'" fill="#5b8bff" font-size="10" font-weight="600">m</text>';
-  grid+='<text x="'+(W-PADR+10)+'" y="'+(PADT-4)+'" fill="#58a6ff" font-size="10" font-weight="600">m/s</text>';
-  // Stride number labels along X
-  for(let i=0;i<valid.length;i++){
-    grid+='<text x="'+xs(i).toFixed(1)+'" y="'+(H-PADB+15)+'" fill="#5a5a64" font-size="9" text-anchor="middle">'+valid[i].step_number+'</text>';
-  }
-  grid+='<text x="'+(W/2)+'" y="'+(H-6)+'" fill="#5a5a64" font-size="10" text-anchor="middle">stride number</text>';
-  // Bars (stride length)
-  let bars='';
-  for(let i=0;i<valid.length;i++){
-    const x=xs(i)-barWidth/2;
-    const y=yL(valid[i].step_length_m);
-    const h=H-PADB-y;
-    bars+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+barWidth.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="#5b8bff" opacity="0.75" rx="2"/>';
-  }
-  // Velocity overlay line
-  let velPath='';
-  for(let i=0;i<valid.length;i++){
-    velPath+=(i?'L':'M')+xs(i).toFixed(1)+','+yV(vels[i]).toFixed(1);
-  }
-  // Velocity dots
-  let velDots='';
-  for(let i=0;i<valid.length;i++){
-    velDots+='<circle cx="'+xs(i).toFixed(1)+'" cy="'+yV(vels[i]).toFixed(1)+'" r="3" fill="#58a6ff"/>';
-  }
-  svg.innerHTML=grid+bars+'<path d="'+velPath+'" stroke="#58a6ff" stroke-width="2" fill="none"/>'+velDots;
+  document.getElementById('steps-table').innerHTML=rows;
+  twrap.style.display='block';
+
+  // L/R asymmetry — side-by-side cards with a step selector (1080 style)
+  renderAsymCards(rep, null);
+}
+
+// L/R asymmetry cards, recomputed over a selectable step subset (All / Last N).
+// Declared-foot alternation, so it stays labelled experimental. Selecting the
+// steady-state steps is the honest fix for the acceleration bias in the globals.
+function renderAsymCards(rep, lastN){
+  const asymEl=document.getElementById('steps-asym');
+  const all=(rep.step_events||[]).filter(e=>e.foot && e.step_length_m!=null);
+  if(all.length<2){ asymEl.style.display='none'; return; }
+  const sel = lastN ? all.slice(-lastN) : all;
+  const L=sel.filter(s=>s.foot==='left'), R=sel.filter(s=>s.foot==='right');
+  const mean=(arr,k)=>{const v=arr.map(s=>s[k]).filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+  const asym=(l,r)=>(l==null||r==null||(l+r)===0)?null:Math.round(2000*(l-r)/(l+r))/10;
+  const METRICS=[['step_length_m','Length','m',2],['step_frequency_hz','Freq','Hz',1],['step_speed_mps','Speed','m/s',2]];
+  const fmt=(v,d)=>v==null?'–':v.toFixed(d);
+  const card=(side,arr)=>{
+    let h='<div class="asym-card '+side+'"><div class="side-h">'+side+'<span class="side-n">'+arr.length+' steps</span></div>';
+    for(const [k,lab,unit,d] of METRICS) h+='<div class="asym-row"><span class="k">'+lab+'</span><span class="v">'+fmt(mean(arr,k),d)+'<small>'+unit+'</small></span></div>';
+    return h+'</div>';
+  };
+  let deltas='';
+  for(const [k,lab] of METRICS){ const a=asym(mean(L,k),mean(R,k)); const cls=a==null?'zero':(a>0.5?'pos':(a<-0.5?'neg':'zero'));
+    deltas+='<span class="dchip '+cls+'">'+lab+' '+(a==null?'–':((a>0?'+':'')+a+'%')) +'</span>'; }
+  const opts=[['All',null],['Last 10',10],['Last 6',6]];
+  const buttons=opts.map(o=>'<button class="'+(lastN===o[1]?'on':'')+'" data-n="'+(o[1]==null?'':o[1])+'">'+o[0]+'</button>').join('');
+  const startFoot=(rep.asymmetry&&rep.asymmetry.start_foot)||all[0].foot;
+  asymEl.innerHTML=
+    '<div class="asym-head">L/R asymmetry <span class="exp-badge">experimental</span></div>'
+    +'<div class="asym-note">Declared start foot <b>'+startFoot+'</b>, alternated — the tether cannot verify which foot struck, so magnitudes are indicative. Select the steady-state steps (Last 10/6) to cut the acceleration bias.</div>'
+    +'<div class="asym-select">'+buttons+'</div>'
+    +'<div class="asym-cards">'+card('left',L)+card('right',R)+'</div>'
+    +'<div class="asym-delta">L vs R: '+deltas+' <span class="muted">(+ = left larger)</span></div>';
+  asymEl.style.display='block';
+  asymEl.querySelectorAll('.asym-select button').forEach(b=>b.onclick=()=>{ const n=b.getAttribute('data-n'); renderAsymCards(rep, n?parseInt(n,10):null); });
 }
 
 function renderSplitsTab(rep){
@@ -4029,6 +4232,7 @@ function applyMode(mode, opts){
   opts = opts || {};
   if(['resisted','assisted','cod','gym','flywheel'].indexOf(mode) < 0) mode = 'resisted';
   currentMode = mode;
+  var _shEl=document.getElementById('sheet'); if(_shEl) _shEl.setAttribute('data-mode', mode);
   // warm/cool state accent — resisting (resisted/cod/gym) warm; assist/flywheel cool
   var _warm = !(mode==='assisted' || mode==='flywheel');
   document.documentElement.style.setProperty('--state', _warm?'var(--warm)':'var(--cool)');
@@ -4047,8 +4251,13 @@ function applyMode(mode, opts){
   const rl = document.getElementById('cfg-resist-l');
   const dl = document.getElementById('cfg-resist-dist-l');
   if(rl) rl.textContent = (mode === 'assisted') ? 'Assistance (kg)'
-                        : (mode === 'gym') ? 'Concentric weight (kg)'
+                        : (mode === 'gym') ? 'Working load (kg)'
                         : 'Working resistance (kg)';
+  var _lt=document.getElementById('cfg-load-tag');
+  if(_lt) _lt.textContent = (mode === 'assisted') ? 'Assisting'
+                          : (mode === 'gym') ? 'Lifting'
+                          : (mode === 'cod') ? 'C.O.D.'
+                          : 'Resisting';
   if(dl) dl.textContent = (mode === 'assisted') ? 'Tow distance (m)' : 'Resist distance (m)';
   renderDrillGrid(mode);
   if(typeof updateEccNote === 'function') updateEccNote();
