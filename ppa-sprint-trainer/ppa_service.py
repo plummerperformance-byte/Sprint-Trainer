@@ -2419,7 +2419,7 @@ PHASE_C_HTML = """<!doctype html>
 
     <!-- F-V tab -->
     <div class="rd-panel" data-tab="fv" style="display:none">
-      <div class="meta">Sprint force–velocity · modelled horizontal force (m·a + cable) per step vs speed, with the Morin profile line</div>
+      <div class="meta">Sprint force–velocity profile · F0 / V0 / Pmax from the velocity-curve method (Morin), imported from the 1080</div>
       <svg id="fv-rep-chart" viewBox="0 0 600 240" preserveAspectRatio="none" height="240"
            style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:10px"></svg>
     </div>
@@ -3910,129 +3910,46 @@ function niceAxisMax(v){
 
 function renderFVRepTab(rep){
   const svg=document.getElementById('fv-rep-chart');
-  const samples=window._lastSamples||[];
-  if(!samples.length){
-    svg.innerHTML='<text x="300" y="120" fill="#5a5a64" text-anchor="middle">Click a rep to load samples</text>'; return;
+  const f0=(rep&&rep.f0_n)?rep.f0_n:null, v0=(rep&&rep.v0_mps)?rep.v0_mps:null;
+  const pmax=(rep&&rep.pmax_w_morin)?rep.pmax_w_morin:(f0&&v0?(f0*v0/4):null);
+  const f0rel=(rep&&rep.f0_rel_nkg)||null, pmaxrel=(rep&&rep.pmax_rel_wkg)||null, slope=(rep&&rep.fv_slope_per_kg);
+  if(!f0 || !v0){
+    svg.innerHTML='<text x="300" y="116" fill="#818eae" text-anchor="middle" font-size="12">Force-velocity profile not available for this rep</text>'+
+      '<text x="300" y="136" fill="#56618a" text-anchor="middle" font-size="10">Needs a 1080 xlsx import (or a free-sprint capture) carrying the Morin F0 / V0 / Pmax</text>';
+    return;
   }
-  const W=600,H=240,PADL=46,PADR=22,PADT=18,PADB=32;
-
-  // Morin F-V profile (from the xlsx Dashboard import) — line from (0,F0) to (V0,0).
-  const f0 = (rep && rep.f0_n) ? rep.f0_n : null;
-  const v0 = (rep && rep.v0_mps) ? rep.v0_mps : null;
-  const pmax = (rep && rep.pmax_w_morin) ? rep.pmax_w_morin : (f0 && v0 ? (f0*v0/4) : null);
-  const mass = (rep && rep._meta && rep._meta.body_mass_kg) || (rep && rep.body_mass_kg)
-             || (window._athleteProfile && window._athleteProfile.athlete && window._athleteProfile.athlete.body_mass_kg) || null;
-
-  // Modeled horizontal (propulsive) force per STEP: Samozino m·a + cable resistance
-  // + a light aero term, averaged over each step window. Raw cable force alone is
-  // NOT the athlete's F-V force — that near-zero smear is what looked broken.
-  const strideFV=[];
-  if(mass && rep && rep.step_events && rep.step_events.length>1){
-    // Per-step mean velocity + cable, then net acceleration between step midpoints
-    // from the velocity trend (the stored a_mps2 channel is unreliable/zeroed).
-    const sm=[];
-    for(let i=1;i<rep.step_events.length;i++){
-      const tA=rep.step_events[i-1].t_strike_s*1000, tB=rep.step_events[i].t_strike_s*1000;
-      const win=samples.filter(s=>s.t_ms>=tA && s.t_ms<tB);
-      if(win.length<2) continue;
-      sm.push({tMid:(tA+tB)/2, tB:tB,
-        v:win.reduce((a,b)=>a+b.v_mps,0)/win.length,
-        c:win.reduce((a,b)=>a+(b.F_N||0),0)/win.length});
-    }
-    for(let i=1;i<sm.length-1;i++){
-      // centred difference over ±1 step → smoother net acceleration
-      const dt=(sm[i+1].tMid-sm[i-1].tMid)/1000;
-      const a=dt>0?(sm[i+1].v-sm[i-1].v)/dt:0;
-      const mv=sm[i].v;
-      strideFV.push({v:mv, f:Math.max(0, mass*a + sm[i].c + 0.25*mv*mv), t:sm[i].tB});
-    }
-  }
-
-  const vMax = Math.max(v0||0, ...samples.map(s=>s.v_mps), 0.1);
-  const fMax = Math.max(f0||0, ...strideFV.map(p=>p.f), 1);
-  const tMax = Math.max(...samples.map(s=>s.t_ms),1);
-  const vAx = niceAxisMax(vMax*1.08);
-  const fAx = niceAxisMax(fMax*1.08);
+  const W=600,H=240,PADL=48,PADR=22,PADT=22,PADB=32;
+  const vAx=niceAxisMax(v0*1.12), fAx=niceAxisMax(f0*1.12);
   const xs=v=>PADL+(v/vAx)*(W-PADL-PADR);
   const ys=f=>H-PADB-(f/fAx)*(H-PADT-PADB);
 
-  // Gridlines + axis ticks
   let grid='';
   for(let i=0;i<=4;i++){
-    const y=PADT+i*(H-PADT-PADB)/4;
-    const x=PADL+i*(W-PADL-PADR)/4;
+    const y=PADT+i*(H-PADT-PADB)/4, x=PADL+i*(W-PADL-PADR)/4;
     grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26"/>';
     grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#58a6ff" font-size="10" text-anchor="end" opacity="0.7">'+(fAx*(1-i/4)).toFixed(0)+'</text>';
     grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="#3a3a44"/>';
     grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="#5a5a64" font-size="10" text-anchor="middle">'+(vAx*(i/4)).toFixed(1)+'</text>';
   }
-  grid+='<text x="'+(PADL-32)+'" y="'+(PADT-4)+'" fill="#58a6ff" font-size="10" font-weight="600">F (N)</text>';
+  grid+='<text x="'+(PADL-34)+'" y="'+(PADT-6)+'" fill="#58a6ff" font-size="10" font-weight="600">F (N)</text>';
   grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="#5b8bff" font-size="10" font-weight="600" text-anchor="end">v (m/s)</text>';
 
-  // Per-step modeled-force points, coloured by time (start warm → end cool)
-  let strideDots='';
-  for(const p of strideFV){
-    const tt=p.t/tMax;
-    const r=Math.round(212+(88-212)*tt), g=Math.round(130+(166-130)*tt), b=Math.round(58+(255-58)*tt);
-    strideDots+='<circle cx="'+xs(p.v).toFixed(1)+'" cy="'+ys(p.f).toFixed(1)+'" r="4.5" fill="rgb('+r+','+g+','+b+')" stroke="#0a0a0c" stroke-width="1"/>';
-  }
-  let dots='';
+  // The force-velocity profile: a clean line from (0,F0) to (V0,0), with area fill.
+  const x0=xs(0), y0=ys(f0), x1=xs(v0), y1=ys(0);
+  let plot='<path d="M'+x0.toFixed(1)+','+y0.toFixed(1)+' L'+x1.toFixed(1)+','+y1.toFixed(1)+' L'+x1.toFixed(1)+','+ys(0).toFixed(1)+' Z" fill="#5b8bff" opacity="0.1"/>';
+  plot+='<line x1="'+x0.toFixed(1)+'" y1="'+y0.toFixed(1)+'" x2="'+x1.toFixed(1)+'" y2="'+y1.toFixed(1)+'" stroke="#5b8bff" stroke-width="2.5"/>';
+  plot+='<circle cx="'+x0.toFixed(1)+'" cy="'+y0.toFixed(1)+'" r="4" fill="#5b8bff"/>';
+  plot+='<text x="'+(x0+8).toFixed(1)+'" y="'+(y0+4).toFixed(1)+'" fill="#5b8bff" font-size="11" font-weight="700">F0 = '+f0.toFixed(0)+' N'+(f0rel?(' · '+f0rel.toFixed(1)+' N/kg'):'')+'</text>';
+  plot+='<circle cx="'+x1.toFixed(1)+'" cy="'+y1.toFixed(1)+'" r="4" fill="#5b8bff"/>';
+  plot+='<text x="'+(x1-4).toFixed(1)+'" y="'+(y1-8).toFixed(1)+'" fill="#5b8bff" font-size="11" font-weight="700" text-anchor="end">V0 = '+v0.toFixed(2)+' m/s</text>';
+  const px=xs(v0/2), py=ys(f0/2);
+  plot+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="6" fill="none" stroke="#d4a13a" stroke-width="2"/><circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="2" fill="#d4a13a"/>';
+  plot+='<text x="'+(px+10).toFixed(1)+'" y="'+(py+4).toFixed(1)+'" fill="#d4a13a" font-size="11" font-weight="700">Pmax = '+(pmax?pmax.toFixed(0):'?')+' W'+(pmaxrel?(' · '+pmaxrel.toFixed(1)+' W/kg'):'')+'</text>';
 
-  // Morin F-V regression line + F0 / V0 / Pmax markers
-  let morin='';
-  if(f0 && v0){
-    const x0=xs(0), y0=ys(f0);     // (0, F0)
-    const x1=xs(v0), y1=ys(0);     // (V0, 0)
-    morin+='<line x1="'+x0.toFixed(1)+'" y1="'+y0.toFixed(1)+'" x2="'+x1.toFixed(1)+'" y2="'+y1.toFixed(1)+'" stroke="#5aa86a" stroke-width="2" stroke-dasharray="6,4" opacity="0.85"/>';
-    // F0 endpoint
-    morin+='<circle cx="'+x0.toFixed(1)+'" cy="'+y0.toFixed(1)+'" r="4" fill="#5aa86a"/>';
-    morin+='<text x="'+(x0+8).toFixed(1)+'" y="'+(y0).toFixed(1)+'" fill="#5aa86a" font-size="11" font-weight="600">F0 = '+f0.toFixed(0)+' N</text>';
-    // V0 endpoint
-    morin+='<circle cx="'+x1.toFixed(1)+'" cy="'+y1.toFixed(1)+'" r="4" fill="#5aa86a"/>';
-    morin+='<text x="'+(x1-4).toFixed(1)+'" y="'+(y1-8).toFixed(1)+'" fill="#5aa86a" font-size="11" font-weight="600" text-anchor="end">V0 = '+v0.toFixed(2)+' m/s</text>';
-    // Pmax point at (V0/2, F0/2)
-    if(pmax){
-      const px=xs(v0/2), py=ys(f0/2);
-      morin+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="6" fill="none" stroke="#d4a13a" stroke-width="2"/>';
-      morin+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="2" fill="#d4a13a"/>';
-      morin+='<text x="'+(px+10).toFixed(1)+'" y="'+(py+4).toFixed(1)+'" fill="#d4a13a" font-size="11" font-weight="600">Pmax = '+pmax.toFixed(0)+' W</text>';
-    }
-  }
+  let slopeTxt='';
+  if(slope!=null) slopeTxt='<text x="'+(PADL+4)+'" y="'+(PADT-8)+'" fill="#8a8a96" font-size="10">F-V slope '+Number(slope).toFixed(3)+' (per kg) · higher speed = flatter</text>';
 
-  // Legend
-  const legend = '<g transform="translate('+(W-160)+','+(PADT)+')">'+
-    '<rect x="0" y="0" width="155" height="'+((f0&&v0)?36:20)+'" fill="#0a0a0c" stroke="#1f1f26" rx="4"/>'+
-    '<circle cx="10" cy="12" r="4" fill="#d4823a"/><text x="18" y="16" fill="#8a8a96" font-size="10">modelled F per step</text>'+
-    (f0 && v0 ?
-      '<line x1="3" y1="28" x2="17" y2="28" stroke="#5aa86a" stroke-width="2" stroke-dasharray="3,2"/><text x="22" y="31" fill="#8a8a96" font-size="10">Morin F-V line</text>' : '')+
-    '</g>';
-
-  // Fit confidence: least-squares regression of the modelled points on their own
-  // line (how linear this single sprint's F-V is), + the fitted F0/V0.
-  let r2txt='', fitLine='';
-  if(strideFV.length>=3){
-    const n=strideFV.length; let sv=0,sf=0,svv=0,svf=0;
-    for(const p of strideFV){ sv+=p.v; sf+=p.f; svv+=p.v*p.v; svf+=p.v*p.f; }
-    const mvv=sv/n, mff=sf/n;
-    const b=(svf-n*mvv*mff)/((svv-n*mvv*mvv)||1e-9);   // slope (N per m/s)
-    const a=mff-b*mvv;                                  // intercept ≈ F0
-    let ssRes=0, ssTot=0;
-    for(const p of strideFV){ const pred=a+b*p.v; ssRes+=(p.f-pred)*(p.f-pred); ssTot+=(p.f-mff)*(p.f-mff); }
-    const r2=ssTot>0?Math.max(0,1-ssRes/ssTot):0;
-    // draw the fitted line across the plotted v-range
-    if(b<0){ const vf0=-a/b; const yA=ys(Math.max(0,a)), xA=xs(0), xB=xs(Math.min(vf0,vAx)), yB=ys(Math.max(0,a+b*Math.min(vf0,vAx)));
-      fitLine='<line x1="'+xA.toFixed(1)+'" y1="'+yA.toFixed(1)+'" x2="'+xB.toFixed(1)+'" y2="'+yB.toFixed(1)+'" stroke="#5b8bff" stroke-width="1.5" opacity="0.7"/>'; }
-    const col=r2>=0.9?'#5aa86a':(r2>=0.6?'#d4a13a':'#ff5a5f');
-    r2txt='<text x="'+(PADL+6)+'" y="'+(PADT+14)+'" fill="'+col+'" font-size="11" '+
-          'font-weight="700">R² '+r2.toFixed(2)+' · single-sprint fit</text>';
-  }
-
-  // Note when force can't be modelled (no body mass on file)
-  let note='';
-  if(!mass){ note='<text x="300" y="128" fill="#d4a13a" font-size="11" text-anchor="middle">Set the athlete body mass to model the force-velocity profile</text>'; }
-  else if(!strideFV.length){ note='<text x="300" y="128" fill="#5a5a64" font-size="11" text-anchor="middle">Not enough step data for the force cloud</text>'; }
-
-  svg.innerHTML=grid+dots+fitLine+morin+strideDots+r2txt+note+legend;
+  svg.innerHTML=grid+plot+slopeTxt;
 }
 
 // Tab switching
