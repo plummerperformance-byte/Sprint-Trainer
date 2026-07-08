@@ -1638,7 +1638,7 @@ PHASE_C_HTML = """<!doctype html>
   .mi-never:hover{color:var(--fg)}
   .chart-empty{color:var(--muted);text-align:center;font-size:14px;padding:60px 0}
   #live-chart{width:100%;height:auto;flex:1 1 auto;min-height:220px;
-              background:#0a0a0c;border:1px solid var(--line);border-radius:6px}
+              background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px}
 
   /* Stats card */
   .stats-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;
@@ -1854,7 +1854,7 @@ PHASE_C_HTML = """<!doctype html>
   /* Recent reps list */
   .reps-list{display:flex;flex-direction:column;gap:6px}
   .rep-row{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;
-           padding:10px 12px;background:#0a0a0c;border:1px solid var(--line);
+           padding:10px 12px;background:var(--raised);border:1px solid var(--line);
            border-left:3px solid transparent;border-radius:8px;cursor:pointer;
            font-size:15px;font-variant-numeric:tabular-nums;
            transition:background 120ms,border-color 120ms;-webkit-tap-highlight-color:transparent}
@@ -1946,7 +1946,7 @@ PHASE_C_HTML = """<!doctype html>
   details.report[open] > summary::before{transform:rotate(90deg)}
   details.report .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
   details.report .row select,details.report .row button{}
-  #cmp-chart,#fv-chart{width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:8px}
+  #cmp-chart,#fv-chart{width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:8px}
 
   /* ===== Visual calm pass — rounder cards, soft depth, more air (2026-07) ===== */
   .chart-card,.stats-card{border-radius:20px;padding:22px}
@@ -2420,8 +2420,8 @@ PHASE_C_HTML = """<!doctype html>
     <!-- F-V tab -->
     <div class="rd-panel" data-tab="fv" style="display:none">
       <div class="meta">Sprint force–velocity profile · F0 / V0 / Pmax from the velocity-curve method (Morin), imported from the 1080</div>
-      <svg id="fv-rep-chart" viewBox="0 0 600 240" preserveAspectRatio="none" height="240"
-           style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:10px"></svg>
+      <svg id="fv-rep-chart" viewBox="0 0 600 270"
+           style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px"></svg>
     </div>
 
     <div class="meta" id="rd-note" style="margin-top:10px;font-size:10px"></div>
@@ -2449,7 +2449,7 @@ PHASE_C_HTML = """<!doctype html>
         <select id="cmp-b" style="flex:1"><option value="">Rep B</option></select>
         <button id="cmp-go" class="secondary">Compare</button>
       </div>
-      <svg id="cmp-chart" viewBox="0 0 600 140" preserveAspectRatio="none" height="140"></svg>
+      <svg id="cmp-chart" viewBox="0 0 600 140"></svg>
     </div>
     <div class="an-panel" data-an="fv" hidden>
       <div class="meta">All reps in the current session.</div>
@@ -2457,7 +2457,7 @@ PHASE_C_HTML = """<!doctype html>
         <button id="fv-go" class="secondary">Build F-V profile</button>
       </div>
       <div id="fv-result" class="meta" style="margin-top:8px">Need at least 2 reps at different loads</div>
-      <svg id="fv-chart" viewBox="0 0 600 200" preserveAspectRatio="none" height="200"></svg>
+      <svg id="fv-chart" viewBox="0 0 600 200"></svg>
     </div>
   </div>
 
@@ -3918,7 +3918,7 @@ function renderFVRepTab(rep){
       '<text x="300" y="136" fill="#56618a" text-anchor="middle" font-size="10">Needs a 1080 xlsx import (or a free-sprint capture) carrying the Morin F0 / V0 / Pmax</text>';
     return;
   }
-  const W=600,H=240,PADL=48,PADR=22,PADT=22,PADB=32;
+  const W=600,H=270,PADL=48,PADR=22,PADT=32,PADB=36;
   const vAx=niceAxisMax(v0*1.12), fAx=niceAxisMax(f0*1.12);
   const xs=v=>PADL+(v/vAx)*(W-PADL-PADR);
   const ys=f=>H-PADB-(f/fAx)*(H-PADT-PADB);
@@ -3926,12 +3926,12 @@ function renderFVRepTab(rep){
   let grid='';
   for(let i=0;i<=4;i++){
     const y=PADT+i*(H-PADT-PADB)/4, x=PADL+i*(W-PADL-PADR)/4;
-    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26"/>';
-    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#58a6ff" font-size="10" text-anchor="end" opacity="0.7">'+(fAx*(1-i/4)).toFixed(0)+'</text>';
-    grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="#3a3a44"/>';
-    grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="#5a5a64" font-size="10" text-anchor="middle">'+(vAx*(i/4)).toFixed(1)+'</text>';
+    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#243157" opacity="0.7"/>';
+    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#818eae" font-size="10" text-anchor="end">'+(fAx*(1-i/4)).toFixed(0)+'</text>';
+    grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="#33436b"/>';
+    grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="#818eae" font-size="10" text-anchor="middle">'+(vAx*(i/4)).toFixed(1)+'</text>';
   }
-  grid+='<text x="'+(PADL-34)+'" y="'+(PADT-6)+'" fill="#58a6ff" font-size="10" font-weight="600">F (N)</text>';
+  grid+='<text x="4" y="'+(PADT-8)+'" fill="#58a6ff" font-size="10" font-weight="600">F (N)</text>';
   grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="#5b8bff" font-size="10" font-weight="600" text-anchor="end">v (m/s)</text>';
 
   // The force-velocity profile: a clean line from (0,F0) to (V0,0), with area fill.
@@ -3947,7 +3947,7 @@ function renderFVRepTab(rep){
   plot+='<text x="'+(px+10).toFixed(1)+'" y="'+(py+4).toFixed(1)+'" fill="#d4a13a" font-size="11" font-weight="700">Pmax = '+(pmax?pmax.toFixed(0):'?')+' W'+(pmaxrel?(' · '+pmaxrel.toFixed(1)+' W/kg'):'')+'</text>';
 
   let slopeTxt='';
-  if(slope!=null) slopeTxt='<text x="'+(PADL+4)+'" y="'+(PADT-8)+'" fill="#8a8a96" font-size="10">F-V slope '+Number(slope).toFixed(3)+' (per kg) · higher speed = flatter</text>';
+  if(slope!=null) slopeTxt='<text x="'+(W-PADR)+'" y="'+(PADT-8)+'" fill="#818eae" font-size="10" text-anchor="end">F–V slope '+Number(slope).toFixed(3)+' /kg</text>';
 
   svg.innerHTML=grid+plot+slopeTxt;
 }
@@ -5011,8 +5011,8 @@ SETUP_HTML = """<!doctype html>
               <option value="MIN">Worst of session</option>
             </select>
           </div>
-          <svg id="hist-chart" viewBox="0 0 380 140" preserveAspectRatio="none" height="140"
-               style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:8px"></svg>
+          <svg id="hist-chart" viewBox="0 0 380 140"
+               style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:8px"></svg>
           <div class="meta" id="hist-trend" style="margin-top:6px"></div>
 
           <div class="ath-section-h">Sessions</div>
