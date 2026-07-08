@@ -24,7 +24,7 @@ CHART_SAMPLE_BUDGET = 600  # decimate raw 1 kHz → ~600 chart points (≈50 Hz 
 SPLIT_LENGTH_M = 5.0       # 1080-style uniform split bucket
 
 
-def parse_xlsx(path: Path) -> dict:
+def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
     wb = openpyxl.load_workbook(path, data_only=True)
 
     # Find raw-data sheet (one with "Raw Data" in the name)
@@ -185,9 +185,15 @@ def parse_xlsx(path: Path) -> dict:
                 splits_extended[str(marker)] = round(times_s[i], 3)
                 break
 
-    # ---- Step detection (force-peak) ----
-    step_events = detect_steps(times_s, forces_n, pos_m)
+    # ---- Step detection + foot labels + L/R asymmetry ----
+    # Primary detector = speed residual (doc §2); it beat the cable-force detector
+    # decisively in the A/B on real 1080 data (speed found ~2x the steps at the
+    # right rhythm). The force detector stays available for heavy-resisted sprints
+    # where cable tension may carry a cleaner per-step signal — worth re-checking.
+    step_events = detect_steps_speed_residual(times_s, speeds_mps, pos_m)
+    step_events = label_feet(step_events, start_foot)
     step_aggs = compute_step_aggregates(step_events)
+    asymmetry = compute_asymmetry(step_events)
 
     # ---- RFmax + Drf are NOT derivable from cable-only sprint data ----
     # Morin's RFmax = horizontal_GRF / resultant_GRF, requires either a
@@ -266,6 +272,8 @@ def parse_xlsx(path: Path) -> dict:
         # Step events + aggregates (1080-App step_events table shape)
         "step_events": step_events,
         **step_aggs,
+        # Foot-labelled L/R asymmetry (declared start foot; doc §4/§5)
+        "asymmetry": asymmetry,
         "samples": samples,
         # Morin sprint-FV outputs (1080's own per-rep regression, imported from
         # Dashboard sheet). Keys mirror the 1080-App `sprint_metrics` table.
@@ -299,7 +307,18 @@ def _smooth(xs, window=15):
     return out
 
 
-def detect_steps(t_s, f_n, pos_m, min_period_s=0.15, min_prominence_n=4.0, smooth_window=15):
+# Physiological sanity window for a single sprint step (handoff doc §2 / §7).
+# These bound the accepted inter-event gap. Values outside are FLAGGED, not
+# silently dropped — a long gap usually means a *missed* peak that a reviewer
+# should see, per the doc's confidence/manual-correction guidance (§8).
+STEP_MIN_S = 0.11      # < ~9 Hz between strikes is implausibly fast
+STEP_MAX_S = 0.45      # > this gap ≈ a missed step
+STEP_MIN_LEN_M = 0.25  # a "step" shorter than this is almost certainly noise
+STEP_MAX_LEN_M = 3.5   # longer than this is implausible for one step
+
+
+def detect_steps(t_s, f_n, pos_m, min_period_s=0.15, min_prominence_n=4.0, smooth_window=15,
+                 min_step_len_m=STEP_MIN_LEN_M):
     """Peak-detect foot strikes on the cable force trace.
 
     Cable trainers maintain constant baseline tension so peaks are subtle
@@ -309,9 +328,15 @@ def detect_steps(t_s, f_n, pos_m, min_period_s=0.15, min_prominence_n=4.0, smoot
       2. Find every local maximum
       3. Compute prominence (how far it rises above the lower of the two
          adjacent valleys); discard peaks below `min_prominence_n`
-      4. Enforce minimum spacing of `min_period_s` between accepted peaks
+      4. Reject a candidate that sits too close to the previous accepted event
+         in TIME (`min_period_s`) OR DISTANCE (`min_step_len_m`) — keep the more
+         prominent of the pair. Distance-dedup (doc §2) catches one-step splits
+         the time gate alone misses at high cable speed.
+      5. Tag each accepted interval whose period/length falls outside the
+         physiological window with a `flags` list (doc §7 validation), rather
+         than dropping it — a long gap usually means a *missed* step to review.
 
-    Returns list of step dicts (1080-App step_events shape).
+    Returns list of step dicts (1080-App step_events shape), each with `flags`.
     """
     if len(f_n) < 3:
         return []
@@ -328,8 +353,7 @@ def detect_steps(t_s, f_n, pos_m, min_period_s=0.15, min_prominence_n=4.0, smoot
     # For each maximum, compute prominence vs adjacent valleys (look in a
     # ±0.5 s window, which comfortably brackets one full step at 2-5 Hz).
     win = max(20, int(0.5 / max(t_s[1] - t_s[0], 1e-4)))  # samples in 0.5 s
-    accepted_indices = []
-    last_t = -1e9
+    accepted = []
     for idx in maxima:
         a = max(0, idx - win); b = min(len(fs), idx + win + 1)
         valley_left = min(fs[a:idx + 1]) if idx > a else fs[idx]
@@ -337,23 +361,33 @@ def detect_steps(t_s, f_n, pos_m, min_period_s=0.15, min_prominence_n=4.0, smoot
         prominence = fs[idx] - max(valley_left, valley_right)
         if prominence < min_prominence_n:
             continue
-        # min spacing
-        if t_s[idx] - last_t < min_period_s:
-            # If the new candidate is more prominent, replace the previous one
-            if accepted_indices and fs[idx] > fs[accepted_indices[-1]]:
-                accepted_indices[-1] = idx
-                last_t = t_s[idx]
-            continue
-        accepted_indices.append(idx)
-        last_t = t_s[idx]
+        if accepted:
+            prev = accepted[-1]
+            too_close = ((t_s[idx] - t_s[prev]) < min_period_s
+                         or (pos_m[idx] - pos_m[prev]) < min_step_len_m)
+            if too_close:
+                # same step split into two candidates — keep the more prominent
+                if fs[idx] > fs[prev]:
+                    accepted[-1] = idx
+                continue
+        accepted.append(idx)
 
     # Build step events using ORIGINAL (un-smoothed) force values for the recorded peak
     steps = []
-    for i, idx in enumerate(accepted_indices):
-        prev_idx = accepted_indices[i - 1] if i > 0 else None
+    for i, idx in enumerate(accepted):
+        prev_idx = accepted[i - 1] if i > 0 else None
         period_ms = round((t_s[idx] - t_s[prev_idx]) * 1000, 1) if prev_idx is not None else None
         length_m = round(pos_m[idx] - pos_m[prev_idx], 3) if prev_idx is not None else None
         inst_freq_hz = round(1000 / period_ms, 2) if period_ms and period_ms > 0 else None
+        step_speed = (round(length_m / (period_ms / 1000.0), 3)
+                      if (length_m is not None and period_ms) else None)
+        flags = []
+        if period_ms is not None:
+            if period_ms > STEP_MAX_S * 1000: flags.append("long_gap")    # likely missed step
+            elif period_ms < STEP_MIN_S * 1000: flags.append("short_gap")  # likely double
+        if length_m is not None:
+            if length_m > STEP_MAX_LEN_M: flags.append("long_step")
+            elif length_m < STEP_MIN_LEN_M: flags.append("short_step")
         steps.append({
             "step_number": i + 1,
             "t_strike_s": round(t_s[idx], 4),
@@ -362,6 +396,113 @@ def detect_steps(t_s, f_n, pos_m, min_period_s=0.15, min_prominence_n=4.0, smoot
             "step_period_ms": period_ms,
             "step_length_m": length_m,
             "step_frequency_hz": inst_freq_hz,
+            "step_speed_mps": step_speed,
+            "flags": flags,
+        })
+    return steps
+
+
+def _rolling_med_mad(sig, w):
+    """Rolling median + MAD (median absolute deviation) over a w-sample window.
+    Basis for the adaptive step-accept threshold (handoff §5.1)."""
+    h = w // 2
+    n = len(sig)
+    med = [0.0] * n
+    mad = [0.0] * n
+    for i in range(n):
+        a = max(0, i - h); b = min(n, i + h + 1)
+        win = sorted(sig[a:b]); m = win[len(win) // 2]
+        med[i] = m
+        mad[i] = sorted(abs(x - m) for x in win)[len(win) // 2]
+    return med, mad
+
+
+def _step_flags(period_ms, length_m):
+    """Physiological-window validation flags shared by both detectors (doc §7)."""
+    flags = []
+    if period_ms is not None:
+        if period_ms > STEP_MAX_S * 1000: flags.append("long_gap")
+        elif period_ms < STEP_MIN_S * 1000: flags.append("short_gap")
+    if length_m is not None:
+        if length_m > STEP_MAX_LEN_M: flags.append("long_step")
+        elif length_m < STEP_MIN_LEN_M: flags.append("short_step")
+    return flags
+
+
+# Speed-residual defaults validated by A/B against the force detector on the
+# Tyrone 1080 workbook (short 25 ms / long 200 ms / no prominence floor gave 23
+# clean detections + 3 flagged gaps ≈ 26 true steps, matching the doc's 25-26 /
+# 4.39 Hz reference; the force detector found only 13 at 2.2 Hz). A long window
+# past ~300 ms starts spanning whole steps and cancels the step signal.
+def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
+                                min_period_s=0.11, min_step_len_m=STEP_MIN_LEN_M,
+                                adaptive_k=0.2, thr_win_ms=400, min_prominence_mps=None):
+    """Doc §2 speed-residual step detector (the doc's recommended first pass).
+
+    Removes the broad acceleration trend from the tether speed and keeps the
+    rhythmic step-scale pulses:
+        v_short = MA(speed, ~25-40 ms)   (short_ms)
+        v_long  = MA(speed, ~200-300 ms) (long_ms)
+        step_signal = v_short - v_long
+    Local maxima of step_signal are candidate strikes; a candidate too close to
+    the previous accepted event in TIME or DISTANCE is merged (keep the taller
+    residual peak). Same event shape + `flags` as the force detector so the two
+    are directly comparable.
+    """
+    n = len(v_mps)
+    if n < 5:
+        return []
+    dt = max(t_s[1] - t_s[0], 1e-4)
+    fs_hz = 1.0 / dt
+    w_short = max(1, int(round(short_ms / 1000.0 * fs_hz)))
+    w_long = max(w_short + 1, int(round(long_ms / 1000.0 * fs_hz)))
+    v_short = _smooth(v_mps, w_short)
+    v_long = _smooth(v_mps, w_long)
+    sig = [a - b for a, b in zip(v_short, v_long)]
+
+    # Adaptive accept threshold (handoff §5.1): rolling median + k·MAD tracks the
+    # local noise floor, recovering the steps a fixed floor misses during
+    # acceleration. On the Tyrone workbook this lifts detection from 23 @ 3.73 Hz
+    # (3 missed) to 26 @ 4.24 Hz (0 missed) — matching the 25-26 / 4.39 Hz reference.
+    if adaptive_k is not None:
+        tw = max(5, int(round(thr_win_ms / 1000.0 * fs_hz)))
+        med, mad = _rolling_med_mad(sig, tw)
+        thr = [med[i] + adaptive_k * 1.4826 * mad[i] for i in range(n)]
+    else:
+        fl = min_prominence_mps or 0.0
+        thr = [fl] * n
+    maxima = [i for i in range(1, n - 1)
+              if sig[i] > sig[i - 1] and sig[i] >= sig[i + 1] and sig[i] > thr[i]]
+    if not maxima:
+        return []
+    accepted = []
+    for idx in maxima:
+        if accepted:
+            prev = accepted[-1]
+            if (t_s[idx] - t_s[prev]) < min_period_s or (pos_m[idx] - pos_m[prev]) < min_step_len_m:
+                if sig[idx] > sig[prev]:
+                    accepted[-1] = idx
+                continue
+        accepted.append(idx)
+
+    steps = []
+    for i, idx in enumerate(accepted):
+        prev_idx = accepted[i - 1] if i > 0 else None
+        period_ms = round((t_s[idx] - t_s[prev_idx]) * 1000, 1) if prev_idx is not None else None
+        length_m = round(pos_m[idx] - pos_m[prev_idx], 3) if prev_idx is not None else None
+        inst_freq = round(1000 / period_ms, 2) if period_ms and period_ms > 0 else None
+        step_speed = (round(length_m / (period_ms / 1000.0), 3)
+                      if (length_m is not None and period_ms) else None)
+        steps.append({
+            "step_number": i + 1,
+            "t_strike_s": round(t_s[idx], 4),
+            "pos_m": round(pos_m[idx], 3),
+            "peak_speed_mps": round(v_mps[idx], 3),
+            "step_period_ms": period_ms,
+            "step_length_m": length_m,
+            "step_frequency_hz": inst_freq,
+            "step_speed_mps": step_speed,
+            "flags": _step_flags(period_ms, length_m),
         })
     return steps
 
@@ -380,12 +521,100 @@ def compute_step_aggregates(steps):
     avg_length = sum(lengths) / len(lengths) if lengths else 0
     var_l = sum((l - avg_length) ** 2 for l in lengths) / len(lengths) if lengths else 0
     std_length = var_l ** 0.5
+    flagged = sum(1 for s in steps if s.get("flags"))
     return {
         "total_steps": len(steps),
         "step_freq_hz": round(step_freq_hz, 2),
         "avg_step_length_m": round(avg_length, 3),
         "step_length_std_m": round(std_length, 3),
         "avg_step_period_ms": round(avg_period, 1),
+        "flagged_steps": flagged,
+        "step_confidence": round(1 - flagged / len(steps), 2),
+    }
+
+
+def label_feet(steps, start_foot="left"):
+    """Alternate L/R foot labels from a user-declared start foot (doc §4).
+
+    Tether data cannot know true foot identity (doc §8) — this is a *declared*
+    start alternation, not a measurement. A step preceded by a 'long_gap' flag
+    (a likely missed strike) flips the true alternation from that point, so it
+    is marked `foot_suspect` for a reviewer to relabel from there.
+    """
+    start = "left" if str(start_foot).lower().startswith("l") else "right"
+    other = "right" if start == "left" else "left"
+    for i, s in enumerate(steps):
+        s["foot"] = start if i % 2 == 0 else other
+        s["foot_suspect"] = "long_gap" in (s.get("flags") or [])
+    return steps
+
+
+def _asym_pct(left, right):
+    """Normalised symmetry index: 200*(L-R)/(L+R). +ve = left larger (doc §5)."""
+    if left is None or right is None:
+        return None
+    denom = left + right
+    return round(200.0 * (left - right) / denom, 1) if denom else None
+
+
+def compute_asymmetry(steps, zone_len_m=10.0):
+    """Left/right asymmetry across the step series (handoff doc §5).
+
+    Reports three views for each spatio-temporal metric:
+      * global  — whole-sprint L-mean vs R-mean (marked low-confidence: rising
+                  speed through the sprint biases it, doc §5/§8)
+      * pairwise — mean of consecutive L/R pair asymmetries (accel-robust)
+      * zones    — asymmetry within 0-10 / 10-20 / … m distance buckets
+    Returns None if fewer than two labelled steps.
+    """
+    labelled = [s for s in steps if s.get("foot") and s.get("step_period_ms") is not None]
+    if len(labelled) < 2:
+        return None
+    METRICS = ("step_length_m", "step_period_ms", "step_frequency_hz",
+               "step_speed_mps", "peak_force_n")
+
+    def mean(vals):
+        vals = [v for v in vals if v is not None]
+        return sum(vals) / len(vals) if vals else None
+
+    lefts = [s for s in labelled if s["foot"] == "left"]
+    rights = [s for s in labelled if s["foot"] == "right"]
+
+    glob = {k: _asym_pct(mean([s.get(k) for s in lefts]),
+                         mean([s.get(k) for s in rights])) for k in METRICS}
+
+    pairwise = {k: [] for k in METRICS}
+    for a, b in zip(labelled, labelled[1:]):
+        if a["foot"] == b["foot"]:
+            continue  # a missed step broke the alternation — skip this pair
+        lft, rgt = (a, b) if a["foot"] == "left" else (b, a)
+        for k in METRICS:
+            p = _asym_pct(lft.get(k), rgt.get(k))
+            if p is not None:
+                pairwise[k].append(p)
+    pairwise_mean = {k: (round(sum(v) / len(v), 1) if v else None)
+                     for k, v in pairwise.items()}
+
+    max_pos = max(s["pos_m"] for s in labelled)
+    zones = []
+    for z in range(int(max_pos // zone_len_m) + 1):
+        lo, hi = z * zone_len_m, (z + 1) * zone_len_m
+        zl = [s for s in lefts if lo <= s["pos_m"] < hi]
+        zr = [s for s in rights if lo <= s["pos_m"] < hi]
+        if not zl or not zr:
+            continue
+        row = {"zone": f"{int(lo)}-{int(hi)}m", "left_steps": len(zl), "right_steps": len(zr)}
+        for k in METRICS:
+            row[k] = _asym_pct(mean([s.get(k) for s in zl]), mean([s.get(k) for s in zr]))
+        zones.append(row)
+
+    return {
+        "start_foot": (steps[0].get("foot") if steps else labelled[0]["foot"]),
+        "declared": True,
+        "global": glob,
+        "global_confidence": "low (acceleration-biased)",
+        "pairwise_mean": pairwise_mean,
+        "zones": zones,
     }
 
 
@@ -466,12 +695,12 @@ def post_rep(rep: dict, athlete_id: Optional[int] = None) -> None:
         print(f"  POST -> {r.status}: {r.read().decode('utf-8')}")
 
 
-def main(path_str: str) -> None:
+def main(path_str: str, start_foot: str = "left") -> None:
     path = Path(path_str)
     if not path.exists():
         print(f"file not found: {path}", file=sys.stderr); sys.exit(1)
-    print(f"loading {path.name}")
-    rep = parse_xlsx(path)
+    print(f"loading {path.name}  (start foot: {start_foot})")
+    rep = parse_xlsx(path, start_foot)
     print(f"  athlete:         {rep['_meta'].get('athlete_name')} ({rep['_meta'].get('body_mass_kg')} kg)")
     print(f"  duration:        {rep['duration_s']:.2f} s")
     print(f"  distance:        {rep['max_extension_m']:.2f} m")
@@ -488,6 +717,21 @@ def main(path_str: str) -> None:
               f"{rep.get('step_freq_hz', '?')} Hz, "
               f"{rep.get('avg_step_length_m', '?')} m avg "
               f"(std {rep.get('step_length_std_m', '?')} m)")
+        if rep.get('flagged_steps'):
+            print(f"                   {rep['flagged_steps']} flagged "
+                  f"(confidence {rep.get('step_confidence')})")
+    if rep.get('asymmetry'):
+        a = rep['asymmetry']
+        pl = a['pairwise_mean'].get('step_length_m')
+        pt = a['pairwise_mean'].get('step_period_ms')
+        print(f"  asymmetry:       start {a['start_foot']} (declared) — "
+              f"pairwise len {pl}%  time {pt}%  (+ve = left larger)")
+        print(f"                   global len {a['global'].get('step_length_m')}% "
+              f"[{a['global_confidence']}]")
+        for z in a['zones']:
+            print(f"    {z['zone']:>8}: len {str(z.get('step_length_m')):>6}%  "
+                  f"time {str(z.get('step_period_ms')):>6}%  "
+                  f"L{z['left_steps']}/R{z['right_steps']}")
     if rep.get('rf_max_pct') is not None:
         print(f"  RFmax:           {rep['rf_max_pct']:.1f}%   Drf: {rep.get('drf')}")
     print("posting to service…")
@@ -501,6 +745,14 @@ def main(path_str: str) -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("usage: python load_1080_xlsx.py <path-to-xlsx>"); sys.exit(2)
-    main(sys.argv[1])
+    args = sys.argv[1:]
+    start_foot = "left"
+    if "--start-foot" in args:
+        i = args.index("--start-foot")
+        if i + 1 < len(args):
+            start_foot = args[i + 1]
+            del args[i:i + 2]
+    if not args:
+        print("usage: python load_1080_xlsx.py <path-to-xlsx> [--start-foot left|right]")
+        sys.exit(2)
+    main(args[0], start_foot)
