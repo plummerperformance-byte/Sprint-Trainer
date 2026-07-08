@@ -2033,6 +2033,16 @@ PHASE_C_HTML = """<!doctype html>
   .phase-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--state)}
   .hero-speed{margin:2px 0}
   .hero-chart{position:relative}
+  /* live-chart metric toggle (Speed / Force / Accel) — like the Current/Peak/Avg toggle */
+  .chart-metric-toggle{position:absolute;top:6px;right:6px;z-index:3;display:inline-flex;gap:2px;padding:3px;
+    background:rgba(4,8,20,.6);border:1px solid var(--line);border-radius:8px;backdrop-filter:blur(4px)}
+  .cm-tog{padding:4px 11px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    background:transparent;color:var(--muted);border:0;border-radius:6px;cursor:pointer;min-height:26px}
+  .cm-tog:hover{color:var(--fg)}
+  .cm-tog.active{color:#08122a}
+  .cm-tog[data-metric="speed"].active{background:var(--warm)}
+  .cm-tog[data-metric="force"].active{background:var(--accent);color:#fff}
+  .cm-tog[data-metric="accel"].active{background:var(--cool)}
   .hero-chart .chart-empty{padding:16px 0;font-size:13px}
   .hero-chart #live-chart{min-height:150px}
   .hero-tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
@@ -2256,6 +2266,11 @@ PHASE_C_HTML = """<!doctype html>
       </div>
       <div class="stat-line tappable hero-speed" data-tile="speed" title="Tap to cycle metric"><span class="l" id="stat-speed-l">Speed</span><span class="v primary" id="stat-speed"><span class="num">0.00</span><span class="unit">m/s</span></span></div>
       <div class="hero-chart">
+        <div class="chart-metric-toggle" id="chart-metric-toggle" role="group" aria-label="Chart metric" style="display:none">
+          <button type="button" class="cm-tog active" data-metric="speed">Speed</button>
+          <button type="button" class="cm-tog" data-metric="force">Force</button>
+          <button type="button" class="cm-tog" data-metric="accel">Accel</button>
+        </div>
         <div class="chart-empty" id="chart-empty">Start a drill to see the live trace</div>
         <svg id="live-chart" viewBox="0 0 600 240" preserveAspectRatio="none" style="display:none"></svg>
         <div class="mode-intro" id="mode-intro" hidden>
@@ -3519,68 +3534,67 @@ function renderFV(j){
 // ---- Live chart ----
 function renderLiveChart(samples, opts){
   opts = opts || {};
+  const cmTog=document.getElementById('chart-metric-toggle');
+  if(samples && samples.length>=2){ window._liveChartSamples=samples; window._liveChartOpts=opts; }
   if(!samples||samples.length<2){
-    chartEmpty.style.display='block'; liveChart.style.display='none'; return;
+    chartEmpty.style.display='block'; liveChart.style.display='none'; if(cmTog) cmTog.style.display='none'; return;
   }
-  chartEmpty.style.display='none'; liveChart.style.display='block';
-  const W=600,H=240,PADL=42,PADR=42,PADT=22,PADB=26;
-  const tMax=Math.max(...samples.map(s=>s.t_ms))||1;
-  const vMax=Math.max(...samples.map(s=>s.v_mps),0.1);
-  const fMax=Math.max(...samples.map(s=>s.F_N),1);
-  // Round axis maxima up to a "nice" value for cleaner ticks
-  const niceMax=v=>{const e=Math.pow(10,Math.floor(Math.log10(v)));const m=v/e;return e*(m<=1?1:m<=2?2:m<=5?5:10);};
-  const vAxMax=niceMax(vMax*1.1);
-  const fAxMax=niceMax(fMax*1.1);
-  const tAxMax=tMax/1000;
+  chartEmpty.style.display='none'; liveChart.style.display='block'; if(cmTog) cmTog.style.display='inline-flex';
+  const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const metric=window._chartMetric||'speed';
+  const W=600,H=240,PADL=48,PADR=18,PADT=24,PADB=26;
+  const tMax=Math.max(...samples.map(s=>s.t_ms))||1, tAxMax=tMax/1000;
+  // acceleration from the velocity trend (stored a_mps2 is zeroed), smoothed
+  const accRaw=samples.map((s,i)=>{ if(i<1) return 0; const dt=(samples[i].t_ms-samples[i-1].t_ms)/1000; return dt>0?(samples[i].v_mps-samples[i-1].v_mps)/dt:0; });
+  const accArr=accRaw.map((v,i)=>{ let a=0,c=0; for(let j=Math.max(0,i-4);j<=Math.min(accRaw.length-1,i+4);j++){a+=accRaw[j];c++;} return a/c; });
+  const CFG={
+    speed:{arr:samples.map(s=>s.v_mps), color:cssv('--warm')||'#ff9440', unit:'m/s', dp:1},
+    force:{arr:samples.map(s=>s.F_N||0), color:cssv('--accent')||'#5b8bff', unit:'N', dp:0},
+    accel:{arr:accArr, color:cssv('--cool')||'#2bd0e2', unit:'m/s²', dp:1},
+  };
+  const mm=CFG[metric]||CFG.speed, series=mm.arr;
+  const yMin=Math.min(0,...series);
+  const niceMax=v=>{const e=Math.pow(10,Math.floor(Math.log10(Math.max(v,1e-3))));const m=v/e;
+    const n=m<=1?1:m<=1.2?1.2:m<=1.5?1.5:m<=2?2:m<=2.5?2.5:m<=3?3:m<=4?4:m<=5?5:m<=6?6:m<=8?8:10;return e*n;};
+  const yMax=niceMax(Math.max(...series,0.1)*1.08);
+  const gl=cssv('--line')||'#243157', mut=cssv('--ink-3')||'#818eae';
   const xs=t=>PADL+(t/tMax)*(W-PADL-PADR);
-  const yV=v=>H-PADB-(v/vAxMax)*(H-PADT-PADB);
-  const yF=f=>H-PADB-(f/fAxMax)*(H-PADT-PADB);
-
-  // Gridlines + ticks (5 horizontal divisions)
+  const ys=v=>H-PADB-((v-yMin)/((yMax-yMin)||1))*(H-PADT-PADB);
   let grid='';
   for(let i=0;i<=4;i++){
-    const y=PADT+i*(H-PADT-PADB)/4;
-    const v=vAxMax*(1-i/4);
-    const f=fAxMax*(1-i/4);
-    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26" stroke-width="1"/>';
-    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="#5b8bff" font-size="10" text-anchor="end" opacity="0.7">'+v.toFixed(v<10?1:0)+'</text>';
-    grid+='<text x="'+(W-PADR+6)+'" y="'+(y+3)+'" fill="#58a6ff" font-size="10" opacity="0.7">'+f.toFixed(0)+'</text>';
+    const y=PADT+i*(H-PADT-PADB)/4, val=yMax-(yMax-yMin)*i/4;
+    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="'+gl+'" opacity="0.6"/>';
+    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="'+mut+'" font-size="10" text-anchor="end">'+val.toFixed(mm.dp)+'</text>';
   }
-  // X ticks (4 divisions)
   for(let i=0;i<=4;i++){
-    const x=PADL+i*(W-PADL-PADR)/4;
-    const t=tAxMax*(i/4);
-    grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="#3a3a44" stroke-width="1"/>';
-    grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="#5a5a64" font-size="10" text-anchor="middle">'+t.toFixed(1)+'s</text>';
+    const x=PADL+i*(W-PADL-PADR)/4, t=tAxMax*i/4;
+    grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="'+gl+'"/>';
+    grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="'+mut+'" font-size="10" text-anchor="middle">'+t.toFixed(1)+'s</text>';
   }
-  // Axis labels
-  grid+='<text x="'+(PADL-30)+'" y="'+(PADT-8)+'" fill="#5b8bff" font-size="10" font-weight="600">m/s</text>';
-  grid+='<text x="'+(W-PADR+10)+'" y="'+(PADT-8)+'" fill="#58a6ff" font-size="10" font-weight="600">N</text>';
-
-  // Phase-coloured velocity polyline: orange while above corridor (engaged), muted otherwise
-  const corridorM = (opts.corridor_m != null) ? opts.corridor_m : 0;
-  function segColor(s){ return (s.pos_m != null && s.pos_m >= corridorM && corridorM > 0) ? '#5b8bff' : '#8a6d4a'; }
-  let velSegments='';
-  for(let i=1;i<samples.length;i++){
-    const a=samples[i-1], b=samples[i];
-    const c=segColor(b);
-    velSegments+='<line x1="'+xs(a.t_ms).toFixed(1)+'" y1="'+yV(a.v_mps).toFixed(1)+'" x2="'+xs(b.t_ms).toFixed(1)+'" y2="'+yV(b.v_mps).toFixed(1)+'" stroke="'+c+'" stroke-width="2" stroke-linecap="round"/>';
-  }
-  const pathF=samples.map((s,i)=>(i?'L':'M')+xs(s.t_ms).toFixed(1)+','+yF(s.F_N).toFixed(1)).join(' ');
-
-  // Peak markers (small dots at the peak of each curve)
-  const peakV=samples.reduce((a,b)=>b.v_mps>a.v_mps?b:a, samples[0]);
-  const peakF=samples.reduce((a,b)=>b.F_N>a.F_N?b:a, samples[0]);
-
-  liveChart.innerHTML=
-    grid+
-    '<path d="'+pathF+'" stroke="#58a6ff" stroke-width="1.8" fill="none" opacity="0.9"/>'+
-    velSegments+
-    '<circle cx="'+xs(peakV.t_ms).toFixed(1)+'" cy="'+yV(peakV.v_mps).toFixed(1)+'" r="3.5" fill="#5b8bff"/>'+
-    '<circle cx="'+xs(peakF.t_ms).toFixed(1)+'" cy="'+yF(peakF.F_N).toFixed(1)+'" r="3.5" fill="#58a6ff"/>'+
-    '<text x="'+(xs(peakV.t_ms)+8).toFixed(1)+'" y="'+(yV(peakV.v_mps)-4).toFixed(1)+'" fill="#5b8bff" font-size="10" font-weight="600">'+peakV.v_mps.toFixed(2)+' m/s</text>'+
-    '<text x="'+(xs(peakF.t_ms)+8).toFixed(1)+'" y="'+(yF(peakF.F_N)-4).toFixed(1)+'" fill="#58a6ff" font-size="10" font-weight="600">'+peakF.F_N.toFixed(0)+' N</text>';
+  grid+='<text x="4" y="'+(PADT-8)+'" fill="'+mm.color+'" font-size="10" font-weight="700">'+mm.unit+'</text>';
+  grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="'+mut+'" font-size="10" text-anchor="end">time</text>';
+  if(yMin<0){ const zy=ys(0); grid+='<line x1="'+PADL+'" y1="'+zy.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+zy.toFixed(1)+'" stroke="'+mut+'" opacity="0.4" stroke-dasharray="3 2"/>'; }
+  let d='', area='M'+xs(samples[0].t_ms).toFixed(1)+','+ys(yMin).toFixed(1);
+  samples.forEach((s,i)=>{ const x=xs(s.t_ms).toFixed(1), y=ys(series[i]).toFixed(1); d+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
+  area+=' L'+xs(samples[samples.length-1].t_ms).toFixed(1)+','+ys(yMin).toFixed(1)+' Z';
+  let pi=0; for(let i=1;i<series.length;i++) if(series[i]>series[pi]) pi=i;
+  liveChart.innerHTML=grid
+    +'<defs><linearGradient id="lcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+mm.color+'" stop-opacity="0.22"/><stop offset="1" stop-color="'+mm.color+'" stop-opacity="0"/></linearGradient></defs>'
+    +'<path d="'+area+'" fill="url(#lcg)"/>'
+    +'<path d="'+d+'" fill="none" stroke="'+mm.color+'" stroke-width="2.2" stroke-linejoin="round"/>'
+    +'<circle cx="'+xs(samples[pi].t_ms).toFixed(1)+'" cy="'+ys(series[pi]).toFixed(1)+'" r="3.5" fill="'+mm.color+'"/>'
+    +'<text x="'+Math.min(xs(samples[pi].t_ms)+8, W-72).toFixed(1)+'" y="'+(ys(series[pi])-5).toFixed(1)+'" fill="'+mm.color+'" font-size="10" font-weight="700">'+series[pi].toFixed(mm.dp)+' '+mm.unit+'</text>';
 }
+// Live-chart metric toggle (Speed / Force / Accel) → re-render the last trace
+window._chartMetric='speed';
+(function(){
+  const tog=document.getElementById('chart-metric-toggle'); if(!tog) return;
+  tog.querySelectorAll('.cm-tog').forEach(function(b){ b.addEventListener('click',function(){
+    window._chartMetric=b.getAttribute('data-metric');
+    tog.querySelectorAll('.cm-tog').forEach(function(x){ x.classList.toggle('active', x===b); });
+    if(window._liveChartSamples) renderLiveChart(window._liveChartSamples, window._liveChartOpts||{});
+  }); });
+})();
 function hideChart(){chartEmpty.style.display='block'; liveChart.style.display='none';}
 
 function fmtSec(v){return v==null?'–':(v.toFixed(2)+' s');}
