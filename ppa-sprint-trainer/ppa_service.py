@@ -2119,6 +2119,15 @@ PHASE_C_HTML = """<!doctype html>
     letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card)}
   .steps-table td{padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
   .steps-table tr.flagged td{background:rgba(255,90,95,.08)}
+  /* collapsible + scroll-contained per-step table so it stops hogging the page */
+  .steps-table-details{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+  .steps-table-details > summary{cursor:pointer;list-style:none;padding:10px 12px;font-size:12px;font-weight:700;
+    color:var(--fg);display:flex;align-items:center;gap:8px}
+  .steps-table-details > summary::-webkit-details-marker{display:none}
+  .steps-table-details > summary::before{content:"\203A";color:var(--muted);font-size:16px;line-height:1;transition:transform .15s}
+  .steps-table-details[open] > summary::before{transform:rotate(90deg)}
+  .steps-table-details .st-count{color:var(--muted);font-weight:600;font-size:11px}
+  .steps-table-scroll{max-height:300px;overflow:auto;padding:0 12px 12px}
   .foot-chip{display:inline-block;width:18px;height:18px;line-height:18px;text-align:center;border-radius:5px;
     font-weight:800;font-size:11px;color:#08122a}
   .foot-chip.left{background:var(--warm)} .foot-chip.right{background:var(--cool)}
@@ -2386,9 +2395,12 @@ PHASE_C_HTML = """<!doctype html>
       <svg id="steps-chart" viewBox="0 0 600 250"
            style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px"></svg>
       <div id="steps-empty" class="meta" style="display:none;text-align:center;padding:30px 0">No step data — needs a 1 kHz xlsx import (tether speed/force)</div>
-      <div id="steps-table-wrap" style="display:none;overflow-x:auto;margin-top:12px">
-        <table class="steps-table" id="steps-table"></table>
-      </div>
+      <details id="steps-table-wrap" class="steps-table-details" style="display:none">
+        <summary>Per-step table <span class="st-count" id="st-tbl-count"></span></summary>
+        <div class="steps-table-scroll">
+          <table class="steps-table" id="steps-table"></table>
+        </div>
+      </details>
       <div id="steps-asym" class="steps-asym" style="display:none"></div>
     </div>
 
@@ -3814,6 +3826,7 @@ function renderStepsTab(rep){
       +'<td class="muted">'+((e.flags&&e.flags.length)?e.flags.join(', '):'')+'</td></tr>';
   }
   document.getElementById('steps-table').innerHTML=rows;
+  var _tc=document.getElementById('st-tbl-count'); if(_tc) _tc.textContent='('+events.length+' steps)';
   twrap.style.display='block';
 
   // L/R asymmetry — side-by-side cards with a step selector (1080 style)
