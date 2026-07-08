@@ -3924,12 +3924,39 @@ function niceAxisMax(v){
 
 function renderFVRepTab(rep){
   const svg=document.getElementById('fv-rep-chart');
-  const f0=(rep&&rep.f0_n)?rep.f0_n:null, v0=(rep&&rep.v0_mps)?rep.v0_mps:null;
-  const pmax=(rep&&rep.pmax_w_morin)?rep.pmax_w_morin:(f0&&v0?(f0*v0/4):null);
-  const f0rel=(rep&&rep.f0_rel_nkg)||null, pmaxrel=(rep&&rep.pmax_rel_wkg)||null, slope=(rep&&rep.fv_slope_per_kg);
+  // Self-compute the sprint F-V (ChronoJump/Samozino): fit the POSITION trace to
+  // the integrated mono-exponential v=Vmax(1-e^-Kt) (position is clean where
+  // velocity is noisy), then F = m·a + Ka·v² and linear-regress F on v.
+  const samples=(window._lastSamples||[]).filter(s=>s.pos_m!=null && s.t_ms!=null);
+  const mass=(rep&&rep._meta&&rep._meta.body_mass_kg)||(rep&&rep.body_mass_kg)||(window._athleteProfile&&window._athleteProfile.athlete&&window._athleteProfile.athlete.body_mass_kg)||null;
+  const heightM=((window._athleteProfile&&window._athleteProfile.athlete&&window._athleteProfile.athlete.height_cm)/100)||1.80;
+  let f0=null,v0=null,pmax=null,slope=null,f0rel=null,pmaxrel=null,fitR2=null,source='';
+  if(samples.length>=8 && mass){
+    const t0=samples[0].t_ms, p0=samples[0].pos_m;
+    const t=samples.map(s=>(s.t_ms-t0)/1000), pos=samples.map(s=>s.pos_m-p0);
+    const mp=pos.reduce((a,b)=>a+b,0)/pos.length;
+    // separable fit: pos = Vmax·g(t;K), g = t + (1/K)e^-Kt − 1/K (Vmax linear given K)
+    const fitFor=K=>{ let sg=0,sgg=0; for(let i=0;i<t.length;i++){const g=t[i]+(1/K)*Math.exp(-K*t[i])-1/K; sg+=pos[i]*g; sgg+=g*g;} const Vmax=sgg>0?sg/sgg:0; let sse=0,st=0; for(let i=0;i<t.length;i++){const g=t[i]+(1/K)*Math.exp(-K*t[i])-1/K, r=pos[i]-Vmax*g; sse+=r*r; st+=(pos[i]-mp)*(pos[i]-mp);} return {Vmax:Vmax,sse:sse,r2:st>0?1-sse/st:0}; };
+    let best={sse:Infinity,K:1,Vmax:0,r2:0};
+    for(let K=0.3;K<=3.5;K+=0.02){ const fr=fitFor(K); if(fr.sse<best.sse) best={sse:fr.sse,K:K,Vmax:fr.Vmax,r2:fr.r2}; }
+    for(let K=best.K-0.02;K<=best.K+0.02;K+=0.002){ const fr=fitFor(K); if(fr.sse<best.sse) best={sse:fr.sse,K:K,Vmax:fr.Vmax,r2:fr.r2}; }
+    if(best.Vmax>0 && best.K>0 && best.r2>0.9){
+      const Vmax=best.Vmax, K=best.K;
+      const ro=1.293*(760/760)*273/(273+20);                 // 20°C, 760 mmHg
+      const Ka=0.5*ro*(0.2025*Math.pow(heightM,0.725)*Math.pow(mass,0.425)*0.266)*0.9;
+      let sv=0,sf=0,svv=0,svf=0,n=0; const tmax=t[t.length-1];
+      for(let k=0;k<=60;k++){ const ti=tmax*k/60, v=Vmax*(1-Math.exp(-K*ti)), a=Vmax*K*Math.exp(-K*ti), F=mass*a+Ka*v*v; sv+=v; sf+=F; svv+=v*v; svf+=v*F; n++; }
+      const mv=sv/n, mf=sf/n, b=(svf-n*mv*mf)/((svv-n*mv*mv)||1e-9), a0=mf-b*mv;
+      if(b<0 && a0>0){ f0=a0; v0=-a0/b; pmax=f0*v0/4; f0rel=f0/mass; pmaxrel=pmax/mass; slope=b/mass; fitR2=best.r2; source='computed'; }
+    }
+  }
+  if(!f0 || !v0){   // fall back to the 1080-imported profile
+    f0=(rep&&rep.f0_n)||null; v0=(rep&&rep.v0_mps)||null; pmax=(rep&&rep.pmax_w_morin)||(f0&&v0?f0*v0/4:null);
+    f0rel=(rep&&rep.f0_rel_nkg)||(f0&&mass?f0/mass:null); pmaxrel=(rep&&rep.pmax_rel_wkg)||null; slope=(rep&&rep.fv_slope_per_kg)||null; source=(f0&&v0)?'1080':'';
+  }
   if(!f0 || !v0){
     svg.innerHTML='<text x="300" y="116" fill="#818eae" text-anchor="middle" font-size="12">Force-velocity profile not available for this rep</text>'+
-      '<text x="300" y="136" fill="#56618a" text-anchor="middle" font-size="10">Needs a 1080 xlsx import (or a free-sprint capture) carrying the Morin F0 / V0 / Pmax</text>';
+      '<text x="300" y="136" fill="#56618a" text-anchor="middle" font-size="10">Needs a rep with a position trace + the athlete body mass</text>';
     return;
   }
   const W=600,H=270,PADL=48,PADR=22,PADT=32,PADB=36;
@@ -3962,8 +3989,10 @@ function renderFVRepTab(rep){
 
   let slopeTxt='';
   if(slope!=null) slopeTxt='<text x="'+(W-PADR)+'" y="'+(PADT-8)+'" fill="#818eae" font-size="10" text-anchor="end">F–V slope '+Number(slope).toFixed(3)+' /kg</text>';
+  const srcLabel = source==='computed' ? ('computed · velocity-fit R² '+(fitR2!=null?fitR2.toFixed(3):'')) : (source==='1080'?'from 1080 import':'');
+  const srcTxt = srcLabel ? '<text x="'+(PADL+34)+'" y="'+(PADT-8)+'" fill="#5aa86a" font-size="9">'+srcLabel+'</text>' : '';
 
-  svg.innerHTML=grid+plot+slopeTxt;
+  svg.innerHTML=grid+plot+slopeTxt+srcTxt;
 }
 
 // Tab switching
