@@ -124,14 +124,18 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
     v_smooth = _flt["smooth_speed"]                       # 1.3 Hz
     v_step = _flt["step_speed"]                           # 6 Hz (or raw if fs too low)
     f_step, _ = filt.butter_lowpass(forces_n, filt.STEP_HZ, fs_hz)
-    a_step = filt.derivative(times_s, v_step)             # de-noised acceleration
+    a_smooth = filt.derivative(times_s, v_smooth)        # acceleration ENVELOPE (trend,
+                                                          # not the 6 Hz step-ripple derivative)
     powers_w = [f * v for f, v in zip(forces_n, speeds_mps)]   # raw — for avg/work
     p_step = [f * v for f, v in zip(f_step, v_step)]           # de-noised power
     filter_meta = _flt["meta"]
 
-    # Peaks from the filtered curves (top speed = peak of the smooth curve).
+    # Peaks from the filtered curves. Top speed = peak of the smooth curve; the
+    # 6 Hz curve's peak is a cable slack/snap spike on this hardware (validated
+    # against a real export: 6 Hz peak 10.6 vs device Max V 9.2), so speed peaks
+    # use the smooth curve too. Force/power still use the 6 Hz curve.
     top_v = max(v_smooth); top_v_idx = v_smooth.index(top_v)   # 1080 "Top Speed"
-    peak_v = max(v_step);  peak_v_idx = v_step.index(peak_v)   # de-noised instantaneous
+    peak_v = top_v; peak_v_idx = top_v_idx
     peak_f = max(f_step);  peak_f_idx = f_step.index(peak_f)
     peak_p = max(p_step)
     # Raw peaks retained for audit (what the old raw-max() path reported).
@@ -150,7 +154,7 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
         dt = times_s[i] - times_s[i - 1]
         if dt > 0:
             accs.append((speeds_mps[i] - speeds_mps[i - 1]) / dt)
-    peak_a = max(a_step) if a_step else 0.0
+    peak_a = max(a_smooth) if a_smooth else 0.0
     peak_a_raw = max(accs) if accs else 0.0
     avg_a = sum(accs) / len(accs) if accs else 0.0
 
@@ -191,8 +195,14 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
 
     # ---- 1080-App sprint metric extensions ----
     # Time / distance to peak v + 90% peak v (acceleration profile shape)
-    time_to_max_v_s = times_s[top_v_idx]
-    dist_to_max_v_m = pos_m[top_v_idx]
+    # "Reached max V" = first time the smooth speed comes within 1% of its peak.
+    # argmax wanders across the flat top (validated vs a real export: argmax gave
+    # 5.20 s / 36.5 m, plateau-onset gives ~4.26 s / 28.1 m, matching the device).
+    maxv_onset_idx = next(
+        (i for i, v in enumerate(v_smooth) if v >= 0.99 * top_v), top_v_idx
+    )
+    time_to_max_v_s = times_s[maxv_onset_idx]
+    dist_to_max_v_m = pos_m[maxv_onset_idx]
     time_to_90pct_v_s = None
     dist_to_90pct_v_m = None
     target_90 = 0.90 * top_v
@@ -242,7 +252,7 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
 
     # Time-to-peak metrics (ms)
     ttpf_ms = int(times_s[peak_f_idx] * 1000)
-    ttps_ms = int(times_s[top_v_idx] * 1000)
+    ttps_ms = int(times_s[maxv_onset_idx] * 1000)
 
     # Decimate to ~CHART_SAMPLE_BUDGET points for the UI chart
     step = max(1, n // CHART_SAMPLE_BUDGET)
@@ -270,7 +280,7 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
         "max_extension_m": round(max_extension_m, 3),
         "total_distance_m": round(max_extension_m, 3),
         "total_time_s": round(duration_s, 3),
-        "peak_speed_mps": round(peak_v, 3),       # de-noised instantaneous peak (6 Hz)
+        "peak_speed_mps": round(peak_v, 3),       # = top speed (smooth 1.3 Hz); cable spikes excluded
         "top_speed_mps": round(top_v, 3),         # 1080 "Top Speed" — smooth curve (1.3 Hz)
         "peak_force_n": round(peak_f, 1),
         "peak_power_w": round(peak_p, 1),
