@@ -1511,6 +1511,7 @@ PHASE_C_HTML = """<!doctype html>
         <button class="rd-tab" data-tab="steps">Steps</button>
         <button class="rd-tab" data-tab="splits">Splits</button>
         <button class="rd-tab" data-tab="fv">F · V</button>
+        <button class="rd-tab" data-tab="quadrants">Quadrants</button>
       </div>
     </div>
 
@@ -1625,6 +1626,23 @@ PHASE_C_HTML = """<!doctype html>
       <div class="meta">Force vs velocity, sampled across this rep · one dot per sample, coloured by time</div>
       <svg id="fv-rep-chart" viewBox="0 0 600 240" preserveAspectRatio="none" height="240"
            style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;margin-top:10px"></svg>
+    </div>
+
+    <!-- Quadrants tab -->
+    <div class="rd-panel" data-tab="quadrants" style="display:none">
+      <div class="meta">Where this rep sits — the verdict is the cell it lands in; the split lines are the &ldquo;at standard&rdquo; thresholds for <span id="q-pos">back</span> norms.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:10px" id="q-grid">
+        <div>
+          <div class="meta" style="margin-bottom:4px">Force · Velocity — what to train</div>
+          <svg id="q-fv" viewBox="0 0 300 300" style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px"></svg>
+          <div id="q-fv-verdict" style="margin-top:8px"></div>
+        </div>
+        <div>
+          <div class="meta" style="margin-bottom:4px">Acceleration · Top speed — which phase limits</div>
+          <svg id="q-am" viewBox="0 0 300 300" style="width:100%;background:#0a0a0c;border:1px solid var(--line);border-radius:6px"></svg>
+          <div id="q-am-verdict" style="margin-top:8px"></div>
+        </div>
+      </div>
     </div>
 
     <div class="meta" id="rd-note" style="margin-top:10px;font-size:10px"></div>
@@ -2760,6 +2778,7 @@ function renderTab(name){
   else if(name==='splits') renderSplitsTab(currentRep);
   else if(name==='fv') renderFVRepTab(currentRep);
   else if(name==='insights') renderInsightsTab(currentRep);
+  else if(name==='quadrants') renderQuadrantsTab(currentRep);
   // 'profile' is static DOM, already populated in renderRunDetail
 }
 
@@ -2861,10 +2880,70 @@ async function renderCoachInsights(rep, pos, mod){
   document.getElementById('ins-caveat').textContent = r.framing_caveat || '';
 }
 
+// ---- Quadrants tab: F-V (what to train) + Accel-MaxV (which phase limits) ----
+const QCELLS = {
+  fv: { tr:['Well-rounded','good'], tl:['Force-oriented','muted'],
+        br:['Velocity-oriented','muted'], bl:['Under-powered','warn'] },
+  am: { tr:['Complete','good'], tl:['Accelerator','muted'],
+        br:['Speedster','muted'], bl:['Developing','warn'] },
+};
+const QTINT = { good:'var(--good)', warn:'var(--warn)', muted:'var(--muted)' };
+
+function drawQuad(svgId, verdictId, q, cells){
+  const svg = document.getElementById(svgId); if(!svg) return;
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  const vEl = document.getElementById(verdictId);
+  if(!q){
+    if(vEl) vEl.innerHTML = '<div class="meta">Needs an F-V profile (F0 / V0) for this rep — build it on the F · V tab.</div>';
+    return;
+  }
+  const NS='http://www.w3.org/2000/svg', S=300, M=26, P=S-2*M;
+  const X=nx=>M+nx*P, Y=ny=>S-M-ny*P;
+  const mk=(n,a,txt)=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;svg.appendChild(e);return e;};
+  const cx=X(q.center.x), cy=Y(q.center.y);
+  const box={tl:[M,M,cx-M,cy-M],tr:[cx,M,S-M-cx,cy-M],bl:[M,cy,cx-M,S-M-cy],br:[cx,cy,S-M-cx,S-M-cy]};
+  for(const key of ['tl','tr','bl','br']){
+    const b=box[key], name=cells[key][0], col=QTINT[cells[key][1]], on=(name===q.quadrant);
+    mk('rect',{x:b[0]+1.5,y:b[1]+1.5,width:Math.max(0,b[2]-3),height:Math.max(0,b[3]-3),
+      fill:col,'fill-opacity':on?0.22:0.08,rx:3,stroke:on?col:'none','stroke-width':on?1.5:0});
+    mk('text',{x:b[0]+7,y:b[1]+16,fill:on?col:'#c9cfd8','font-size':11,
+      'font-weight':on?700:500,'font-family':'system-ui,sans-serif'}, name);
+  }
+  mk('rect',{x:M,y:M,width:P,height:P,fill:'none',stroke:'var(--line)','stroke-width':1,rx:4});
+  mk('line',{x1:cx,y1:M,x2:cx,y2:S-M,stroke:'#3a3f47','stroke-dasharray':'3 3'});
+  mk('line',{x1:M,y1:cy,x2:S-M,y2:cy,stroke:'#3a3f47','stroke-dasharray':'3 3'});
+  mk('circle',{cx:X(q.point.x),cy:Y(q.point.y),r:6,fill:'#ffcf5c',stroke:'#0a0a0c','stroke-width':2});
+  mk('text',{x:S-M,y:S-8,fill:'#8a93a3','font-size':9,'text-anchor':'end','font-family':'system-ui'},
+     ((q.x&&q.x.label)||'')+' →');
+  mk('text',{x:10,y:M-9,fill:'#8a93a3','font-size':9,'font-family':'system-ui'},
+     '↑ '+((q.y&&q.y.label)||''));
+  if(vEl){
+    const pres=(q.prescribe||[]).map(p=>'<li>'+p+'</li>').join('');
+    vEl.innerHTML = '<div class="ins-tag">'+q.quadrant+'</div><div class="ins-detail">'+q.verdict+'</div>'+(pres?'<ul>'+pres+'</ul>':'');
+  }
+}
+
+async function renderQuadrantsTab(rep){
+  if(!rep || !rep.rep_idx) return;
+  const pos = (document.getElementById('ins-position')||{value:'back'}).value;
+  const mod = (document.getElementById('ins-modality')||{value:''}).value;
+  const pl = document.getElementById('q-pos'); if(pl) pl.textContent = pos;
+  let r;
+  try{ r = await(await fetch('/api/c/athletic/rep/'+rep.rep_idx+'/insights?position='+pos+(mod?('&planned_modality='+mod):''))).json(); }
+  catch(e){ return; }
+  const q = r.quadrants || {};
+  drawQuad('q-fv','q-fv-verdict', q.fv, QCELLS.fv);
+  drawQuad('q-am','q-am-verdict', q.accel_maxv, QCELLS.am);
+}
+
 // Re-render when position/modality change OR when the view toggle is hit
 ['ins-position','ins-modality'].forEach(id=>{
   const el = document.getElementById(id);
-  if(el) el.addEventListener('change',()=>{ if(activeTab==='insights' && currentRep) renderInsightsTab(currentRep); });
+  if(el) el.addEventListener('change',()=>{
+    if(!currentRep) return;
+    if(activeTab==='insights') renderInsightsTab(currentRep);
+    else if(activeTab==='quadrants') renderQuadrantsTab(currentRep);
+  });
 });
 document.querySelectorAll('.ins-view-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{
