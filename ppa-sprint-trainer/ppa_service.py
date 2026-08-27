@@ -4038,6 +4038,9 @@ function renderLiveChart(samples, opts){
       c.fillText(t, tx, Math.max(py-6*dpr, u.bbox.top+10*dpr));
     }
     c.restore();}}};
+  // Spline interpolation in Smooth mode so a sparse 10 Hz live trace reads as a
+  // smooth curve instead of blocky segments (Raw keeps the true straight lines).
+  const _splinePaths=(window._chartSmooth==='smooth' && uPlot.paths && uPlot.paths.spline)?uPlot.paths.spline():undefined;
   window._liveU=new uPlot({
     width:(liveChart.clientWidth||600), height:Math.max(liveChart.clientHeight||240,180)-30,
     padding:[10,10,0,0], legend:{show:false},
@@ -4052,7 +4055,7 @@ function renderLiveChart(samples, opts){
        values:(u,vs)=>vs.map(x=>x+' '+mm.unit)},
     ],
     series:[{label:(xmode==='dist'?'Pos':'Time')},
-            {label:metric,stroke:mm.color,width:2,fill:hex2rgba(mm.color,0.14)}],
+            {label:metric,stroke:mm.color,width:2,fill:hex2rgba(mm.color,0.14),paths:_splinePaths}],
     cursor:{x:true,y:true},
     plugins:[deco],
   },[xsArr,ysArr],liveChart);
