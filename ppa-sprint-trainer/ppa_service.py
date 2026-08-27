@@ -1954,6 +1954,18 @@ PHASE_C_HTML = """<!doctype html>
   .rep-row .chev{color:var(--muted);font-size:20px;line-height:1}
   .rep-row:hover .chev,.rep-row.active .chev{color:var(--accent)}
   .reps-empty{color:var(--muted);text-align:center;padding:14px;font-size:14px}
+  /* Per-rep badges: norm band + gated F-V validity */
+  .rep-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;font-variant-numeric:normal}
+  .badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:0.06em;
+         text-transform:uppercase;padding:2px 7px;border-radius:99px;line-height:1.5;
+         border:1px solid var(--line-strong);color:var(--muted)}
+  .badge.band-elite{color:#0a1020;background:var(--accent);border-color:var(--accent)}
+  .badge.band-good{color:var(--good);background:rgba(51,209,122,.13);border-color:rgba(51,209,122,.4)}
+  .badge.band-average{color:var(--muted);background:rgba(129,142,174,.12);border-color:var(--line-strong)}
+  .badge.band-below_avg{color:var(--warn);background:rgba(255,148,64,.12);border-color:rgba(255,148,64,.4)}
+  .badge.band-poor{color:var(--bad);background:rgba(255,90,95,.12);border-color:rgba(255,90,95,.4)}
+  .badge.fv-ok{color:var(--good);background:rgba(51,209,122,.10);border-color:rgba(51,209,122,.35)}
+  .badge.fv-rejected{color:var(--bad);background:rgba(255,90,95,.14);border-color:rgba(255,90,95,.5)}
   /* Per-rep annotation controls + set grouping */
   .rep-color,.rep-note{background:transparent;border:0;cursor:pointer;padding:0 3px;
                        line-height:1;color:var(--muted);font-size:13px}
@@ -2577,11 +2589,11 @@ PHASE_C_HTML = """<!doctype html>
       <svg id="cmp-chart" viewBox="0 0 600 140"></svg>
     </div>
     <div class="an-panel" data-an="fv" hidden>
-      <div class="meta">All reps in the current session.</div>
+      <div class="meta">Tether-model fit of each rep's velocity trace — every value passes a physiological validity gate.</div>
       <div class="row">
         <button id="fv-go" class="secondary">Build F-V profile</button>
       </div>
-      <div id="fv-result" class="meta" style="margin-top:8px">Need at least 2 reps at different loads</div>
+      <div id="fv-result" class="meta" style="margin-top:8px">Needs at least 1 rep with a full trace</div>
       <svg id="fv-chart" viewBox="0 0 600 200"></svg>
     </div>
   </div>
@@ -3610,34 +3622,71 @@ function renderCompare(sa,sb,la,lb){
     '<text x="'+(W-6)+'" y="'+(H-4)+'" fill="#56618a" font-size="10" text-anchor="end">'+(tMax/1000).toFixed(1)+' s</text>';
 }
 
-// ---- FV report ----
+// ---- FV report (validated tether model, per-rep validity gate) ----
+function fvRepChips(perRep){
+  return (perRep||[]).map(p=>{
+    const cls=p.valid?'fv-ok':'fv-rejected';
+    const label='R'+p.rep_idx+(p.valid
+      ?(' · '+(p.pmax_rel_wkg!=null?p.pmax_rel_wkg.toFixed(1)+' W/kg':'ok'))
+      :' · rejected');
+    const title=p.valid
+      ?('F0 '+p.f0_rel_nkg+' N/kg · V0 '+p.v0_ms+' m/s · R² '+p.r2)
+      :('rejected: '+((p.rejected||[]).join(', ')||'fit failed'));
+    return '<span class="badge '+cls+'" title="'+title+'">'+label+'</span>';
+  }).join(' ');
+}
 document.getElementById('fv-go').onclick=async()=>{
   const j=await(await fetch('/api/c/athletic/fv')).json();
   const out=document.getElementById('fv-result');
+  const chips=fvRepChips(j.per_rep);
   if(!j.ok){
-    out.innerHTML='<span class="warn">'+j.reason+'</span>';
+    out.innerHTML='<span class="warn">'+(j.reason||'no profile yet')+'</span>'+
+      (chips?'<div class="rep-badges" style="margin-top:6px">'+chips+'</div>':'');
     document.getElementById('fv-chart').innerHTML='';
     return;
   }
-  out.innerHTML='F0 = <b>'+j.F0_n+' N</b> · V0 = <b>'+j.V0_mps+' m/s</b> · Pmax = <b>'+j.Pmax_w+' W</b> · slope '+j.slope+' · R² '+j.r2+' · n='+j.n;
+  const b=j.best;
+  out.innerHTML='Best valid rep '+b.rep_idx+' · F0 <b>'+b.f0_rel_nkg.toFixed(2)+
+    ' N/kg</b> · V0 <b>'+b.v0_ms.toFixed(2)+' m/s</b> · Pmax <b>'+
+    b.pmax_rel_wkg.toFixed(1)+' W/kg</b>'+
+    (b.rfmax_pct!=null?(' · RFmax <b>'+b.rfmax_pct.toFixed(1)+'%</b>'):'')+
+    ' · R² '+(b.r2!=null?b.r2.toFixed(3):'–')+' · '+j.n_valid+'/'+j.n+' reps valid'+
+    '<div class="rep-badges" style="margin-top:6px">'+chips+'</div>';
   renderFV(j);
 };
 function renderFV(j){
   const svg=document.getElementById('fv-chart');
-  const W=600,H=200,PAD=24;
-  const pts=j.points;
-  const vMax=Math.max(j.V0_mps||0,...pts.map(p=>p.v))*1.1||1;
-  const fMax=Math.max(j.F0_n||0,...pts.map(p=>p.F))*1.1||1;
+  const W=600,H=200,PAD=28;
+  const valid=(j.per_rep||[]).filter(p=>p.valid&&p.f0_rel_nkg&&p.v0_ms);
+  if(!valid.length){ svg.innerHTML=''; return; }
+  const b=j.best;
+  const vMax=Math.max(...valid.map(p=>p.v0_ms))*1.1||1;
+  const fMax=Math.max(...valid.map(p=>p.f0_rel_nkg))*1.1||1;
   const xs=v=>PAD+(v/vMax)*(W-2*PAD);
   const ys=f=>H-PAD-(f/fMax)*(H-2*PAD);
-  const line='M'+xs(0).toFixed(1)+','+ys(j.F0_n).toFixed(1)+' L'+xs(j.V0_mps).toFixed(1)+','+ys(0).toFixed(1);
-  const dots=pts.map(p=>'<circle cx="'+xs(p.v).toFixed(1)+'" cy="'+ys(p.F).toFixed(1)+'" r="4" fill="#5b8bff"/>').join('');
+  // every valid rep as a faint modelled line; the best rep emphasized
+  let lines='';
+  valid.forEach(p=>{
+    if(p.rep_idx===b.rep_idx) return;
+    lines+='<line x1="'+xs(0).toFixed(1)+'" y1="'+ys(p.f0_rel_nkg).toFixed(1)+
+      '" x2="'+xs(p.v0_ms).toFixed(1)+'" y2="'+ys(0).toFixed(1)+
+      '" stroke="#33436b" stroke-width="1.5"/>';
+  });
+  const bl='M'+xs(0).toFixed(1)+','+ys(b.f0_rel_nkg).toFixed(1)+
+    ' L'+xs(b.v0_ms).toFixed(1)+','+ys(0).toFixed(1);
+  const px=xs(b.v0_ms/2), py=ys(b.f0_rel_nkg/2);
   svg.innerHTML=
     '<line x1="'+PAD+'" y1="'+(H-PAD)+'" x2="'+(W-PAD)+'" y2="'+(H-PAD)+'" stroke="#33436b"/>'+
     '<line x1="'+PAD+'" y1="'+PAD+'" x2="'+PAD+'" y2="'+(H-PAD)+'" stroke="#33436b"/>'+
-    '<path d="'+line+'" stroke="#58a6ff" stroke-width="2" fill="none"/>'+
-    dots+
-    '<text x="'+PAD+'" y="14" fill="#56618a" font-size="10">F (N)</text>'+
+    lines+
+    '<path d="'+bl+'" stroke="#5b8bff" stroke-width="2.5" fill="none"/>'+
+    '<circle cx="'+xs(0).toFixed(1)+'" cy="'+ys(b.f0_rel_nkg).toFixed(1)+'" r="4" fill="#5b8bff"/>'+
+    '<circle cx="'+xs(b.v0_ms).toFixed(1)+'" cy="'+ys(0).toFixed(1)+'" r="4" fill="#5b8bff"/>'+
+    '<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="5" fill="none" stroke="#d4a13a" stroke-width="2"/>'+
+    '<text x="'+(xs(0)+8).toFixed(1)+'" y="'+(ys(b.f0_rel_nkg)+4).toFixed(1)+'" fill="#5b8bff" font-size="11" font-weight="700">F0 '+b.f0_rel_nkg.toFixed(1)+' N/kg</text>'+
+    '<text x="'+(xs(b.v0_ms)-6).toFixed(1)+'" y="'+(ys(0)-8).toFixed(1)+'" fill="#5b8bff" font-size="11" font-weight="700" text-anchor="end">V0 '+b.v0_ms.toFixed(2)+' m/s</text>'+
+    '<text x="'+(px+10).toFixed(1)+'" y="'+(py+4).toFixed(1)+'" fill="#d4a13a" font-size="11" font-weight="700">Pmax '+b.pmax_rel_wkg.toFixed(1)+' W/kg</text>'+
+    '<text x="'+PAD+'" y="14" fill="#56618a" font-size="10">F (N/kg)</text>'+
     '<text x="'+(W-PAD)+'" y="'+(H-6)+'" fill="#56618a" font-size="10" text-anchor="end">v (m/s)</text>';
 }
 
@@ -4240,6 +4289,26 @@ async function patchRepAnnotation(idx, body){
     return true;
   }catch(e){ alert('Network error'); return false; }
 }
+// Per-rep badges: norm band (vs reference cohort) + gated F-V validity.
+// fv.valid=false renders a red "F-V rejected" flag — the fit failed the
+// physiological validity gate, so its numbers are withheld, not shown.
+function repBadgesHtml(r){
+  let out='';
+  const ts=r.norms&&r.norms.top_speed;
+  if(ts&&ts.band) out+='<span class="badge band-'+ts.band+'" title="Top speed vs reference cohort">'+
+      ts.band.replace('_',' ')+' · P'+ts.percentile+'</span>';
+  if(r.fv){
+    if(r.fv.valid){
+      out+='<span class="badge fv-ok" title="Tether F-V fit passed the physiological validity gate">F-V '+
+          (r.fv.pmax_rel_wkg!=null?r.fv.pmax_rel_wkg.toFixed(1)+' W/kg':'ok')+'</span>';
+    }else{
+      const why=(r.fv.rejected||[]).join(', ')||'fit failed';
+      out+='<span class="badge fv-rejected" title="F-V fit rejected: '+repEsc(why)+'">F-V rejected</span>';
+    }
+  }
+  return out?('<div class="rep-badges">'+out+'</div>'):'';
+}
+
 function renderRepsList(reps){
   if(!reps.length){
     repsList.innerHTML='<div class="reps-empty">No reps yet — start a drill to log reps here.</div>';
@@ -4281,6 +4350,7 @@ function renderRepsList(reps){
         '<span class="sep">·</span>'+
         (r.duration_s||0).toFixed(2)+' s'+
         (r.comment?('<div class="rep-comment">'+repEsc(r.comment)+'</div>'):'')+
+        repBadgesHtml(r)+
       '</div>'+
       '<div style="display:flex;gap:5px;align-items:center">'+
         '<button class="rep-color" data-rep="'+r.rep_idx+'" title="Colour tag" '+
@@ -4823,7 +4893,8 @@ async function refresh(){
   if(autoInd) autoInd.style.display=(c.config&&c.config.auto_stop_enabled)?'inline-block':'none';
 
   const armed=c.phase_c==='armed';
-  const repActive=c.athletic_phase==='resist'||c.athletic_phase==='return';
+  const ph=c.athletic_mode?c.athletic_phase:'off';
+  const repActive=ph==='resist'||ph==='return';
 
   // Single phase-aware primary action — Arm rig → Start/Next rep → Stop → Reset
   if(primaryBtn){
