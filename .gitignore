@@ -9,3 +9,8 @@ C:\Users\trigo\
 _svc_*.log
 _exports/
 ppa-sprint-trainer/_exports/
+
+# service stdout/stderr run logs
+*.log
+svc.out.txt
+svc.err.txt
