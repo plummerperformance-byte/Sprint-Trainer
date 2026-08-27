@@ -125,7 +125,8 @@ _AM_PRESCRIBE = {
 
 def accel_maxv_quadrant(rep: dict, position_group: str = "back") -> Optional[dict]:
     pg = NORMS.get(position_group, NORMS["back"])
-    max_v = rep.get("max_v_ms") or rep.get("top_speed_mps")
+    max_v = (rep.get("max_v_ms") or rep.get("top_speed_mps")
+             or rep.get("peak_speed_mps"))  # DB/hydrated reps use peak_speed_mps
     tau = rep.get("tau_s")
     x = _axis("max_v_ms", "Top speed (Vmax)", "m/s", max_v, pg["max_v_ms"])
     if x is None or tau is None:
