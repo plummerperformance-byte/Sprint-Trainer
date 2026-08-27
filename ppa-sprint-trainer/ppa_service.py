@@ -2179,6 +2179,7 @@ PHASE_C_HTML = """<!doctype html>
   .phase-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--state)}
   .hero-speed{margin:2px 0}
   .hero-chart{position:relative}
+  #live-chart{overflow:hidden}
   /* live-chart metric toggle (Speed / Force / Accel) — like the Current/Peak/Avg toggle */
   .chart-metric-toggle{position:absolute;top:6px;right:6px;z-index:3;display:inline-flex;gap:2px;padding:3px;
     background:rgba(4,8,20,.6);border:1px solid var(--line);border-radius:8px;backdrop-filter:blur(4px)}
@@ -2460,11 +2461,11 @@ PHASE_C_HTML = """<!doctype html>
           <button type="button" class="cx-tog" data-x="dist">Dist</button>
         </div>
         <div class="chart-s-toggle" id="chart-s-toggle" role="group" aria-label="Chart smoothing" style="display:none">
-          <button type="button" class="cs-tog active" data-s="raw">Raw</button>
-          <button type="button" class="cs-tog" data-s="smooth">Smooth</button>
+          <button type="button" class="cs-tog" data-s="raw">Raw</button>
+          <button type="button" class="cs-tog active" data-s="smooth">Smooth</button>
         </div>
         <div class="chart-empty" id="chart-empty">Start a drill to see the live trace</div>
-        <svg id="live-chart" viewBox="0 0 600 240" preserveAspectRatio="none" style="display:none"></svg>
+        <div id="live-chart" style="display:none"></div>
         <div class="mode-intro" id="mode-intro" hidden>
           <div class="mi-title" id="mi-title"></div>
           <div class="mi-diagram" id="mi-diagram"></div>
@@ -3973,7 +3974,6 @@ function renderLiveChart(samples, opts){
   if(cxTog) cxTog.style.display=hasPos?'inline-flex':'none';
   const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const metric=window._chartMetric||'speed';
-  const W=600,H=240,PADL=48,PADR=18,PADT=24,PADB=26;
   // APEX-style x-axis: plot the metric over time OR over distance (position)
   const xmode=(window._chartXAxis==='dist' && hasPos)?'dist':'time';
   const xv=s=>xmode==='dist'?s.pos_m:s.t_ms;
@@ -3996,44 +3996,71 @@ function renderLiveChart(samples, opts){
       for(let j=Math.max(0,i-4);j<=Math.min(series.length-1,i+4);j++){a+=series[j];c++;}
       return a/c; });
   }
-  const yMin=Math.min(0,...series);
-  const niceMax=v=>{const e=Math.pow(10,Math.floor(Math.log10(Math.max(v,1e-3))));const m=v/e;
-    const n=m<=1?1:m<=1.2?1.2:m<=1.5?1.5:m<=2?2:m<=2.5?2.5:m<=3?3:m<=4?4:m<=5?5:m<=6?6:m<=8?8:10;return e*n;};
-  const yMax=niceMax(Math.max(...series,0.1)*1.08);
-  const gl=cssv('--line')||'#243157', mut=cssv('--ink-3')||'#818eae';
-  const xs=x=>PADL+(x/xMax)*(W-PADL-PADR);
-  const ys=v=>H-PADB-((v-yMin)/((yMax-yMin)||1))*(H-PADT-PADB);
-  let grid='';
-  for(let i=0;i<=4;i++){
-    const y=PADT+i*(H-PADT-PADB)/4, val=yMax-(yMax-yMin)*i/4;
-    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="'+gl+'" opacity="0.6"/>';
-    grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="'+mut+'" font-size="10" text-anchor="end">'+val.toFixed(mm.dp)+'</text>';
-  }
-  for(let i=0;i<=4;i++){
-    const x=PADL+i*(W-PADL-PADR)/4, xa=xAxMax*i/4;
-    grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="'+gl+'"/>';
-    grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="'+mut+'" font-size="10" text-anchor="middle">'+xa.toFixed(xmode==='dist'?0:1)+xUnit+'</text>';
-  }
-  grid+='<text x="4" y="'+(PADT-8)+'" fill="'+mm.color+'" font-size="10" font-weight="700">'+mm.unit+'</text>';
-  grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="'+mut+'" font-size="10" text-anchor="end">'+(xmode==='dist'?'distance':'time')+'</text>';
-  if(yMin<0){ const zy=ys(0); grid+='<line x1="'+PADL+'" y1="'+zy.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+zy.toFixed(1)+'" stroke="'+mut+'" opacity="0.4" stroke-dasharray="3 2"/>'; }
-  let d='', area='M'+xs(xv(samples[0])).toFixed(1)+','+ys(yMin).toFixed(1);
-  samples.forEach((s,i)=>{ const x=xs(xv(s)).toFixed(1), y=ys(series[i]).toFixed(1); d+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
-  area+=' L'+xs(xv(samples[samples.length-1])).toFixed(1)+','+ys(yMin).toFixed(1)+' Z';
+  // ---- uPlot hero chart: crisp canvas + crosshair + drag-to-zoom (the same
+  // engine as the rep-detail trace, which reads far better than the old
+  // stretched-SVG plot). Peak marker + dashed RMS baseline drawn on top.
+  const hex2rgba=(h,a)=>{const m=/^#?([0-9a-f]{6})$/i.exec((h||'').trim());
+    if(!m) return 'rgba(91,139,255,'+a+')';
+    const n=parseInt(m[1],16);
+    return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';};
+  const xsArr=[],ysArr=[]; let mxx=-1e9;
+  samples.forEach((s,i)=>{ let x=xmode==='dist'?(s.pos_m||0):(s.t_ms/1000);
+    if(x<=mxx) x=mxx+1e-4; mxx=x; xsArr.push(x); ysArr.push(series[i]); });
   let pi=0; for(let i=1;i<series.length;i++) if(series[i]>series[pi]) pi=i;
-  // Peak-vs-RMS (APEX): dashed RMS baseline beside the peak marker
   const rms=Math.sqrt(series.reduce((a,v)=>a+v*v,0)/series.length);
-  const ryv=ys(rms);
-  const rmsMk=(isFinite(ryv)&&rms>0)?('<line x1="'+PADL+'" y1="'+ryv.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+ryv.toFixed(1)+'" stroke="'+mm.color+'" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>'
-    +'<text x="'+(PADL+4)+'" y="'+(ryv-4).toFixed(1)+'" fill="'+mm.color+'" font-size="9" font-weight="700" opacity="0.9">RMS '+rms.toFixed(mm.dp)+'</text>'):'';
-  const pkx=xs(xv(samples[pi]));
-  liveChart.innerHTML=grid
-    +'<defs><linearGradient id="lcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+mm.color+'" stop-opacity="0.22"/><stop offset="1" stop-color="'+mm.color+'" stop-opacity="0"/></linearGradient></defs>'
-    +'<path d="'+area+'" fill="url(#lcg)"/>'
-    +'<path d="'+d+'" fill="none" stroke="'+mm.color+'" stroke-width="2.2" stroke-linejoin="round"/>'
-    +rmsMk
-    +'<circle cx="'+pkx.toFixed(1)+'" cy="'+ys(series[pi]).toFixed(1)+'" r="3.5" fill="'+mm.color+'"/>'
-    +'<text x="'+Math.min(pkx+8, W-72).toFixed(1)+'" y="'+(ys(series[pi])-5).toFixed(1)+'" fill="'+mm.color+'" font-size="10" font-weight="700">'+series[pi].toFixed(mm.dp)+' '+mm.unit+'</text>';
+  window._liveUMeta={rms:rms,px:xsArr[pi],py:series[pi],color:mm.color,unit:mm.unit,dp:mm.dp};
+  const gl=cssv('--line')||'#243157', mut=cssv('--ink-faint')||'#818eae';
+  const sig=metric+'|'+xmode+'|'+(window._chartSmooth||'raw');
+  if(window._liveU && window._liveUSig===sig){
+    window._liveU.setData([xsArr,ysArr]);   // live tick — cheap update, zoom-safe path
+    return;
+  }
+  if(window._liveU){ try{window._liveU.destroy();}catch(e){} window._liveU=null; }
+  liveChart.innerHTML='';
+  if(typeof uPlot==='undefined'){ liveChart.textContent='chart library missing'; return; }
+  const dpr=(uPlot.pxRatio||window.devicePixelRatio||1);
+  const deco={hooks:{draw:u=>{const M=window._liveUMeta; if(!M) return; const c=u.ctx; c.save();
+    if(M.rms>0){ const y=u.valToPos(M.rms,'y',true);
+      if(isFinite(y)&&y>u.bbox.top&&y<u.bbox.top+u.bbox.height){
+        c.strokeStyle=M.color; c.globalAlpha=0.5; c.setLineDash([5*dpr,4*dpr]); c.lineWidth=1*dpr;
+        c.beginPath(); c.moveTo(u.bbox.left,y); c.lineTo(u.bbox.left+u.bbox.width,y); c.stroke();
+        c.setLineDash([]); c.globalAlpha=0.95; c.fillStyle=M.color;
+        c.font=(9*dpr)+'px system-ui,sans-serif';
+        c.fillText('RMS '+M.rms.toFixed(M.dp), u.bbox.left+5*dpr, y-4*dpr);
+      } }
+    const px=u.valToPos(M.px,'x',true), py=u.valToPos(M.py,'y',true);
+    if(isFinite(px)&&isFinite(py)){
+      c.globalAlpha=1; c.fillStyle=M.color;
+      c.beginPath(); c.arc(px,py,3.5*dpr,0,7); c.fill();
+      c.font='700 '+(10*dpr)+'px system-ui,sans-serif';
+      const t=M.py.toFixed(M.dp)+' '+M.unit;
+      const tx=Math.min(px+7*dpr, u.bbox.left+u.bbox.width-c.measureText(t).width-4*dpr);
+      c.fillText(t, tx, Math.max(py-6*dpr, u.bbox.top+10*dpr));
+    }
+    c.restore();}}};
+  window._liveU=new uPlot({
+    width:(liveChart.clientWidth||600), height:Math.max(liveChart.clientHeight||240,180)-30,
+    padding:[10,10,0,0], legend:{show:false},
+    scales:{x:{time:false},
+            y:{range:(u,mn,mxv)=>[Math.min(0,mn||0),(mxv||1)*1.1]}},
+    axes:[
+      {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},
+       font:(11*dpr)+'px system-ui,sans-serif',
+       values:(u,vs)=>vs.map(x=>x+(xmode==='dist'?' m':' s'))},
+      {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},size:54,
+       font:(11*dpr)+'px system-ui,sans-serif',
+       values:(u,vs)=>vs.map(x=>x+' '+mm.unit)},
+    ],
+    series:[{label:(xmode==='dist'?'Pos':'Time')},
+            {label:metric,stroke:mm.color,width:2,fill:hex2rgba(mm.color,0.14)}],
+    cursor:{x:true,y:true},
+    plugins:[deco],
+  },[xsArr,ysArr],liveChart);
+  window._liveUSig=sig;
+  if(!window._liveUResizeHooked){ window._liveUResizeHooked=true;
+    window.addEventListener('resize',function(){
+      if(window._liveU&&liveChart.clientWidth)
+        window._liveU.setSize({width:liveChart.clientWidth,height:Math.max(liveChart.clientHeight||240,180)-30}); }); }
 }
 // Live-chart metric toggle (Speed / Force / Accel) → re-render the last trace
 window._chartMetric='speed';
@@ -4046,7 +4073,7 @@ window._chartMetric='speed';
   }); });
 })();
 // Live-chart smoothing toggle (Raw / Smooth) → re-render the last trace
-window._chartSmooth='raw';
+window._chartSmooth='smooth';   // smooth display by default — analysis always runs on raw
 (function(){
   const tog=document.getElementById('chart-s-toggle'); if(!tog) return;
   tog.querySelectorAll('.cs-tog').forEach(function(b){ b.addEventListener('click',function(){
@@ -4078,7 +4105,11 @@ function renderRunDetail(rep){
   if(!rep){ card.style.display='none'; return; }
   card.style.display='block';
   currentRep = rep;
-  document.getElementById('rd-rep-label').textContent='Rep '+(rep.rep_idx||'?');
+  const _lr=window._lastReps||[];
+  const _isLatest=_lr.length&&_lr[_lr.length-1].rep_idx===rep.rep_idx;
+  const _pinned=window._selectedRepIdx!=null&&window._selectedRepIdx===rep.rep_idx;
+  document.getElementById('rd-rep-label').innerHTML='<b style="color:var(--accent)">Rep '+(rep.rep_idx||'?')+'</b>'+
+    (_pinned?' · pinned — tap its row to unpin':(_isLatest?' · latest':''));
 
   // Profile tab fields
   document.getElementById('rd-peak-v').textContent=(rep.peak_speed_mps||0).toFixed(2)+' m/s';
@@ -4927,6 +4958,12 @@ function renderRepsList(reps){
   repsList.querySelectorAll('.rep-row').forEach(row=>{
     const activate=async()=>{
       const idx=parseInt(row.getAttribute('data-rep'),10);
+      // Pin this rep as the run feeding the detail card. Tapping the pinned
+      // rep again (or the newest rep) unpins and follows live again.
+      const lastArr=window._lastReps||[];
+      const latestIdx=lastArr.length?lastArr[lastArr.length-1].rep_idx:null;
+      window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
+      window._lastSamplesRepIdx=idx;
       const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
       cachedSamples=sj.samples||[];
       window._lastSamples = cachedSamples;
@@ -5570,17 +5607,30 @@ async function refresh(){
   renderRepsList(reps);
   populateRepSelects(reps);
 
-  // Cache reps for click-to-render lookup; auto-show latest rep's run detail
+  // Cache reps for click-to-render lookup. Run detail (profile / steps /
+  // F-V / quadrants) FOLLOWS THE NEWEST REP unless the coach pinned one by
+  // tapping its row — the header shows "latest" vs "pinned" so it's always
+  // clear which run is feeding the analysis.
   window._lastReps = reps;
   if(reps.length){
     const latest = reps[reps.length-1];
-    renderRunDetail(latest);
-    // Lazy-load samples for the latest rep so Steps/F-V tabs work without click
-    if(!window._lastSamples || window._lastSamplesRepIdx !== latest.rep_idx){
+    let shown = latest;
+    if(window._selectedRepIdx!=null){
+      const pin = reps.find(r=>r.rep_idx===window._selectedRepIdx);
+      if(pin) shown = pin; else window._selectedRepIdx = null;
+    }
+    repsList.setAttribute('data-active-rep', String(shown.rep_idx));
+    repsList.querySelectorAll('.rep-row').forEach(x=>
+      x.classList.toggle('active', x.getAttribute('data-rep')===String(shown.rep_idx)));
+    renderRunDetail(shown);
+    // Lazy-load samples for the shown rep so Steps/F-V/chart work without click
+    if(!window._lastSamples || window._lastSamplesRepIdx !== shown.rep_idx){
       try{
-        const sj = await(await fetch('/api/c/athletic/rep/'+latest.rep_idx+'/samples')).json();
+        const sj = await(await fetch('/api/c/athletic/rep/'+shown.rep_idx+'/samples')).json();
         window._lastSamples = sj.samples||[];
-        window._lastSamplesRepIdx = latest.rep_idx;
+        window._lastSamplesRepIdx = shown.rep_idx;
+        cachedSamples = window._lastSamples;
+        renderLiveChart(cachedSamples, {corridor_m: lastCorridor});
         renderTab(activeTab);  // re-render in case Steps/F-V is open
       }catch(e){}
     }
