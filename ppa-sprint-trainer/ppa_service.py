@@ -1463,7 +1463,8 @@ let lastRepCount=0;
 
 function showLastRep(rep){
   if(!rep)return;
-  lastRep.innerHTML='Last rep · <b>'+(rep.peak_speed_mps||0).toFixed(2)+' m/s</b> · <b>'+(rep.peak_power_w||0).toFixed(0)+' W</b>';
+  lastRep.innerHTML='Last rep · <b>'+(rep.peak_speed_mps||0).toFixed(2)+' m/s</b> · <b>'+(rep.peak_power_w||0).toFixed(0)+' W</b>'+
+    (rep.load_kg!=null?' · <b class="load">'+rep.load_kg+' kg</b>':'');
   lastRep.classList.add('show');
   if(lastRepTimer)clearTimeout(lastRepTimer);
   lastRepTimer=setTimeout(()=>lastRep.classList.remove('show'),3000);
@@ -2000,6 +2001,9 @@ PHASE_C_HTML = """<!doctype html>
   .rep-row.active{border-left-color:var(--accent);background:rgba(91,139,255,0.05)}
   .rep-row .num{color:var(--muted);font-weight:600}
   .rep-row .stats{color:var(--fg);font-weight:500}
+  .rep-row .load-tag{display:inline-block;font-weight:800;font-size:11px;color:var(--accent);
+    background:rgba(91,139,255,.13);border:1px solid var(--line-strong);border-radius:6px;
+    padding:1px 7px;margin-right:8px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
   .rep-row .stats .sep{color:#3a3a44;margin:0 8px}
   .rep-row .chev{color:var(--muted);font-size:20px;line-height:1}
   .rep-row:hover .chev,.rep-row.active .chev{color:var(--accent)}
@@ -4919,6 +4923,7 @@ function renderRepsList(reps){
         'aria-label="Show detail for rep '+r.rep_idx+'">'+
       '<div class="num">Rep '+r.rep_idx+(isInvalid?'<span class="invalid-tag">invalid</span>':'')+'</div>'+
       '<div class="stats">'+
+        (r.load_kg!=null?'<span class="load-tag">'+r.load_kg+' kg</span>':'')+
         (r.peak_speed_mps||0).toFixed(2)+' m/s'+
         '<span class="sep">·</span>'+
         (r.peak_force_n||0).toFixed(0)+' N'+
