@@ -37,6 +37,8 @@ import statistics
 import urllib.request
 from pathlib import Path
 
+import sprint_model
+
 from load_1080_xlsx import (
     CHART_SAMPLE_BUDGET,
     SPLIT_LENGTH_M,
@@ -230,6 +232,34 @@ def build_rep(path: Path, rep_idx: int, start_foot: str = "left",
     ttpf_ms = int(times_s[peak_f_idx] * 1000)
     ttps_ms = int(times_s[peak_v_idx] * 1000)
 
+    # Gated single-rep F-V (tether model) from the FULL-RESOLUTION trace —
+    # the same fit + validity gate the live path runs, so a direct-DB import
+    # carries the identical F-V columns a --post import would get. Relative
+    # fields (F0_rel/V0/Pmax_rel/slope/tau) are mass-invariant; absolute
+    # F0/Pmax are only computed when a real body mass was given.
+    fv_fields = {"f0_n": None, "f0_rel_nkg": None, "v0_mps": None,
+                 "pmax_w_morin": None, "pmax_rel_wkg": None,
+                 "fv_slope_per_kg": None, "tau_s": None}
+    try:
+        prof = sprint_model.profile_from_trace(
+            times_s[:peak_v_idx + 1], pos_m[:peak_v_idx + 1],
+            speeds_mps[:peak_v_idx + 1],
+            bodymass=body_mass_kg or 75.0, resisted=True)
+        if prof.get("ok") and prof.get("valid"):
+            fvp, m = prof["fvp"], prof["model"]
+            fv_fields.update(
+                f0_rel_nkg=round(fvp["F0_rel"], 2),
+                v0_mps=round(fvp["V0"], 2),
+                pmax_rel_wkg=round(fvp["Pmax_rel"], 2),
+                fv_slope_per_kg=(round(fvp["FV_slope"], 3)
+                                 if fvp.get("FV_slope") else None),
+                tau_s=round(m["TAU"], 3))
+            if body_mass_kg:
+                fv_fields["f0_n"] = round(fvp["F0_rel"] * body_mass_kg, 1)
+                fv_fields["pmax_w_morin"] = round(fvp["Pmax_rel"] * body_mass_kg, 1)
+    except Exception:
+        pass  # a failed fit imports as NULLs, never as a wrong number
+
     step = max(1, n // CHART_SAMPLE_BUDGET)
     samples = []
     for i in range(0, n, step):
@@ -286,10 +316,8 @@ def build_rep(path: Path, rep_idx: int, start_foot: str = "left",
         **step_aggs,
         "asymmetry": asymmetry,
         "samples": samples,
-        # Morin F-V: not derivable from a single resisted rep — needs the
-        # multi-load session-level fit (see session summary), left None here.
-        "f0_n": None, "f0_rel_nkg": None, "v0_mps": None,
-        "pmax_w_morin": None, "pmax_rel_wkg": None, "fv_slope_per_kg": None,
+        # Gated tether-model F-V (NULLs when the fit failed the gate).
+        **fv_fields,
         "_meta": {
             "source": "hmi_raw_csv",
             "file": path.name,
