@@ -2158,6 +2158,11 @@ PHASE_C_HTML = """<!doctype html>
   .cm-tog:hover{color:var(--fg)}
   .cm-tog.active{color:#08122a}
   /* live-chart x-axis toggle (Time / Distance) — APEX-style dual-axis view */
+  .chart-s-toggle{position:absolute;bottom:6px;right:6px;z-index:3;display:inline-flex;gap:2px;padding:3px;
+    background:rgba(4,8,20,.6);border:1px solid var(--line);border-radius:8px;backdrop-filter:blur(4px)}
+  .cs-tog{padding:3px 9px;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    background:transparent;color:var(--muted);border:0;border-radius:6px;cursor:pointer;min-height:22px}
+  .cs-tog.active{background:var(--accent-soft);color:var(--accent)}
   .chart-x-toggle{position:absolute;top:6px;left:6px;z-index:3;display:inline-flex;gap:2px;padding:3px;
     background:rgba(4,8,20,.6);border:1px solid var(--line);border-radius:8px;backdrop-filter:blur(4px)}
   .cx-tog{padding:4px 10px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
@@ -2399,12 +2404,17 @@ PHASE_C_HTML = """<!doctype html>
       <div class="hero-chart">
         <div class="chart-metric-toggle" id="chart-metric-toggle" role="group" aria-label="Chart metric" style="display:none">
           <button type="button" class="cm-tog active" data-metric="speed">Speed</button>
+          <button type="button" class="cm-tog" data-metric="power">Power</button>
           <button type="button" class="cm-tog" data-metric="force">Force</button>
           <button type="button" class="cm-tog" data-metric="accel">Accel</button>
         </div>
         <div class="chart-x-toggle" id="chart-x-toggle" role="group" aria-label="Chart x-axis" style="display:none">
           <button type="button" class="cx-tog active" data-x="time">Time</button>
           <button type="button" class="cx-tog" data-x="dist">Dist</button>
+        </div>
+        <div class="chart-s-toggle" id="chart-s-toggle" role="group" aria-label="Chart smoothing" style="display:none">
+          <button type="button" class="cs-tog active" data-s="raw">Raw</button>
+          <button type="button" class="cs-tog" data-s="smooth">Smooth</button>
         </div>
         <div class="chart-empty" id="chart-empty">Start a drill to see the live trace</div>
         <svg id="live-chart" viewBox="0 0 600 240" preserveAspectRatio="none" style="display:none"></svg>
@@ -2574,7 +2584,8 @@ PHASE_C_HTML = """<!doctype html>
 
     <!-- F-V tab -->
     <div class="rd-panel" data-tab="fv" style="display:none">
-      <div class="meta">Sprint force–velocity profile · F0 / V0 / Pmax from the velocity-curve method (Morin), imported from the 1080</div>
+      <div class="meta">Sprint force–velocity profile · tether-model fit of this rep's trace, validity-gated</div>
+      <div id="fv-rep-gate" class="meta" style="margin-top:8px"></div>
       <svg id="fv-rep-chart" viewBox="0 0 600 270"
            style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px"></svg>
     </div>
@@ -3717,11 +3728,12 @@ function renderLiveChart(samples, opts){
   opts = opts || {};
   const cmTog=document.getElementById('chart-metric-toggle');
   const cxTog=document.getElementById('chart-x-toggle');
+  const csTog=document.getElementById('chart-s-toggle');
   if(samples && samples.length>=2){ window._liveChartSamples=samples; window._liveChartOpts=opts; }
   if(!samples||samples.length<2){
-    chartEmpty.style.display='block'; liveChart.style.display='none'; if(cmTog) cmTog.style.display='none'; if(cxTog) cxTog.style.display='none'; return;
+    chartEmpty.style.display='block'; liveChart.style.display='none'; if(cmTog) cmTog.style.display='none'; if(cxTog) cxTog.style.display='none'; if(csTog) csTog.style.display='none'; return;
   }
-  chartEmpty.style.display='none'; liveChart.style.display='block'; if(cmTog) cmTog.style.display='inline-flex';
+  chartEmpty.style.display='none'; liveChart.style.display='block'; if(cmTog) cmTog.style.display='inline-flex'; if(csTog) csTog.style.display='inline-flex';
   const hasPos=samples.every(s=>s.pos_m!=null);
   if(cxTog) cxTog.style.display=hasPos?'inline-flex':'none';
   const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -3736,10 +3748,19 @@ function renderLiveChart(samples, opts){
   const accArr=accRaw.map((v,i)=>{ let a=0,c=0; for(let j=Math.max(0,i-4);j<=Math.min(accRaw.length-1,i+4);j++){a+=accRaw[j];c++;} return a/c; });
   const CFG={
     speed:{arr:samples.map(s=>s.v_mps), color:cssv('--warm')||'#ff9440', unit:'m/s', dp:1},
+    power:{arr:samples.map(s=>(s.P_W!=null?s.P_W:((s.F_N||0)*(s.v_mps||0)))), color:'#d4a13a', unit:'W', dp:0},
     force:{arr:samples.map(s=>s.F_N||0), color:cssv('--accent')||'#5b8bff', unit:'N', dp:0},
     accel:{arr:accArr, color:cssv('--cool')||'#2bd0e2', unit:'m/s²', dp:1},
   };
-  const mm=CFG[metric]||CFG.speed, series=mm.arr;
+  const mm=CFG[metric]||CFG.speed;
+  let series=mm.arr;
+  // Smooth/Raw toggle: centred moving average over ±4 samples (accel is
+  // already smoothed at source, so leave it alone).
+  if(window._chartSmooth==='smooth' && metric!=='accel'){
+    series=series.map((v,i)=>{ let a=0,c=0;
+      for(let j=Math.max(0,i-4);j<=Math.min(series.length-1,i+4);j++){a+=series[j];c++;}
+      return a/c; });
+  }
   const yMin=Math.min(0,...series);
   const niceMax=v=>{const e=Math.pow(10,Math.floor(Math.log10(Math.max(v,1e-3))));const m=v/e;
     const n=m<=1?1:m<=1.2?1.2:m<=1.5?1.5:m<=2?2:m<=2.5?2.5:m<=3?3:m<=4?4:m<=5?5:m<=6?6:m<=8?8:10;return e*n;};
@@ -3786,6 +3807,16 @@ window._chartMetric='speed';
   tog.querySelectorAll('.cm-tog').forEach(function(b){ b.addEventListener('click',function(){
     window._chartMetric=b.getAttribute('data-metric');
     tog.querySelectorAll('.cm-tog').forEach(function(x){ x.classList.toggle('active', x===b); });
+    if(window._liveChartSamples) renderLiveChart(window._liveChartSamples, window._liveChartOpts||{});
+  }); });
+})();
+// Live-chart smoothing toggle (Raw / Smooth) → re-render the last trace
+window._chartSmooth='raw';
+(function(){
+  const tog=document.getElementById('chart-s-toggle'); if(!tog) return;
+  tog.querySelectorAll('.cs-tog').forEach(function(b){ b.addEventListener('click',function(){
+    window._chartSmooth=b.getAttribute('data-s');
+    tog.querySelectorAll('.cs-tog').forEach(function(x){ x.classList.toggle('active', x===b); });
     if(window._liveChartSamples) renderLiveChart(window._liveChartSamples, window._liveChartOpts||{});
   }); });
 })();
@@ -4187,15 +4218,32 @@ function renderSplitsTab(rep){
     tbl.innerHTML='<tr><td class="meta" style="text-align:center;padding:30px 0">No splits — needs reps that cover ≥5 m</td></tr>';
     return;
   }
-  let rows='<tr><th>Marker</th><th>Time</th><th>Segment</th><th>Avg speed</th></tr>';
+  // Session-best split per marker (valid reps only) for a delta-vs-best column
+  const best={};
+  (window._lastReps||[]).forEach(r=>{
+    if(r.valid===false) return;
+    const rs=r.splits_s_extended||r.splits_s||{};
+    for(const m of markers){
+      const t=rs[String(m)];
+      if(t!=null && (best[m]==null || Number(t)<best[m])) best[m]=Number(t);
+    }
+  });
+  let rows='<tr><th>Marker</th><th>Time</th><th>Δ best</th><th>Segment</th><th>Avg speed</th></tr>';
   let prevT=0, prevM=0;
   for(const m of markers){
     const t=Number(sx[String(m)]);
     const segT=t-prevT, segM=m-prevM;
     const segV=segT>0?(segM/segT):0;
+    let dTxt='–';
+    if(best[m]!=null){
+      const d=t-best[m];
+      dTxt=d<=0.0005?'<span style="color:var(--good);font-weight:700">best</span>'
+          :'<span style="color:var(--warn)">+'+d.toFixed(2)+' s</span>';
+    }
     rows+='<tr>'+
       '<td>'+m+' m</td>'+
       '<td>'+t.toFixed(2)+' s</td>'+
+      '<td>'+dTxt+'</td>'+
       '<td>'+(prevM===0?'0–'+m+' m':prevM+'–'+m+' m')+' · '+segT.toFixed(2)+' s</td>'+
       '<td>'+segV.toFixed(2)+' m/s</td>'+
     '</tr>';
@@ -4217,6 +4265,34 @@ function niceAxisMax(v){
 
 function renderFVRepTab(rep){
   const svg=document.getElementById('fv-rep-chart');
+  const gateEl=document.getElementById('fv-rep-gate');
+  // Preferred path: the server-side gated tether-model profile attached to the
+  // rep by rep_analysis. Valid -> render it (with RFmax + validity chip);
+  // rejected -> red flag with the failed checks, numbers withheld.
+  if(rep && rep.fv){
+    if(!rep.fv.valid){
+      const why=(rep.fv.rejected||[]).join(', ')||rep.fv.reason||'fit failed';
+      if(gateEl) gateEl.innerHTML='<span class="badge fv-rejected">F-V fit rejected</span> '+
+        '<span style="color:var(--bad)">'+repEsc(why)+'</span>'+
+        ' — outside physiological bounds or a poor fit; numbers withheld rather than shown wrong.';
+      svg.innerHTML='<text x="300" y="120" fill="#ff5a5f" text-anchor="middle" font-size="13" font-weight="700">Force-velocity fit rejected</text>'+
+        '<text x="300" y="140" fill="#818eae" text-anchor="middle" font-size="10">failed: '+repEsc(why)+'</text>';
+      return;
+    }
+    const g=rep.fv;
+    const mass=rep._analysis_bodymass_kg||(rep._meta&&rep._meta.body_mass_kg)||(window._athleteProfile&&window._athleteProfile.athlete&&window._athleteProfile.athlete.body_mass_kg)||null;
+    if(gateEl) gateEl.innerHTML='<span class="badge fv-ok">validity gate passed</span> '+
+      'R² '+(g.r2!=null?g.r2.toFixed(3):'–')+
+      (g.rfmax_pct!=null?(' · RFmax '+g.rfmax_pct.toFixed(1)+'%'):'')+
+      (g.tau_s!=null?(' · τ '+g.tau_s.toFixed(2)+' s'):'');
+    drawFVProfile(svg, {
+      f0:(mass?g.f0_rel_nkg*mass:null), v0:g.v0_ms,
+      pmax:(mass?g.pmax_rel_wkg*mass:null),
+      f0rel:g.f0_rel_nkg, pmaxrel:g.pmax_rel_wkg, slope:g.fv_slope,
+      fitR2:g.r2, source:'gated model'});
+    return;
+  }
+  if(gateEl) gateEl.innerHTML='';
   // Self-compute the sprint F-V (ChronoJump/Samozino): fit the POSITION trace to
   // the integrated mono-exponential v=Vmax(1-e^-Kt) (position is clean where
   // velocity is noisy), then F = m·a + Ka·v² and linear-regress F on v.
@@ -4252,6 +4328,21 @@ function renderFVRepTab(rep){
       '<text x="300" y="136" fill="#56618a" text-anchor="middle" font-size="10">Needs a rep with a position trace + the athlete body mass</text>';
     return;
   }
+  drawFVProfile(svg,{f0:f0,v0:v0,pmax:pmax,f0rel:f0rel,pmaxrel:pmaxrel,
+                     slope:slope,fitR2:fitR2,source:source});
+}
+
+function drawFVProfile(svg,o){
+  // Draw an F-V profile line (0,F0)->(V0,0) with Pmax midpoint. Falls back to
+  // relative units (N/kg, W/kg) when absolute force isn't known (no body mass).
+  let f0=o.f0, pmax=o.pmax, fUnit='N', pUnit='W';
+  const v0=o.v0, f0rel=o.f0rel, pmaxrel=o.pmaxrel, slope=o.slope,
+        fitR2=o.fitR2, source=o.source;
+  if(!f0 && f0rel){ f0=f0rel; pmax=pmaxrel; fUnit='N/kg'; pUnit='W/kg'; }
+  if(!f0 || !v0){
+    svg.innerHTML='<text x="300" y="120" fill="#818eae" text-anchor="middle" font-size="12">Force-velocity profile not available</text>';
+    return;
+  }
   const W=600,H=270,PADL=48,PADR=22,PADT=32,PADB=36;
   const vAx=niceAxisMax(v0*1.12), fAx=niceAxisMax(f0*1.12);
   const xs=v=>PADL+(v/vAx)*(W-PADL-PADR);
@@ -4265,7 +4356,7 @@ function renderFVRepTab(rep){
     grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="#33436b"/>';
     grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="#818eae" font-size="10" text-anchor="middle">'+(vAx*(i/4)).toFixed(1)+'</text>';
   }
-  grid+='<text x="4" y="'+(PADT-8)+'" fill="#58a6ff" font-size="10" font-weight="600">F (N)</text>';
+  grid+='<text x="4" y="'+(PADT-8)+'" fill="#58a6ff" font-size="10" font-weight="600">F ('+fUnit+')</text>';
   grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="#5b8bff" font-size="10" font-weight="600" text-anchor="end">v (m/s)</text>';
 
   // The force-velocity profile: a clean line from (0,F0) to (V0,0), with area fill.
@@ -4273,16 +4364,16 @@ function renderFVRepTab(rep){
   let plot='<path d="M'+x0.toFixed(1)+','+y0.toFixed(1)+' L'+x1.toFixed(1)+','+y1.toFixed(1)+' L'+x1.toFixed(1)+','+ys(0).toFixed(1)+' Z" fill="#5b8bff" opacity="0.1"/>';
   plot+='<line x1="'+x0.toFixed(1)+'" y1="'+y0.toFixed(1)+'" x2="'+x1.toFixed(1)+'" y2="'+y1.toFixed(1)+'" stroke="#5b8bff" stroke-width="2.5"/>';
   plot+='<circle cx="'+x0.toFixed(1)+'" cy="'+y0.toFixed(1)+'" r="4" fill="#5b8bff"/>';
-  plot+='<text x="'+(x0+8).toFixed(1)+'" y="'+(y0+4).toFixed(1)+'" fill="#5b8bff" font-size="11" font-weight="700">F0 = '+f0.toFixed(0)+' N'+(f0rel?(' · '+f0rel.toFixed(1)+' N/kg'):'')+'</text>';
+  plot+='<text x="'+(x0+8).toFixed(1)+'" y="'+(y0+4).toFixed(1)+'" fill="#5b8bff" font-size="11" font-weight="700">F0 = '+f0.toFixed(fUnit==='N'?0:1)+' '+fUnit+((fUnit==='N'&&f0rel)?(' · '+f0rel.toFixed(1)+' N/kg'):'')+'</text>';
   plot+='<circle cx="'+x1.toFixed(1)+'" cy="'+y1.toFixed(1)+'" r="4" fill="#5b8bff"/>';
   plot+='<text x="'+(x1-4).toFixed(1)+'" y="'+(y1-8).toFixed(1)+'" fill="#5b8bff" font-size="11" font-weight="700" text-anchor="end">V0 = '+v0.toFixed(2)+' m/s</text>';
   const px=xs(v0/2), py=ys(f0/2);
   plot+='<circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="6" fill="none" stroke="#d4a13a" stroke-width="2"/><circle cx="'+px.toFixed(1)+'" cy="'+py.toFixed(1)+'" r="2" fill="#d4a13a"/>';
-  plot+='<text x="'+(px+10).toFixed(1)+'" y="'+(py+4).toFixed(1)+'" fill="#d4a13a" font-size="11" font-weight="700">Pmax = '+(pmax?pmax.toFixed(0):'?')+' W'+(pmaxrel?(' · '+pmaxrel.toFixed(1)+' W/kg'):'')+'</text>';
+  plot+='<text x="'+(px+10).toFixed(1)+'" y="'+(py+4).toFixed(1)+'" fill="#d4a13a" font-size="11" font-weight="700">Pmax = '+(pmax?pmax.toFixed(pUnit==='W'?0:1):'?')+' '+pUnit+((pUnit==='W'&&pmaxrel)?(' · '+pmaxrel.toFixed(1)+' W/kg'):'')+'</text>';
 
   let slopeTxt='';
   if(slope!=null) slopeTxt='<text x="'+(W-PADR)+'" y="'+(PADT-8)+'" fill="#818eae" font-size="10" text-anchor="end">F–V slope '+Number(slope).toFixed(3)+' /kg</text>';
-  const srcLabel = source==='computed' ? ('computed · velocity-fit R² '+(fitR2!=null?fitR2.toFixed(3):'')) : (source==='1080'?'from 1080 import':'');
+  const srcLabel = source==='gated model' ? ('gated tether model · R² '+(fitR2!=null?fitR2.toFixed(3):'')) : source==='computed' ? ('computed · velocity-fit R² '+(fitR2!=null?fitR2.toFixed(3):'')) : (source==='1080'?'from 1080 import':'');
   const srcTxt = srcLabel ? '<text x="'+(PADL+34)+'" y="'+(PADT-8)+'" fill="#5aa86a" font-size="9">'+srcLabel+'</text>' : '';
 
   svg.innerHTML=grid+plot+slopeTxt+srcTxt;
