@@ -37,6 +37,7 @@ import statistics
 import urllib.request
 from pathlib import Path
 
+import filtering as filt  # 1080-style Butterworth smoothing
 import sprint_model
 
 from load_1080_xlsx import (
@@ -148,15 +149,26 @@ def build_rep(path: Path, rep_idx: int, start_foot: str = "left",
     if len(times_s) < 2:
         raise ValueError(f"{path.name}: no samples past detected start")
 
-    # ---- aggregates (mirrors the load_1080_xlsx builder) ----
-    peak_v = max(speeds_mps)
-    peak_v_idx = speeds_mps.index(peak_v)
-    peak_f = max(forces_n)
-    peak_f_idx = forces_n.index(peak_f)
-    powers_w = [f * v for f, v in zip(forces_n, speeds_mps)]
-    peak_p = max(powers_w)
-
+    # ---- aggregates (mirrors the load_1080_xlsx builder, incl. its 1080-
+    # style Butterworth filtering — see filtering.py + that builder's notes:
+    # top speed from the 1.3 Hz smooth curve, de-noised force/power peaks
+    # from the 6 Hz step curve, accel peak from the smooth derivative;
+    # averages / work / impulse / splits stay raw) ----
     n = len(speeds_mps)
+    fs_hz = filt.estimate_fs(times_s)
+    _flt = filt.sprint_filters(times_s, speeds_mps)
+    v_smooth = _flt["smooth_speed"]                   # 1.3 Hz — run trend
+    v_step = _flt["step_speed"]                       # 6 Hz (raw if fs too low)
+    f_step, _ = filt.butter_lowpass(forces_n, filt.STEP_HZ, fs_hz)
+    a_smooth = filt.derivative(times_s, v_smooth)
+    powers_w = [f * v for f, v in zip(forces_n, speeds_mps)]   # raw — avg/work
+    p_step = [f * v for f, v in zip(f_step, v_step)]           # de-noised
+
+    top_v = max(v_smooth); top_v_idx = v_smooth.index(top_v)   # 1080 "Top Speed"
+    peak_v = top_v; peak_v_idx = top_v_idx
+    peak_f = max(f_step); peak_f_idx = f_step.index(peak_f)
+    peak_p = max(p_step)
+
     avg_v = sum(speeds_mps) / n
     avg_f = sum(forces_n) / n
     avg_p = sum(powers_w) / n
@@ -166,7 +178,7 @@ def build_rep(path: Path, rep_idx: int, start_foot: str = "left",
         dt = times_s[i] - times_s[i - 1]
         if dt > 0:
             accs.append((speeds_mps[i] - speeds_mps[i - 1]) / dt)
-    peak_a = max(accs) if accs else 0.0
+    peak_a = max(a_smooth) if a_smooth else 0.0
     avg_a = sum(accs) / len(accs) if accs else 0.0
 
     work_j = 0.0
@@ -195,29 +207,34 @@ def build_rep(path: Path, rep_idx: int, start_foot: str = "left",
                 splits_extended[str(marker)] = round(times_s[i], 3)
                 break
 
+    # Phase segmentation + accel-shape metrics on the SMOOTH curve (raw speed
+    # jitters across the thresholds), matching the xlsx builder.
     accel_end_ms = None
     decel_start_ms = None
     past_peak = False
-    for i, v in enumerate(speeds_mps):
-        if accel_end_ms is None and v >= 0.90 * peak_v:
+    for i, v in enumerate(v_smooth):
+        if accel_end_ms is None and v >= 0.90 * top_v:
             accel_end_ms = int(times_s[i] * 1000)
-        if v >= peak_v:
+        if v >= top_v:
             past_peak = True
-        if past_peak and decel_start_ms is None and v < 0.95 * peak_v:
+        if past_peak and decel_start_ms is None and v < 0.95 * top_v:
             decel_start_ms = int(times_s[i] * 1000)
 
-    time_to_max_v_s = times_s[peak_v_idx]
-    dist_to_max_v_m = pos_m[peak_v_idx]
+    # "Reached max V" = plateau onset (within 1% of top), not argmax.
+    maxv_onset_idx = next(
+        (i for i, v in enumerate(v_smooth) if v >= 0.99 * top_v), top_v_idx)
+    time_to_max_v_s = times_s[maxv_onset_idx]
+    dist_to_max_v_m = pos_m[maxv_onset_idx]
     time_to_90pct_v_s = None
     dist_to_90pct_v_m = None
-    target_90 = 0.90 * peak_v
-    for i, v in enumerate(speeds_mps):
+    target_90 = 0.90 * top_v
+    for i, v in enumerate(v_smooth):
         if v >= target_90:
             time_to_90pct_v_s = times_s[i]
             dist_to_90pct_v_m = pos_m[i]
             break
-    end_v = speeds_mps[-1]
-    v_dropoff_pct = (peak_v - end_v) / peak_v * 100 if peak_v > 0 else 0.0
+    end_v = v_smooth[-1]
+    v_dropoff_pct = (top_v - end_v) / top_v * 100 if top_v > 0 else 0.0
 
     # Same pipeline as the xlsx path: speed-residual detector (primary),
     # force annotation, declared-foot labels, aggregates + L/R asymmetry.
@@ -241,9 +258,12 @@ def build_rep(path: Path, rep_idx: int, start_foot: str = "left",
                  "pmax_w_morin": None, "pmax_rel_wkg": None,
                  "fv_slope_per_kg": None, "tau_s": None}
     try:
+        # Fit on the SMOOTH velocity curve: the mono-exponential models the
+        # run TREND, and r2 against raw 1 kHz step-ripple punishes a good
+        # fit for real gait oscillation (it was rejecting ordinary reps).
         prof = sprint_model.profile_from_trace(
             times_s[:peak_v_idx + 1], pos_m[:peak_v_idx + 1],
-            speeds_mps[:peak_v_idx + 1],
+            v_smooth[:peak_v_idx + 1],
             bodymass=body_mass_kg or 75.0, resisted=True)
         if prof.get("ok") and prof.get("valid"):
             fvp, m = prof["fvp"], prof["model"]
