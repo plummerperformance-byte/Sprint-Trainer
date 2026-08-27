@@ -16,6 +16,11 @@ from typing import Optional
 
 # ===== CALIBRATION CONSTANTS - LOCKED IN 2026-05-10 =====
 # 17-bit serial encoder per V5.1 manual p21 (MA 2KW low-inertia, EIA422).
+# HARDWARE FACT ONLY — do NOT combine with COUNTS_PER_METRE to derive
+# metres/rev or speed: the drive's position register is scaled, not raw
+# encoder counts, so 131072/27917 gives a metres/rev ~13.6x too large
+# (it silently reproduces the superseded 379,288 counts/m error). Speed
+# conversions must go through CABLE_METRES_PER_REV / MPS_PER_RPM below.
 ENCODER_COUNTS_PER_REV = 131_072
 
 # Re-measured 2026-05-15 by a direct 10 m cable pull over CN4/RS485: the

@@ -781,13 +781,14 @@ function setArmed(a) {
 }
 
 // ----- live state handling -----
-// /api/info gives us encoder_counts_per_rev + counts_per_metre. From those:
-//   metres_per_rev = encoder_counts_per_rev / counts_per_metre
-//   speed_mps      = rpm / 60 * metres_per_rev
+// /api/info gives us cable_metres_per_rev; speed_mps = rpm / 60 * metres_per_rev.
+// NEVER derive metres_per_rev from encoder_counts_per_rev / counts_per_metre:
+// the drive's position register is NOT raw encoder counts, so that ratio is
+// ~13.6x too large (it reproduced the superseded 379,288 counts/m error).
 function mpsFromRpm(rpm) {
-  if (!CAL.encoder_counts_per_rev || !CAL.counts_per_metre) return rpm * 0.0026;  // rough fallback
-  const metres_per_rev = CAL.encoder_counts_per_rev / CAL.counts_per_metre;
-  return rpm / 60 * metres_per_rev;
+  const mpr = CAL.cable_metres_per_rev;
+  if (!mpr) return rpm * 0.00576;  // locked calibration fallback (0.3456/60)
+  return rpm / 60 * mpr;
 }
 
 function handleState(s) {

@@ -912,15 +912,17 @@ def _attach_rep_analysis(rep: dict, bodymass: Optional[float] = None,
         samples = rep.get("samples") or []
         if len(samples) < 8:
             return rep
-        bm = (bodymass or (rep.get("_meta") or {}).get("body_mass_kg")
-              or rep.get("body_mass_kg") or 75.0)
+        bm_known = (bodymass or (rep.get("_meta") or {}).get("body_mass_kg")
+                    or rep.get("body_mass_kg"))
+        bm = bm_known or 75.0
         t = [s.get("t_ms", 0) / 1000.0 for s in samples]
         pos = [s.get("pos_m") or 0.0 for s in samples]
         vel = [s.get("v_mps") or 0.0 for s in samples]
         force = [s.get("F_N") or 0.0 for s in samples]
         out = rep_analysis.analyse_rep(
             t, pos, vel, force, bodymass=bm, sport=sport, sex=sex,
-            drill=drill or rep.get("drill") or "Running", resisted=resisted)
+            drill=drill or rep.get("drill") or "Running", resisted=resisted,
+            start_foot=rep.get("start_foot") or "left")
         if not out.get("ok"):
             return rep
         fv = out.get("fv") or {}
@@ -931,16 +933,30 @@ def _attach_rep_analysis(rep: dict, bodymass: Optional[float] = None,
             rep["v0_mps"] = fv.get("v0_ms")
             rep["pmax_rel_wkg"] = fv.get("pmax_rel_wkg")
             rep["fv_slope_per_kg"] = fv.get("fv_slope")
-            if fv.get("f0_rel_nkg") is not None:
-                rep["f0_n"] = round(fv["f0_rel_nkg"] * bm, 1)
-            if fv.get("pmax_rel_wkg") is not None:
-                rep["pmax_w_morin"] = round(fv["pmax_rel_wkg"] * bm, 1)
+            rep["tau_s"] = fv.get("tau_s")
+            # Absolute (mass-scaled) values ONLY when the mass is real — a
+            # silent 75 kg default would fabricate F0/Pmax in newtons/watts.
+            # Relative fields above are mass-invariant and always safe.
+            if bm_known:
+                if fv.get("f0_rel_nkg") is not None:
+                    rep["f0_n"] = round(fv["f0_rel_nkg"] * bm, 1)
+                if fv.get("pmax_rel_wkg") is not None:
+                    rep["pmax_w_morin"] = round(fv["pmax_rel_wkg"] * bm, 1)
+        # Interpolated splits beat the live loop's 10 Hz nearest-sample splits
+        # (up to ±0.1 s quantisation). Imports carry their own 1 kHz-derived
+        # splits, so only live reps (no _meta.source yet) are upgraded.
+        kin = out.get("kinematics") or {}
+        if kin.get("splits_s") and not (rep.get("_meta") or {}).get("source"):
+            rep["splits_s"] = {str(k): v for k, v in kin["splits_s"].items()}
         st = out.get("steps") or {}
         for k in ("total_steps", "step_freq_hz", "avg_step_length_m",
-                  "step_length_std_m", "step_confidence"):
+                  "step_length_std_m", "step_confidence", "flagged_steps"):
             if rep.get(k) is None and st.get(k) is not None:
                 rep[k] = st[k]
+        if rep.get("step_events") is None and out.get("step_events"):
+            rep["step_events"] = out["step_events"]
         rep["_analysis_bodymass_kg"] = bm
+        rep["_analysis_bodymass_defaulted"] = not bm_known
     except Exception as e:
         log.warning("rep analysis failed: %s", e)
     return rep

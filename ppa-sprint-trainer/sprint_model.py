@@ -271,13 +271,23 @@ def profile_from_trace(t, distance, velocity, bodymass: float = 75.0,
     fvp["RFmax_pct"] = rfmax
     fvp["DRF_pct"] = drf
 
-    checks = {
-        "f0_nkg": validity_check("f0_nkg", fvp["F0_rel"]),
-        "v0_ms": validity_check("v0_ms", fvp["V0"]),
-        "pmax_wkg": validity_check("pmax_wkg", fvp["Pmax_rel"]),
-        "rfmax_pct": validity_check("rfmax_pct", rfmax),
-        "tau_s": validity_check("tau_s", fit["TAU"]),
-    }
+    # The physiological gates are FREE-SPRINT bounds (Samozino/Morin field
+    # data). A resisted fit legitimately reads V0/F0/Pmax/RF outside them —
+    # the load itself shifts the numbers — so applying free-sprint bounds to
+    # a resisted rep rejects ordinary good reps (the same apples-to-oranges
+    # hazard rep_analysis documents for the Haugen bands). Resisted reps are
+    # therefore gated on fit quality only (tau sanity + r2 below); free reps
+    # get the full physiological gate.
+    if resisted:
+        checks = {"tau_s": validity_check("tau_s", fit["TAU"])}
+    else:
+        checks = {
+            "f0_nkg": validity_check("f0_nkg", fvp["F0_rel"]),
+            "v0_ms": validity_check("v0_ms", fvp["V0"]),
+            "pmax_wkg": validity_check("pmax_wkg", fvp["Pmax_rel"]),
+            "rfmax_pct": validity_check("rfmax_pct", rfmax),
+            "tau_s": validity_check("tau_s", fit["TAU"]),
+        }
     rejected = [m for m, c in checks.items() if not c.get("ok")]
     # a very poor fit is itself a rejection
     if fit["r2"] < 0.80:
