@@ -33,6 +33,8 @@ _ALIASES = {
     "lateral shuffle left": "Lateral Shuffle_Left",
     "lateral shuffle right": "Lateral Shuffle_Right",
     "running": "Running", "sprint": "Running",
+    # the rig's free-sprint drill — same movement as the 1080 "Running" export
+    "freetest": "Running", "free run": "Running",
 }
 
 # percentile -> band label. Anchored on the p-values stored per metric.

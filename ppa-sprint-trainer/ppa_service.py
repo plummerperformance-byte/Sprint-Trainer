@@ -56,6 +56,10 @@ from pydantic import BaseModel, Field
 from ppa_drive import PPADrive, TORQUE_LIMIT_MAX_PERCENT
 import persistence
 import analytics
+import rep_analysis
+import reference_norms
+import sprint_trends
+import targets as targets_mod
 from ppa.analytics import load_advisor
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -337,6 +341,13 @@ class ServiceState:
             "auto_stop_dwell_s": 1.0,             # s of stillness before the rep ends
         }
         self.athletic_athlete_id: Optional[int] = None
+        # Cached athlete context for the per-rep sprint analysis (gated F-V,
+        # norm bands). Filled at athletic start when an athlete is selected.
+        self.athletic_bodymass_kg: Optional[float] = None
+        self.athletic_sport: Optional[str] = None
+        self.athletic_sex: Optional[str] = None
+        # Session target loop (targets.py): {metric, value, source}
+        self.session_target: Optional[dict] = None
         self.athletic_session_id: Optional[int] = None  # DB session row id
         self.athletic_start_pos: Optional[int] = None
         self.athletic_peak_rpm: int = 0
@@ -882,6 +893,59 @@ def _finalise_in_progress_rep(rip: Optional[dict], period: float) -> Optional[di
     return rip
 
 
+def _attach_rep_analysis(rep: dict, bodymass: Optional[float] = None,
+                         drill: Optional[str] = None, resisted: bool = True,
+                         sport: Optional[str] = None,
+                         sex: Optional[str] = None) -> dict:
+    """Run the validated sprint analysis (rep_analysis.analyse_rep) over a
+    finalised rep's samples and attach:
+      - rep["fv"]: validity-GATED tether F-V profile {valid, rejected, r2,
+        f0_rel_nkg, v0_ms, pmax_rel_wkg, rfmax_pct, ...}
+      - rep["norms"]: reference-band context (drill cohort / sport F-V)
+      - flattened DB columns (f0_rel_nkg, v0_mps, pmax_rel_wkg, ...) ONLY when
+        the fit passed the physiological validity gate — an invalid fit
+        persists as NULLs, never as a wrong number.
+      - step mechanics aggregates when the trace supports them.
+    Never raises; on failure the rep is returned unchanged.
+    """
+    try:
+        samples = rep.get("samples") or []
+        if len(samples) < 8:
+            return rep
+        bm = (bodymass or (rep.get("_meta") or {}).get("body_mass_kg")
+              or rep.get("body_mass_kg") or 75.0)
+        t = [s.get("t_ms", 0) / 1000.0 for s in samples]
+        pos = [s.get("pos_m") or 0.0 for s in samples]
+        vel = [s.get("v_mps") or 0.0 for s in samples]
+        force = [s.get("F_N") or 0.0 for s in samples]
+        out = rep_analysis.analyse_rep(
+            t, pos, vel, force, bodymass=bm, sport=sport, sex=sex,
+            drill=drill or rep.get("drill") or "Running", resisted=resisted)
+        if not out.get("ok"):
+            return rep
+        fv = out.get("fv") or {}
+        rep["fv"] = fv
+        rep["norms"] = out.get("norms") or {}
+        if fv.get("valid"):
+            rep["f0_rel_nkg"] = fv.get("f0_rel_nkg")
+            rep["v0_mps"] = fv.get("v0_ms")
+            rep["pmax_rel_wkg"] = fv.get("pmax_rel_wkg")
+            rep["fv_slope_per_kg"] = fv.get("fv_slope")
+            if fv.get("f0_rel_nkg") is not None:
+                rep["f0_n"] = round(fv["f0_rel_nkg"] * bm, 1)
+            if fv.get("pmax_rel_wkg") is not None:
+                rep["pmax_w_morin"] = round(fv["pmax_rel_wkg"] * bm, 1)
+        st = out.get("steps") or {}
+        for k in ("total_steps", "step_freq_hz", "avg_step_length_m",
+                  "step_length_std_m", "step_confidence"):
+            if rep.get(k) is None and st.get(k) is not None:
+                rep[k] = st[k]
+        rep["_analysis_bodymass_kg"] = bm
+    except Exception as e:
+        log.warning("rep analysis failed: %s", e)
+    return rep
+
+
 def _resistance_curve(curve_pct, x, x_max):
     """Linear-interpolate the resistance curve. curve_pct is N evenly-spaced
     points (% of working resistance) spanning x in [0, x_max]; returns the
@@ -1178,7 +1242,17 @@ async def _athletic_loop(state: "ServiceState"):
                                 except Exception as e:
                                     log.warning("phantom delete_rep failed: %s", e)
                         else:
-                            # Real rep — persist with rich aggregates and surface in UI list.
+                            # Real rep — attach the validated sprint analysis
+                            # (gated F-V, norm bands, step mechanics) off-loop.
+                            try:
+                                await asyncio.to_thread(
+                                    _attach_rep_analysis, fin,
+                                    state.athletic_bodymass_kg,
+                                    state.athletic_config.get("drill"), True,
+                                    state.athletic_sport, state.athletic_sex)
+                            except Exception as e:
+                                log.warning("rep analysis failed: %s", e)
+                            # Persist with rich aggregates and surface in UI list.
                             if (fin.get("rep_db_id") is not None
                                     and state.db is not None
                                     and state.session_start_t is not None):
@@ -6215,7 +6289,20 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         # Optionally open a DB session for this athletic block so reps persist
         state.athletic_athlete_id = athlete_id
         state.athletic_session_id = None
+        # Cache athlete context for the per-rep sprint analysis
+        state.athletic_bodymass_kg = None
+        state.athletic_sport = None
+        state.athletic_sex = None
+        state.session_target = None
         if athlete_id is not None and state.db is not None:
+            try:
+                prof = await state.db_call(persistence.athlete_profile, athlete_id)
+                ath = (prof or {}).get("athlete") or {}
+                state.athletic_bodymass_kg = ath.get("body_mass_kg")
+                state.athletic_sport = ath.get("sport")
+                state.athletic_sex = ath.get("sex")
+            except Exception as e:
+                log.warning("athlete profile lookup failed: %s", e)
             try:
                 notes = f"phase_c athletic | drill={state.athletic_config.get('drill')} | resist_kg={state.athletic_config.get('resist_kg')}"
                 sid = await state.db_call(
@@ -6323,6 +6410,12 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                     rep["_meta"]["rep_db_id"] = out["rep_id"]
                 except Exception as e:
                     log.warning("import_rep failed: %s", e)
+            # Gated F-V / norms / steps for loaded reps that carry a trace
+            if rep.get("fv") is None and rep.get("samples"):
+                await asyncio.to_thread(
+                    _attach_rep_analysis, rep,
+                    (rep.get("_meta") or {}).get("body_mass_kg"),
+                    rep.get("drill"), True)
             state.athletic_reps.append(rep)
         return {"loaded_reps": len(payload_reps), "persisted": persisted_ids}
 
@@ -6374,37 +6467,43 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         state.athletic_mode = True
         state.athletic_phase = "ready"
         state.athletic_reps = []
+        bodymass = state.athletic_bodymass_kg or 80.0
         for i in range(reps):
-            duration_s = round(2.0 + random.random() * 1.5, 2)
-            distance_m = round(2.0 + random.random() * 6.0, 3)
-            peak_v = round(1.0 + random.random() * 4.0, 3)
-            peak_F = round(150 + random.random() * 200, 1)  # N
+            # Mono-exponential sprint trace (Furusawa-Hill): v = MSS(1-e^-t/TAU).
+            # Realistic per-rep spread so the session F-V has variety and the
+            # tether-model fit + validity gate get exercised end-to-end.
+            MSS = round(6.4 + random.random() * 1.8, 3)     # m/s
+            MAC = round(5.2 + random.random() * 2.4, 3)     # m/s²
+            TAU = MSS / MAC
+            duration_s = round(3.6 + random.random() * 0.8, 2)
+            load_n = 25.0 + random.random() * 15.0          # tether resistance
+            dt = 0.02                                       # 50 Hz like the rig
             samples = []
-            n = max(int(duration_s * 10), 8)
-            prev_v = 0.0
+            n = max(int(duration_s / dt), 8)
             for j in range(n):
-                t_ms = int(j * duration_s * 1000 / n)
-                phase = j / n
-                # half-sine velocity profile
-                v = peak_v * math.sin(math.pi * phase)
-                F = peak_F * (0.4 + 0.6 * math.sin(math.pi * phase))
+                t = j * dt
+                v = MSS * (1.0 - math.exp(-t / TAU)) + random.gauss(0, 0.04)
+                v = max(v, 0.0)
+                a = (MSS / TAU) * math.exp(-t / TAU)
+                pos_m = MSS * (t + TAU * (math.exp(-t / TAU) - 1.0))
+                F = bodymass * a + load_n
                 P = F * v
-                a = (v - prev_v) / 0.1
-                prev_v = v
-                pos_m = distance_m * (phase ** 1.4)
                 samples.append({
-                    "t_ms": t_ms, "v_mps": round(v, 3), "F_N": round(F, 1),
-                    "P_W": round(P, 1), "a_mps2": round(a, 3),
-                    "pos_m": round(pos_m, 3),
+                    "t_ms": int(t * 1000), "v_mps": round(v, 3),
+                    "F_N": round(F, 1), "P_W": round(P, 1),
+                    "a_mps2": round(a, 3), "pos_m": round(pos_m, 3),
                 })
+            distance_m = samples[-1]["pos_m"]
+            peak_v = max(s["v_mps"] for s in samples)
+            peak_F = max(s["F_N"] for s in samples)
             avg_v = sum(s["v_mps"] for s in samples) / len(samples)
             avg_F = sum(s["F_N"] for s in samples) / len(samples)
             avg_P = sum(s["P_W"] for s in samples) / len(samples)
             avg_a = sum(s["a_mps2"] for s in samples) / len(samples)
             peak_a = max(s["a_mps2"] for s in samples)
-            work = sum(s["F_N"] * s["v_mps"] * 0.1 for s in samples)
+            work = sum(s["F_N"] * s["v_mps"] * dt for s in samples)
             # Derived metrics same as the live path
-            impulse = sum(s["F_N"] for s in samples) * 0.1
+            impulse = sum(s["F_N"] for s in samples) * dt
             peak_f_idx = max(range(len(samples)), key=lambda i: samples[i]["F_N"])
             peak_v_idx = max(range(len(samples)), key=lambda i: samples[i]["v_mps"])
             splits = {}
@@ -6440,6 +6539,14 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                 "split_report": _build_split_report(samples, SPLIT_LENGTH_M),
                 "samples": samples,
             })
+        # Attach the validated sprint analysis to each seeded rep (same path
+        # a live rep takes at rep end) so gated F-V / norms light up in the UI.
+        drill = state.athletic_config.get("drill") or "Running"
+        await asyncio.to_thread(
+            lambda: [_attach_rep_analysis(r, bodymass, drill, True,
+                                          state.athletic_sport,
+                                          state.athletic_sex)
+                     for r in state.athletic_reps])
         return {"seeded_reps": reps}
 
     @app.post("/api/c/dev/clear")
@@ -6452,47 +6559,61 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
 
     @app.get("/api/c/athletic/fv")
     async def phase_c_athletic_fv():
-        """Build a Force-Velocity profile from the current athletic_reps.
-        Each rep contributes one (avg_force, avg_speed) point. Linear regression
-        gives F0 (force at v=0), V0 (velocity at F=0), Pmax = F0·V0/4 (Samozino).
-        Needs ≥3 reps at meaningfully different loads to be usable.
+        """Session Force-Velocity from the validated tether model (sprint_model
+        via rep_analysis). Each rep's velocity trace is fitted to the
+        mono-exponential sprint model; every derived value passes through the
+        physiological validity gate (reference_norms.validity_check), so a bad
+        fit reports as `valid: false`, never as a wrong number.
+
+        Replaces the old naive avg-force-vs-avg-speed linear regression, which
+        produced non-physiological profiles (e.g. RFmax ~90%).
         """
-        # Exclude invalid reps from the FV regression per §11 of v1 addendum.
-        pts = [(r.get("avg_speed_mps", 0.0), r.get("avg_force_n", 0.0))
-               for r in state.athletic_reps
-               if r.get("avg_speed_mps", 0) > 0.05
-               and r.get("valid", True) is not False]
-        if len(pts) < 2:
-            return {"ok": False, "reason": f"need ≥2 reps with motion, have {len(pts)}",
-                    "points": pts, "n": len(pts)}
-        n = len(pts)
-        sx = sum(v for v, _ in pts)
-        sy = sum(f for _, f in pts)
-        sxy = sum(v * f for v, f in pts)
-        sxx = sum(v * v for v, _ in pts)
-        denom = n * sxx - sx * sx
-        if abs(denom) < 1e-9:
-            return {"ok": False, "reason": "degenerate fit (no velocity spread)",
-                    "points": pts, "n": n}
-        slope = (n * sxy - sx * sy) / denom
-        intercept = (sy - slope * sx) / n
-        f0 = intercept
-        v0 = -intercept / slope if slope else None
-        pmax = (f0 * v0) / 4 if v0 else None
-        # R²
-        mean_y = sy / n
-        ss_res = sum((f - (slope * v + intercept)) ** 2 for v, f in pts)
-        ss_tot = sum((f - mean_y) ** 2 for _, f in pts)
-        r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 1.0
+        def _analyse_all():
+            per_rep = []
+            for r in state.athletic_reps:
+                if r.get("valid", True) is False:
+                    continue  # coach marked the whole rep invalid
+                if r.get("fv") is None and r.get("samples"):
+                    # dev-loaded / imported reps that skipped the live loop
+                    _attach_rep_analysis(
+                        r, state.athletic_bodymass_kg,
+                        state.athletic_config.get("drill"), True,
+                        state.athletic_sport, state.athletic_sex)
+                fv = r.get("fv")
+                if not fv:
+                    continue
+                per_rep.append({
+                    "rep_idx": r.get("rep_idx"),
+                    "valid": bool(fv.get("valid")),
+                    "rejected": fv.get("rejected") or [],
+                    "r2": fv.get("r2"),
+                    "f0_rel_nkg": fv.get("f0_rel_nkg"),
+                    "v0_ms": fv.get("v0_ms"),
+                    "pmax_rel_wkg": fv.get("pmax_rel_wkg"),
+                    "rfmax_pct": fv.get("rfmax_pct"),
+                    "fv_slope": fv.get("fv_slope"),
+                    "tau_s": fv.get("tau_s"),
+                    "bodymass_kg": r.get("_analysis_bodymass_kg"),
+                })
+            return per_rep
+        per_rep = await asyncio.to_thread(_analyse_all)
+        valid = [p for p in per_rep if p["valid"]]
+        if not valid:
+            return {"ok": False, "method": "tether_model_dc",
+                    "reason": ("no reps with a trace yet" if not per_rep else
+                               "no rep passed the F-V validity gate"),
+                    "n": len(per_rep), "n_valid": 0, "per_rep": per_rep}
+        best = max(valid, key=lambda p: p.get("pmax_rel_wkg") or 0.0)
+        bm = best.get("bodymass_kg") or state.athletic_bodymass_kg or 75.0
         return {
-            "ok": True, "n": n,
-            "points": [{"v": v, "F": f} for v, f in pts],
-            "slope": round(slope, 2),
-            "intercept": round(intercept, 1),
-            "F0_n": round(f0, 1),
-            "V0_mps": round(v0, 3) if v0 else None,
-            "Pmax_w": round(pmax, 1) if pmax else None,
-            "r2": round(r2, 4),
+            "ok": True, "method": "tether_model_dc",
+            "n": len(per_rep), "n_valid": len(valid),
+            "per_rep": per_rep,
+            "best": dict(best, f0_n=(round(best["f0_rel_nkg"] * bm, 1)
+                                     if best.get("f0_rel_nkg") else None),
+                         pmax_w=(round(best["pmax_rel_wkg"] * bm, 1)
+                                 if best.get("pmax_rel_wkg") else None)),
+            "bodymass_kg": bm,
         }
 
     def _find_rep(idx: int):

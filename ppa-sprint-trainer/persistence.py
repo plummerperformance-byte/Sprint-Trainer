@@ -598,7 +598,12 @@ def end_rep_with_aggregates(
                   accel_end_ms = ?, decel_start_ms = ?,
                   max_extension_m = ?, drill = ?, splits_s_json = ?,
                   is_eccentric = ?, samples_json = ?, source = ?,
-                  dist_to_max_v_m = ?, decel_time_s = ?
+                  dist_to_max_v_m = ?, decel_time_s = ?,
+                  f0_n = ?, f0_rel_nkg = ?, v0_mps = ?,
+                  pmax_w_morin = ?, pmax_rel_wkg = ?, fv_slope_per_kg = ?,
+                  total_steps = ?, step_freq_hz = ?,
+                  avg_step_length_m = ?, step_length_std_m = ?,
+                  step_confidence = ?
                WHERE id = ?""",
             (
                 ended_at, t_offset_ms,
@@ -616,6 +621,14 @@ def end_rep_with_aggregates(
                 1 if agg.get("is_eccentric") else 0,
                 samples_json, "live",
                 agg.get("dist_to_max_v_m"), agg.get("decel_time_s"),
+                # Gated F-V (NULL when the fit failed the validity gate) +
+                # step mechanics from the live-rep sprint analysis.
+                agg.get("f0_n"), agg.get("f0_rel_nkg"), agg.get("v0_mps"),
+                agg.get("pmax_w_morin"), agg.get("pmax_rel_wkg"),
+                agg.get("fv_slope_per_kg"),
+                agg.get("total_steps"), agg.get("step_freq_hz"),
+                agg.get("avg_step_length_m"), agg.get("step_length_std_m"),
+                agg.get("step_confidence"),
                 rep_id,
             ),
         )
