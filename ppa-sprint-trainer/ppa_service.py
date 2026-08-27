@@ -2185,6 +2185,19 @@ PHASE_C_HTML = """<!doctype html>
     border:1px solid var(--line);border-radius:10px;cursor:pointer}
   .an-tab:hover{color:var(--fg);border-color:var(--line-strong)}
   .an-tab.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  /* End-of-session debrief */
+  .sd-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:12px}
+  .sd-tile{background:var(--raised);border:1px solid var(--line);border-radius:10px;
+           padding:10px 12px;text-align:center}
+  .sd-tile .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+  .sd-tile .l{font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+  .sd-best{background:var(--accent-soft);border:1px solid var(--accent);border-radius:10px;
+           padding:10px 14px;margin-bottom:12px;font-size:14px;font-variant-numeric:tabular-nums}
+  .sd-best b{color:var(--accent)}
+  #sd-close{background:transparent;border:0;color:var(--muted);font-size:14px;cursor:pointer;padding:2px 6px}
+  #sd-close:hover{color:var(--fg)}
+  #sd-table th{cursor:pointer;user-select:none}
+  #sd-table th.sorted{color:var(--accent)}
   .trend-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
   .tr-tab{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
           background:transparent;color:var(--muted);border:1px solid var(--line);
@@ -2447,6 +2460,19 @@ PHASE_C_HTML = """<!doctype html>
           <div><div class="ss-l">TIMER</div><div class="ss-v" id="ss-timer">–</div></div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- End-of-session debrief (renders when the drill stops with reps logged) -->
+  <div class="card" id="session-debrief" style="display:none">
+    <div class="reps-head">
+      <span class="meta">Session results</span>
+      <button type="button" id="sd-close" title="Dismiss">✕</button>
+    </div>
+    <div class="sd-tiles" id="sd-tiles"></div>
+    <div class="sd-best" id="sd-best"></div>
+    <div style="overflow-x:auto">
+      <table class="rd-splits-table" id="sd-table"></table>
     </div>
   </div>
 
@@ -3648,6 +3674,69 @@ function populateRepSelects(reps){
     });
   });
 })();
+// ---- End-of-session debrief (session results card) ----
+window._sdSort={key:'rep_idx',dir:1};
+function renderSessionDebrief(reps,score){
+  const card=document.getElementById('session-debrief');
+  if(!card||!reps||!reps.length) return;
+  window._sdReps=reps; window._sdScore=score||null;
+  const valid=reps.filter(r=>r.valid!==false);
+  const best=valid.slice().sort((a,b)=>(b.peak_speed_mps||0)-(a.peak_speed_mps||0))[0];
+  const totWork=valid.reduce((s,r)=>s+(r.work_j||0),0);
+  const bestP=Math.max(0,...valid.map(r=>r.peak_power_w||0));
+  let tiles=
+    '<div class="sd-tile"><div class="v">'+valid.length+(reps.length>valid.length?('<span style="font-size:12px;color:var(--muted)">/'+reps.length+'</span>'):'')+'</div><div class="l">valid reps</div></div>'+
+    '<div class="sd-tile"><div class="v">'+(best?(best.peak_speed_mps||0).toFixed(2):'–')+'</div><div class="l">best m/s</div></div>'+
+    '<div class="sd-tile"><div class="v">'+bestP.toFixed(0)+'</div><div class="l">best W</div></div>'+
+    '<div class="sd-tile"><div class="v">'+(totWork/1000).toFixed(1)+'</div><div class="l">total kJ</div></div>';
+  if(score&&score.summary&&score.summary.reps>0){
+    tiles+='<div class="sd-tile"><div class="v" style="color:'+(score.summary.success_rate>=50?'var(--good)':'var(--warn)')+'">'+
+      score.summary.success_rate+'%</div><div class="l">target hit rate</div></div>';
+  }
+  document.getElementById('sd-tiles').innerHTML=tiles;
+  const bEl=document.getElementById('sd-best');
+  if(best){
+    bEl.style.display='block';
+    bEl.innerHTML='Best rep — <b>Rep '+best.rep_idx+'</b> · '+(best.peak_speed_mps||0).toFixed(2)+' m/s · '+
+      (best.peak_power_w||0).toFixed(0)+' W · '+(best.duration_s||0).toFixed(2)+' s'+
+      (best.fv&&best.fv.valid&&best.fv.pmax_rel_wkg!=null?(' · F-V '+best.fv.pmax_rel_wkg.toFixed(1)+' W/kg'):'');
+  } else bEl.style.display='none';
+  // sortable rep table
+  const cols=[['rep_idx','Rep'],['peak_speed_mps','m/s'],['peak_force_n','N'],
+              ['peak_power_w','W'],['duration_s','s']];
+  const st=window._sdSort;
+  const rows=reps.slice().sort((a,b)=>((a[st.key]||0)-(b[st.key]||0))*st.dir);
+  let html='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'" class="'+(st.key===c[0]?'sorted':'')+'">'+
+    c[1]+(st.key===c[0]?(st.dir>0?' ▲':' ▼'):'')+'</th>').join('')+'<th>status</th></tr>';
+  rows.forEach(r=>{
+    const g=score&&(score.grades||[]).find(x=>x.rep_idx===r.rep_idx);
+    let stat=r.valid===false?'<span style="color:var(--bad)">invalid</span>'
+      :(r.fv&&!r.fv.valid?'<span class="badge fv-rejected">F-V rejected</span>':'');
+    if(g&&g.status&&g.status!=='none'&&r.valid!==false){
+      const map={reached:'<span style="color:var(--good)">✓ reached</span>',
+                 near:'<span style="color:#ffcf5c">≈ near</span>',
+                 missed:'<span style="color:var(--muted)">✗ missed</span>'};
+      stat=(stat?stat+' ':'')+(map[g.status]||'');
+    }
+    html+='<tr><td>'+r.rep_idx+'</td><td>'+(r.peak_speed_mps||0).toFixed(2)+'</td>'+
+      '<td>'+(r.peak_force_n||0).toFixed(0)+'</td><td>'+(r.peak_power_w||0).toFixed(0)+'</td>'+
+      '<td>'+(r.duration_s||0).toFixed(2)+'</td><td>'+(stat||'–')+'</td></tr>';
+  });
+  const tbl=document.getElementById('sd-table');
+  tbl.innerHTML=html;
+  tbl.querySelectorAll('th[data-k]').forEach(th=>{
+    th.onclick=()=>{
+      const k=th.getAttribute('data-k');
+      window._sdSort={key:k,dir:(st.key===k?-st.dir:-1)};
+      renderSessionDebrief(window._sdReps,window._sdScore);
+    };
+  });
+  card.style.display='block';
+}
+document.getElementById('sd-close').onclick=()=>{
+  document.getElementById('session-debrief').style.display='none';
+};
+
 // ---- Trends: per-session bests with MDC noise corridors (sprint_trends) ----
 window._trendMetric='top_speed';
 const TREND_UNITS={top_speed:'m/s',pmax_rel_wkg:'W/kg',v0_ms:'m/s',f0_rel_nkg:'N/kg',split_10m:'s'};
@@ -5168,6 +5257,17 @@ async function refresh(){
   const armed=c.phase_c==='armed';
   const ph=c.athletic_mode?c.athletic_phase:'off';
   const repActive=ph==='resist'||ph==='return';
+
+  // End-of-session debrief: drill just stopped with reps logged -> show the
+  // session-results card (built from the last polled reps + target score).
+  if(!c.athletic_mode && window._prevAthleticMode && (window._lastReps||[]).length){
+    renderSessionDebrief(window._lastReps, window._targetScore);
+  }
+  if(c.athletic_mode && !window._prevAthleticMode){
+    const sd=document.getElementById('session-debrief');
+    if(sd) sd.style.display='none';   // new drill starting — clear the debrief
+  }
+  window._prevAthleticMode=c.athletic_mode;
 
   // Single phase-aware primary action — Arm rig → Start/Next rep → Stop → Reset
   if(primaryBtn){
