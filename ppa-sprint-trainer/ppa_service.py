@@ -109,7 +109,7 @@ P21_00 = (21 << 8) | 0
 P21_41 = (21 << 8) | 41
 SON_REG = 0x3607
 SON_CMD = 0x02
-PCT_PER_KG = 5.64        # locked-in 2026-05-10 4-point fit
+PCT_PER_KG = analytics.PCT_PER_KG  # single source of truth (analytics.py)
 SPLIT_LENGTH_M = 5.0     # 1080-style uniform split bucket (metres)
 HEARTBEAT_INTERVAL = 1.5  # s; well under 5s drive watchdog
 SPEED_LIMIT_ARMED = 560   # RPM cap during Phase C ops (~3.2 m/s). Sized for the
@@ -6873,7 +6873,8 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                 await asyncio.to_thread(
                     _attach_rep_analysis, rep,
                     (rep.get("_meta") or {}).get("body_mass_kg"),
-                    rep.get("drill"), True)
+                    rep.get("drill"), True,
+                    state.athletic_sport, state.athletic_sex)
             # Persist if athlete_id provided BEFORE appending so we can stamp
             # _meta with the resulting session_id (used by the prev-session
             # delta lookup in the athlete report).
@@ -7396,19 +7397,39 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                 log.warning("annotate_rep failed: %s", e)
         return {"rep_idx": idx, "color": rep.get("color"), "comment": rep.get("comment")}
 
+    _POSITION_ALIASES = {"outside_back": "back", "other": "back"}
+
+    async def _resolve_position(rep: dict, position: Optional[str]) -> str:
+        """Explicit UI choice wins; else the athlete's STORED position_group
+        (previously ignored — every report silently defaulted to 'back');
+        else 'back'. Values outside the NORMS tables (outside_back / other)
+        map onto the nearest table so the norms never silently vanish."""
+        pos = position
+        if not pos:
+            aid = (rep.get("_meta") or {}).get("athlete_id")
+            if aid is not None and state.db is not None:
+                try:
+                    a = await state.db_call(persistence.get_athlete, int(aid))
+                    pos = (a or {}).get("position_group")
+                except Exception:
+                    pos = None
+        pos = (pos or "back").lower()
+        return _POSITION_ALIASES.get(pos, pos if pos in ("back", "forward") else "back")
+
     @app.get("/api/c/athletic/rep/{idx}/insights")
-    async def phase_c_athletic_rep_insights(idx: int, position: str = "back",
+    async def phase_c_athletic_rep_insights(idx: int, position: Optional[str] = None,
                                             planned_modality: Optional[str] = None):
         """Coach view — full ranked insight list, all severities, raw metrics."""
         import insights as _insights
         rep = _find_rep(idx)
         if rep is None:
             raise HTTPException(404, f"rep {idx} not found")
-        return _insights.build_report(rep, position_group=position,
+        pos = await _resolve_position(rep, position)
+        return _insights.build_report(rep, position_group=pos,
                                        planned_modality=planned_modality)
 
     @app.get("/api/c/athletic/rep/{idx}/athlete_report")
-    async def phase_c_athletic_rep_athlete_report(idx: int, position: str = "back",
+    async def phase_c_athletic_rep_athlete_report(idx: int, position: Optional[str] = None,
                                                    planned_modality: Optional[str] = None):
         """Athlete view — synthesised verdict + dosed plan + chase metric.
         If the rep has _meta.athlete_id and there's a prior session for that
@@ -7419,6 +7440,7 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         rep = _find_rep(idx)
         if rep is None:
             raise HTTPException(404, f"rep {idx} not found")
+        position = await _resolve_position(rep, position)
         coach_report = _insights.build_report(rep, position_group=position,
                                               planned_modality=planned_modality)
         all_insights = (coach_report.get("primary_insights", []) +
@@ -7454,13 +7476,25 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         out = await state.db_call(persistence.load_session_reps, session_id)
         if not out.get("session"):
             raise HTTPException(404, f"session {session_id} not found")
+        sess = out["session"]
         state.athletic_mode = True
         state.athletic_phase = "ready"
         state.athletic_reps = []
         for rep in out["reps"]:
+            # Re-attach the gated server-side analysis so the coach F-V panel
+            # renders rep["fv"] (validity-gated tether model) — without this,
+            # every reloaded historical session fell through to the UNGATED
+            # in-browser Samozino fit, showing different F0/V0 one panel apart.
+            try:
+                await asyncio.to_thread(
+                    _attach_rep_analysis, rep, sess.get("body_mass_kg"),
+                    rep.get("drill"), True,
+                    state.athletic_sport, state.athletic_sex)
+            except Exception as e:
+                log.warning("session load: rep analysis failed: %s", e)
             state.athletic_reps.append(rep)
         return {"loaded": len(out["reps"]), "session_id": session_id,
-                "athlete_id": out["session"]["athlete_id"]}
+                "athlete_id": sess["athlete_id"]}
 
     # ---- Athlete metadata (PUT for partial update, GET for single) ----
     @app.get("/api/athletes/{athlete_id}")
@@ -7533,6 +7567,18 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                         log.warning("stop: phantom delete_rep failed: %s", e)
                 elif state.session_start_t is not None:
                     try:
+                        # Same validated analysis the loop path runs. Without
+                        # this, a session ended via the Stop button persisted
+                        # its final rep with no F-V / step columns while its
+                        # siblings had them.
+                        try:
+                            await asyncio.to_thread(
+                                _attach_rep_analysis, rip,
+                                state.athletic_bodymass_kg,
+                                state.athletic_config.get("drill"), True,
+                                state.athletic_sport, state.athletic_sex)
+                        except Exception as e:
+                            log.warning("stop: rep analysis failed: %s", e)
                         t_end_ms = int((rip["ended_at"] - state.session_start_t) * 1000)
                         drill_name = state.athletic_config.get("drill")
                         await asyncio.to_thread(
@@ -7905,6 +7951,19 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         )
         loop = asyncio.get_running_loop()
         metrics = await loop.run_in_executor(None, analytics.compute_rep_analytics, samples)
+        # Prefer the PERSISTED step metrics (speed-residual detector, written
+        # by both the live loop and the importers) over the legacy 10 Hz
+        # approximate recount above — the two detectors produced different
+        # step numbers for the same rep depending on the panel. The legacy
+        # values stay available under *_legacy for comparison.
+        row = dict(rep)
+        for legacy_key, col in (("step_count", "total_steps"),
+                                ("step_rate_hz", "step_freq_hz"),
+                                ("avg_step_length_m", "avg_step_length_m")):
+            v = row.get(col)
+            if v is not None:
+                metrics[legacy_key + "_legacy"] = metrics.get(legacy_key)
+                metrics[legacy_key] = v
         # Decorate with rep id + raw aggregates for convenience
         metrics["rep_id"] = rep_id
         metrics["session_id"] = session_id

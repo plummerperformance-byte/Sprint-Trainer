@@ -825,15 +825,15 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
         if samples:
             # Unit factors mirror analytics.py (COUNTS_PER_METRE, PCT_PER_KG);
             # local import avoids any module-level cycle.
-            from analytics import COUNTS_PER_METRE, PCT_PER_KG
+            from analytics import COUNTS_PER_METRE, PCT_PER_KG, MPS_PER_RPM
             rows = []
             for s in samples:
                 t_ms = s.get("t_ms")
                 if t_ms is None: continue
                 speed_rpm = None
                 if "v_mps" in s:
-                    # 0.00576 m/s per RPM → speed_rpm = v_mps / 0.00576
-                    speed_rpm = int(round(s["v_mps"] / 0.00576))
+                    # speed_rpm = v_mps / MPS_PER_RPM (single source: analytics)
+                    speed_rpm = int(round(s["v_mps"] / MPS_PER_RPM))
                 pos_counts = None
                 if s.get("pos_m") is not None:
                     pos_counts = int(round(s["pos_m"] * COUNTS_PER_METRE))

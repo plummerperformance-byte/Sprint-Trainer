@@ -186,10 +186,11 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
                 break
 
     # ---- Step detection + foot labels + L/R asymmetry ----
-    # Primary detector = speed residual (doc §2); it beat the cable-force detector
-    # decisively in the A/B on real 1080 data (speed found ~2x the steps at the
-    # right rhythm). The force detector stays available for heavy-resisted sprints
-    # where cable tension may carry a cleaner per-step signal — worth re-checking.
+    # Sole detector = speed residual (doc §2); it beat the old cable-force
+    # detector decisively in the A/B on real 1080 data (speed found ~2x the
+    # steps at the right rhythm). The force detector was removed 2026-08-27 —
+    # it had no callers; see git history if a heavy-resisted-specific detector
+    # is ever revisited.
     step_events = detect_steps_speed_residual(times_s, speeds_mps, pos_m)
     step_events = annotate_steps(step_events, times_s, forces_n)
     step_events = label_feet(step_events, start_foot)
@@ -316,91 +317,6 @@ STEP_MIN_S = 0.11      # < ~9 Hz between strikes is implausibly fast
 STEP_MAX_S = 0.45      # > this gap ≈ a missed step
 STEP_MIN_LEN_M = 0.25  # a "step" shorter than this is almost certainly noise
 STEP_MAX_LEN_M = 3.5   # longer than this is implausible for one step
-
-
-def detect_steps(t_s, f_n, pos_m, min_period_s=0.15, min_prominence_n=4.0, smooth_window=15,
-                 min_step_len_m=STEP_MIN_LEN_M):
-    """Peak-detect foot strikes on the cable force trace.
-
-    Cable trainers maintain constant baseline tension so peaks are subtle
-    (typically 5-30 N above the local valley, not 0 → peak like a force
-    plate). Use prominence-based detection on a smoothed trace:
-      1. Light moving-average smooth (~15 ms) to remove digitisation noise
-      2. Find every local maximum
-      3. Compute prominence (how far it rises above the lower of the two
-         adjacent valleys); discard peaks below `min_prominence_n`
-      4. Reject a candidate that sits too close to the previous accepted event
-         in TIME (`min_period_s`) OR DISTANCE (`min_step_len_m`) — keep the more
-         prominent of the pair. Distance-dedup (doc §2) catches one-step splits
-         the time gate alone misses at high cable speed.
-      5. Tag each accepted interval whose period/length falls outside the
-         physiological window with a `flags` list (doc §7 validation), rather
-         than dropping it — a long gap usually means a *missed* step to review.
-
-    Returns list of step dicts (1080-App step_events shape), each with `flags`.
-    """
-    if len(f_n) < 3:
-        return []
-    fs = _smooth(f_n, smooth_window)
-
-    # Find ALL local maxima (no threshold yet)
-    maxima = []
-    for i in range(1, len(fs) - 1):
-        if fs[i] > fs[i - 1] and fs[i] >= fs[i + 1]:
-            maxima.append(i)
-    if not maxima:
-        return []
-
-    # For each maximum, compute prominence vs adjacent valleys (look in a
-    # ±0.5 s window, which comfortably brackets one full step at 2-5 Hz).
-    win = max(20, int(0.5 / max(t_s[1] - t_s[0], 1e-4)))  # samples in 0.5 s
-    accepted = []
-    for idx in maxima:
-        a = max(0, idx - win); b = min(len(fs), idx + win + 1)
-        valley_left = min(fs[a:idx + 1]) if idx > a else fs[idx]
-        valley_right = min(fs[idx:b]) if idx < b - 1 else fs[idx]
-        prominence = fs[idx] - max(valley_left, valley_right)
-        if prominence < min_prominence_n:
-            continue
-        if accepted:
-            prev = accepted[-1]
-            too_close = ((t_s[idx] - t_s[prev]) < min_period_s
-                         or (pos_m[idx] - pos_m[prev]) < min_step_len_m)
-            if too_close:
-                # same step split into two candidates — keep the more prominent
-                if fs[idx] > fs[prev]:
-                    accepted[-1] = idx
-                continue
-        accepted.append(idx)
-
-    # Build step events using ORIGINAL (un-smoothed) force values for the recorded peak
-    steps = []
-    for i, idx in enumerate(accepted):
-        prev_idx = accepted[i - 1] if i > 0 else None
-        period_ms = round((t_s[idx] - t_s[prev_idx]) * 1000, 1) if prev_idx is not None else None
-        length_m = round(pos_m[idx] - pos_m[prev_idx], 3) if prev_idx is not None else None
-        inst_freq_hz = round(1000 / period_ms, 2) if period_ms and period_ms > 0 else None
-        step_speed = (round(length_m / (period_ms / 1000.0), 3)
-                      if (length_m is not None and period_ms) else None)
-        flags = []
-        if period_ms is not None:
-            if period_ms > STEP_MAX_S * 1000: flags.append("long_gap")    # likely missed step
-            elif period_ms < STEP_MIN_S * 1000: flags.append("short_gap")  # likely double
-        if length_m is not None:
-            if length_m > STEP_MAX_LEN_M: flags.append("long_step")
-            elif length_m < STEP_MIN_LEN_M: flags.append("short_step")
-        steps.append({
-            "step_number": i + 1,
-            "t_strike_s": round(t_s[idx], 4),
-            "pos_m": round(pos_m[idx], 3),
-            "peak_force_n": round(f_n[idx], 1),
-            "step_period_ms": period_ms,
-            "step_length_m": length_m,
-            "step_frequency_hz": inst_freq_hz,
-            "step_speed_mps": step_speed,
-            "flags": flags,
-        })
-    return steps
 
 
 def _rolling_med_mad(sig, w):
