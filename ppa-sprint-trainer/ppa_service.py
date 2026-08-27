@@ -2185,6 +2185,11 @@ PHASE_C_HTML = """<!doctype html>
     border:1px solid var(--line);border-radius:10px;cursor:pointer}
   .an-tab:hover{color:var(--fg);border-color:var(--line-strong)}
   .an-tab.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+  .trend-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .tr-tab{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+          background:transparent;color:var(--muted);border:1px solid var(--line);
+          border-radius:99px;cursor:pointer;min-height:28px}
+  .tr-tab.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
   .an-panel[hidden]{display:none}
   /* Adjust panel: each control section wrapped in its own subtle card (mockup rail) */
   .sheet .field{background:var(--raised);border:1px solid var(--line);border-radius:14px;
@@ -2611,6 +2616,7 @@ PHASE_C_HTML = """<!doctype html>
     <div class="an-tabs" role="tablist" aria-label="Rep analysis">
       <button type="button" class="an-tab active" data-an="compare" role="tab">Compare reps</button>
       <button type="button" class="an-tab" data-an="fv" role="tab">Force–Velocity</button>
+      <button type="button" class="an-tab" data-an="trends" role="tab">Trends</button>
     </div>
     <div class="an-panel" data-an="compare">
       <div class="meta">Speed + force overlaid across the two reps.</div>
@@ -2628,6 +2634,25 @@ PHASE_C_HTML = """<!doctype html>
       </div>
       <div id="fv-result" class="meta" style="margin-top:8px">Needs at least 1 rep with a full trace</div>
       <svg id="fv-chart" viewBox="0 0 600 200"></svg>
+    </div>
+    <div class="an-panel" data-an="trends" hidden>
+      <div class="meta">Per-session bests with a minimum-detectable-change corridor — a move inside the shaded band is noise; outside it is a real change.</div>
+      <div class="trend-tabs" id="trend-tabs" role="group" aria-label="Trend metric">
+        <button type="button" class="tr-tab active" data-tm="top_speed">Top speed</button>
+        <button type="button" class="tr-tab" data-tm="pmax_rel_wkg">Pmax/kg</button>
+        <button type="button" class="tr-tab" data-tm="v0_ms">V0</button>
+        <button type="button" class="tr-tab" data-tm="f0_rel_nkg">F0/kg</button>
+        <button type="button" class="tr-tab" data-tm="split_10m">10 m</button>
+      </div>
+      <div id="trend-status" class="meta" style="margin-top:8px"></div>
+      <svg id="trend-chart" viewBox="0 0 600 220"
+           style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:8px"></svg>
+      <div class="trend-legend meta" style="margin-top:6px;font-size:10.5px">
+        <span style="color:var(--good)">●</span> real gain ·
+        <span style="color:var(--bad)">●</span> real decline ·
+        <span style="color:var(--muted)">●</span> within noise ·
+        <span style="color:var(--accent)">▮</span> MDC corridor
+      </div>
     </div>
   </div>
 
@@ -3621,6 +3646,75 @@ function populateRepSelects(reps){
       card.querySelectorAll('.an-tab').forEach(function(x){x.classList.toggle('active',x===t);});
       card.querySelectorAll('.an-panel').forEach(function(p){p.hidden=(p.getAttribute('data-an')!==k);});
     });
+  });
+})();
+// ---- Trends: per-session bests with MDC noise corridors (sprint_trends) ----
+window._trendMetric='top_speed';
+const TREND_UNITS={top_speed:'m/s',pmax_rel_wkg:'W/kg',v0_ms:'m/s',f0_rel_nkg:'N/kg',split_10m:'s'};
+async function renderTrends(){
+  const st=document.getElementById('trend-status');
+  const svg=document.getElementById('trend-chart');
+  if(!st||!svg) return;
+  const aid=document.getElementById('athlete-select').value;
+  if(!aid){ st.textContent='Select an athlete to see progress trends.'; svg.innerHTML=''; return; }
+  let j;
+  try{ j=await(await fetch('/api/athletes/'+aid+'/trends?metric='+window._trendMetric)).json(); }
+  catch(e){ st.textContent='Could not load trends'; svg.innerHTML=''; return; }
+  const s=j.series||[];
+  if(!s.length){ st.textContent='No sessions with this metric yet.'; svg.innerHTML=''; return; }
+  const unit=TREND_UNITS[window._trendMetric]||'';
+  const lv=j.latest;
+  st.innerHTML=lv?('Latest: <b>'+lv.value+' '+unit+'</b> — '+lv.direction+
+    (lv.real_change!=null?(lv.real_change?' (beyond the noise band)':' (within noise)'):'')+
+    ' · '+j.n_sessions+' sessions'):'';
+  // ---- chart ----
+  const W=600,H=220,PADL=46,PADR=16,PADT=18,PADB=26;
+  let lo=Infinity,hi=-Infinity;
+  s.forEach(p=>{ lo=Math.min(lo,p.value,(p.mdc_lo!=null?p.mdc_lo:p.value));
+                 hi=Math.max(hi,p.value,(p.mdc_hi!=null?p.mdc_hi:p.value)); });
+  const span=(hi-lo)||1; lo-=span*0.15; hi+=span*0.15;
+  const xs=i=>s.length>1?(PADL+(i/(s.length-1))*(W-PADL-PADR)):(W/2);
+  const ys=v=>H-PADB-((v-lo)/(hi-lo))*(H-PADT-PADB);
+  let out='';
+  // gridlines + y labels
+  for(let i=0;i<=3;i++){
+    const v=lo+(hi-lo)*i/3, y=ys(v);
+    out+='<line x1="'+PADL+'" y1="'+y.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+y.toFixed(1)+'" stroke="#243157" opacity="0.7"/>';
+    out+='<text x="'+(PADL-6)+'" y="'+(y+3).toFixed(1)+'" fill="#818eae" font-size="9" text-anchor="end">'+v.toFixed(2)+'</text>';
+  }
+  // MDC corridors: shaded band across each segment (prev best ± MDC)
+  for(let i=1;i<s.length;i++){
+    if(s[i].mdc_lo==null) continue;
+    const x0=xs(i-1),x1=xs(i),yT=ys(s[i].mdc_hi),yB=ys(s[i].mdc_lo);
+    out+='<rect x="'+x0.toFixed(1)+'" y="'+yT.toFixed(1)+'" width="'+(x1-x0).toFixed(1)+
+         '" height="'+(yB-yT).toFixed(1)+'" fill="#5b8bff" opacity="0.10"/>';
+  }
+  // line + dots
+  out+='<path d="'+s.map((p,i)=>(i?'L':'M')+xs(i).toFixed(1)+','+ys(p.value).toFixed(1)).join(' ')+
+       '" stroke="#5b8bff" stroke-width="2" fill="none"/>';
+  s.forEach((p,i)=>{
+    const col=p.direction==='improved'?'var(--good)':(p.direction==='declined'?'var(--bad)':(p.direction==='baseline'?'var(--accent)':'#818eae'));
+    out+='<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(p.value).toFixed(1)+'" r="4.5" fill="'+col+'">'+
+         '<title>'+p.date+' · '+p.value+' '+unit+(p.delta!=null?(' · Δ'+p.delta):'')+' · '+p.direction+'</title></circle>';
+  });
+  // sparse x labels: first + last date
+  out+='<text x="'+PADL+'" y="'+(H-8)+'" fill="#818eae" font-size="9">'+(s[0].date||'')+'</text>';
+  if(s.length>1) out+='<text x="'+(W-PADR)+'" y="'+(H-8)+'" fill="#818eae" font-size="9" text-anchor="end">'+(s[s.length-1].date||'')+'</text>';
+  svg.innerHTML=out;
+}
+(function(){
+  const tabs=document.getElementById('trend-tabs'); if(!tabs) return;
+  tabs.querySelectorAll('.tr-tab').forEach(function(b){ b.addEventListener('click',function(){
+    window._trendMetric=b.getAttribute('data-tm');
+    tabs.querySelectorAll('.tr-tab').forEach(function(x){x.classList.toggle('active',x===b);});
+    renderTrends();
+  }); });
+  const trTab=document.querySelector('.an-tab[data-an="trends"]');
+  if(trTab) trTab.addEventListener('click', renderTrends);
+  const sel=document.getElementById('athlete-select');
+  if(sel) sel.addEventListener('change',function(){
+    const p=document.querySelector('.an-panel[data-an="trends"]');
+    if(p&&!p.hidden) renderTrends();
   });
 })();
 document.getElementById('cmp-go').onclick=async()=>{
@@ -6657,6 +6751,13 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
             rep.setdefault("rep_idx", i + 1)
             rep.setdefault("started_at", time.time() - (len(payload_reps) - i) * 5)
             rep.setdefault("ended_at", rep["started_at"] + (rep.get("duration_s") or 1.0))
+            # Gated F-V / norms / steps for loaded reps that carry a trace —
+            # attached BEFORE persisting so the DB row gets the F-V columns.
+            if rep.get("fv") is None and rep.get("samples"):
+                await asyncio.to_thread(
+                    _attach_rep_analysis, rep,
+                    (rep.get("_meta") or {}).get("body_mass_kg"),
+                    rep.get("drill"), True)
             # Persist if athlete_id provided BEFORE appending so we can stamp
             # _meta with the resulting session_id (used by the prev-session
             # delta lookup in the athlete report).
@@ -6672,12 +6773,6 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                     rep["_meta"]["rep_db_id"] = out["rep_id"]
                 except Exception as e:
                     log.warning("import_rep failed: %s", e)
-            # Gated F-V / norms / steps for loaded reps that carry a trace
-            if rep.get("fv") is None and rep.get("samples"):
-                await asyncio.to_thread(
-                    _attach_rep_analysis, rep,
-                    (rep.get("_meta") or {}).get("body_mass_kg"),
-                    rep.get("drill"), True)
             state.athletic_reps.append(rep)
         return {"loaded_reps": len(payload_reps), "persisted": persisted_ids}
 
@@ -6698,6 +6793,29 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                     "points": await state.db_call(
                         persistence.athlete_progression, athlete_id, metric, agg)}
         except ValueError as e:
+            raise HTTPException(400, str(e))
+
+    @app.get("/api/athletes/{athlete_id}/trends")
+    async def athlete_trends(athlete_id: int, metric: Optional[str] = None):
+        """Longitudinal progress with MDC noise corridors (sprint_trends).
+        Each point carries the corridor vs the previous session best and a
+        real-change verdict (improved / declined / stable / baseline)."""
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        sessions = await state.db_call(
+            persistence.athlete_trend_sessions, athlete_id)
+        try:
+            if metric:
+                series = sprint_trends.trend(sessions, metric)
+                return {"athlete_id": athlete_id, "metric": metric,
+                        "n_sessions": len(sessions), "series": series,
+                        "latest": sprint_trends.latest_verdict(series)}
+            allm = sprint_trends.trend_all(sessions)
+            return {"athlete_id": athlete_id, "n_sessions": len(sessions),
+                    "metrics": allm,
+                    "latest": {m: sprint_trends.latest_verdict(s)
+                               for m, s in allm.items()}}
+        except KeyError as e:
             raise HTTPException(400, str(e))
 
     @app.get("/api/athletes/{athlete_id}/profile")

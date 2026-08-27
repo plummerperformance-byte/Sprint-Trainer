@@ -813,6 +813,39 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
     return {"session_id": session_id, "rep_id": rep_id, "athlete_id": athlete_id}
 
 
+def athlete_trend_sessions(conn: sqlite3.Connection, athlete_id: int) -> list:
+    """Per-session rep values shaped for sprint_trends.trend():
+    [{date, session_id, reps: [{top_speed, v0_ms, f0_rel_nkg, pmax_rel_wkg,
+    split_10m, valid}]}] oldest-first. Only sessions with at least one rep."""
+    rows = conn.execute(
+        """SELECT s.id AS session_id, DATE(s.started_at) AS date,
+                  r.peak_speed_mps, r.v0_mps, r.f0_rel_nkg, r.pmax_rel_wkg,
+                  COALESCE(r.valid, 1) AS valid,
+                  json_extract(r.splits_s_json, '$."10"') AS split_10m
+           FROM sessions s
+           JOIN reps r ON r.session_id = s.id
+           WHERE s.athlete_id = ?
+           ORDER BY s.started_at, r.id""",
+        (athlete_id,),
+    ).fetchall()
+    sessions: list = []
+    by_id: dict = {}
+    for row in rows:
+        sid = row["session_id"]
+        if sid not in by_id:
+            by_id[sid] = {"session_id": sid, "date": row["date"], "reps": []}
+            sessions.append(by_id[sid])
+        by_id[sid]["reps"].append({
+            "top_speed": row["peak_speed_mps"],
+            "v0_ms": row["v0_mps"],
+            "f0_rel_nkg": row["f0_rel_nkg"],
+            "pmax_rel_wkg": row["pmax_rel_wkg"],
+            "split_10m": row["split_10m"],
+            "valid": bool(row["valid"]),
+        })
+    return sessions
+
+
 def athlete_history(conn: sqlite3.Connection, athlete_id: int, limit: int = 50) -> dict:
     """Return an athlete's session history with rep summaries.
 
