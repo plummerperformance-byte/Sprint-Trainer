@@ -28,10 +28,18 @@ except Exception:
     rn = None
 
 try:
-    from load_1080_xlsx import detect_steps_speed_residual, compute_step_aggregates
+    from load_1080_xlsx import (detect_steps_speed_residual, annotate_steps,
+                                compute_step_aggregates, label_feet)
     _HAVE_STEPS = True
 except Exception:
     _HAVE_STEPS = False
+
+# The speed-residual detector was tuned and A/B-validated on 1 kHz traces.
+# Its smoothing windows (25/200 ms) degenerate to 1-2 samples below ~100 Hz,
+# so its "step signal" is just sample-to-sample noise there — the 10 Hz live
+# poll loop must NOT feed it (Nyquist for a 4-5 Hz step rate needs >=10 Hz
+# just to see the oscillation, let alone resolve it).
+STEP_DETECT_MIN_HZ = 100.0
 
 SPLIT_DISTANCES = (5, 10, 15, 20, 30, 40)
 
@@ -84,7 +92,8 @@ def _decel_kpis(t, vel, dist, vmax_i):
 
 def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
                 sport: Optional[str] = None, sex: Optional[str] = None,
-                drill: str = "Running", resisted: bool = True) -> dict:
+                drill: str = "Running", resisted: bool = True,
+                start_foot: str = "left") -> dict:
     """Full coach-ready analysis of one rep's trace. Returns a nested dict."""
     t = [float(x) for x in t]
     dist = _abs(pos)
@@ -94,6 +103,19 @@ def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
     n = len(t)
     if n < 5:
         return {"ok": False, "reason": "too few samples"}
+
+    # Trim to the OUTBOUND phase. Live traces run until the cable reels back
+    # to the start, so the return/walk-back leg sits inside the window and
+    # corrupts the F-V fit, the step detector and the aggregates. Everything
+    # after the furthest point reached is not sprinting — cut it. (Imported
+    # traces are already sliced at the sprint start and end near peak
+    # distance, so this is a no-op for them.)
+    far_i = max(range(n), key=lambda i: dist[i])
+    if far_i >= 4 and far_i < n - 1:
+        t, dist, vel = t[:far_i + 1], dist[:far_i + 1], vel[:far_i + 1]
+        if force is not None:
+            force = list(force)[:far_i + 1]
+        n = far_i + 1
 
     vmax = max(vel)
     vmax_i = vel.index(vmax)
@@ -115,11 +137,20 @@ def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
 
     # ---- step mechanics (cable-safe: length + frequency, NOT contact time) ----
     if _HAVE_STEPS:
-        try:
-            steps = detect_steps_speed_residual(t, vel, dist)
-            out["steps"] = compute_step_aggregates(steps)
-        except Exception as e:
-            out["steps"] = {"error": str(e)}
+        if fs < STEP_DETECT_MIN_HZ:
+            out["steps"] = {"error": (f"sample rate {fs:.0f} Hz too low for "
+                                      f"step detection (validated at 1 kHz; "
+                                      f"needs >= {STEP_DETECT_MIN_HZ:.0f} Hz)")}
+        else:
+            try:
+                steps = detect_steps_speed_residual(t, vel, dist)
+                if force is not None and len(force) == n:
+                    steps = annotate_steps(steps, t, force)
+                steps = label_feet(steps, start_foot)
+                out["step_events"] = steps
+                out["steps"] = compute_step_aggregates(steps)
+            except Exception as e:
+                out["steps"] = {"error": str(e)}
 
     # ---- gated force-velocity profile (accel phase only) ----
     acc = slice(0, vmax_i + 1)
@@ -135,6 +166,7 @@ def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
             "v0_ms": round(fvp["V0"], 2),
             "pmax_rel_wkg": round(fvp["Pmax_rel"], 2),
             "rfmax_pct": round(fvp["RFmax_pct"], 1) if fvp["RFmax_pct"] else None,
+            "drf_pct": round(fvp["DRF_pct"], 2) if fvp.get("DRF_pct") else None,
             "fv_slope": round(fvp["FV_slope"], 3) if fvp["FV_slope"] else None,
             "tau_s": round(m["TAU"], 3),
         }
@@ -166,22 +198,6 @@ def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
     return out
 
 
-def to_db_row(rep: dict) -> dict:
-    """Flatten analyse_rep output onto the reps-table columns the app persists."""
-    fv = rep.get("fv", {})
-    k = rep.get("kinematics", {})
-    st = rep.get("steps", {})
-    return {
-        "top_speed": k.get("vmax_ms"),
-        "f0_rel_nkg": fv.get("f0_rel_nkg") if fv.get("valid") else None,
-        "v0_mps": fv.get("v0_ms") if fv.get("valid") else None,
-        "pmax_rel_wkg": fv.get("pmax_rel_wkg") if fv.get("valid") else None,
-        "valid": 1 if fv.get("valid") else 0,
-        "step_freq_hz": st.get("step_freq_hz"),
-        "avg_step_length_m": st.get("avg_step_length_m"),
-    }
-
-
 if __name__ == "__main__":
     import csv
     fn = ("C:/Users/AdamP/1080motion/export/Eric_Hsu_3e017d30/"
@@ -194,4 +210,3 @@ if __name__ == "__main__":
     rep = analyse_rep(t, pos, vel, bodymass=82, sport="soccer", drill="Running")
     import json
     print(json.dumps(rep, indent=2))
-    print("\nDB row:", to_db_row(rep))

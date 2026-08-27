@@ -165,12 +165,21 @@ def synthesise(rep: dict, all_insights: list, position_group: str = "back",
     splits = rep.get("splits_s_extended") or rep.get("splits_s") or {}
     s10 = splits.get("10")
     peak_v = rep.get("peak_speed_mps") or 0
-    ctx = {"peak_v": peak_v, "s10": float(s10) if s10 is not None else 0.0,
-           "position": position_group}
-    try:
-        verdict = rule["verdict_template"].format(**ctx)
-    except Exception:
-        verdict = rule["verdict_template"]
+    if s10 is None and "{s10" in rule["verdict_template"]:
+        # Rep never reached 10 m (short resisted rep, gym drill, …) — never
+        # fabricate a "0.00 s" split in the athlete's face. Give an honest
+        # verdict off what we do have.
+        verdict = (f"You hit {peak_v:.2f} m/s at top speed. This rep didn't "
+                   f"cover 10 m, so there's no 10 m split to judge the start "
+                   f"by — the call below rests on the profile numbers.")
+    else:
+        ctx = {"peak_v": peak_v,
+               "s10": float(s10) if s10 is not None else 0.0,
+               "position": position_group}
+        try:
+            verdict = rule["verdict_template"].format(**ctx)
+        except Exception:
+            verdict = rule["verdict_template"]
 
     # Chase metric — pick the field, current value, target
     chase_field, chase_label, chase_units, target_fn = rule["chase"]
@@ -201,7 +210,10 @@ def synthesise(rep: dict, all_insights: list, position_group: str = "back",
             continue
         rx_ids.append(rid)
 
-    avoids = rule["avoids"]
+    # COPY the rule's avoid list — appending to the reference would weld this
+    # athlete's contextual avoid into the module-level LIMITER_RULES for every
+    # later athlete in the process (real cross-athlete contamination bug).
+    avoids = list(rule["avoids"])
     # Contextual augmentation: if responsiveness predictor fired, add the
     # corresponding avoid.
     for ins in all_insights:

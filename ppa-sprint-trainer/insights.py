@@ -276,7 +276,15 @@ def acceleration_vs_maxv(rep: dict, position_group: str = "back") -> Optional[di
 
 
 def mechanical_effectiveness(rfmax_pct: Optional[float], drf: Optional[float]) -> Optional[dict]:
-    """RFmax + Drf interpretation per Morin 2017."""
+    """RFmax + Drf interpretation per Morin 2017.
+
+    DELIBERATELY force-plate-gated: rep["rf_max_pct"] / rep["drf"] are left
+    None by every current data path. The tether model does estimate an
+    RFmax/DRF from the fit (sprint_model._rf_metrics, surfaced in rep["fv"]
+    for the F-V panel), but per the load_1080_xlsx rationale a cable-derived
+    RF is not trustworthy enough to drive the "mechanics" limiter override —
+    only wire these fields up from measured (force-plate) data.
+    """
     if rfmax_pct is None and drf is None:
         return None
     msgs, prescribe = [], []
@@ -380,14 +388,16 @@ def stride_consistency(rep: dict) -> Optional[dict]:
     """Step-to-step stride-length variability across the STEADY-STATE portion
     of the run only (after step 4, before deceleration onset).
 
-    NOT bilateral asymmetry — cable-only data has no L/R foot tagging. This
-    is a within-athlete, within-rep coordination/fatigue signal, with a
-    much tighter coverage window than the previous "all steps" version per
-    PPA KB review (Topic 13).
+    NOT bilateral asymmetry. Step events come from the speed-residual
+    detector (load_1080_xlsx.detect_steps_speed_residual); foot labels are
+    DECLARED (start-foot input via label_feet), not measured, so this stays
+    a within-athlete, within-rep coordination/fatigue signal, with a much
+    tighter coverage window than the previous "all steps" version per PPA
+    KB review (Topic 13).
 
     Threshold: hide if steady-state CV ≤ 15% (within typical sprint
     biomechanics). Surface as warn at 15-25%, alert above 25%. Asymmetry
-    treatment is gated on a foot-strike sensor that we don't have yet.
+    TREATMENT stays gated on a measured foot-strike signal we don't have.
     """
     events = rep.get("step_events") or []
     if len(events) < 6:
@@ -421,10 +431,11 @@ def stride_consistency(rep: dict) -> Optional[dict]:
     if cv_pct < 25:
         tag = "Stride consistency: moderate"
         severity = "warn"
-        detail = (f"At top speed, stride length varied by ±{std:.2f} m "
-                  f"(CV {cv_pct:.1f}% across strides {valid and 5}–{4 + n}). "
-                  f"Could reflect fatigue, surface, or a stride-pattern "
-                  f"transition mid-run — worth checking on slow-mo video.")
+        detail = (f"At top speed, step length varied by ±{std:.2f} m "
+                  f"(CV {cv_pct:.1f}% across {n} steady-state steps from "
+                  f"step 5 on). Could reflect fatigue, surface, or a "
+                  f"stride-pattern transition mid-run — worth checking on "
+                  f"slow-mo video.")
     else:
         tag = "Stride consistency: high"
         severity = "warn"
@@ -443,7 +454,7 @@ def stride_consistency(rep: dict) -> Optional[dict]:
         "do_not": [],
         # Per PPA KB review: this is a within-athlete signal only, never a
         # cross-athlete benchmark. Do not auto-prescribe correctives.
-        "evidence": _evidence("cable-force peak detection (≈ stride rate; not bilateral asymmetry)", "exploratory"),
+        "evidence": _evidence("speed-residual step detection (≈ stride rate; not bilateral asymmetry)", "exploratory"),
     }
 
 

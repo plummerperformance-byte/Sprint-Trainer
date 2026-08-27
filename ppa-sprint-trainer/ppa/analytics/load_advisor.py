@@ -68,15 +68,26 @@ def suggest_load(profile: dict, target: str,
         lv = profile.get("lv_profile") or {}
         v0 = lv.get("v0_mps")
         slope = lv.get("fv_slope_per_kg")
+        f0_rel = lv.get("f0_rel_nkg")
+        bm = (profile.get("athlete") or {}).get("body_mass_kg")
         if not v0 or not slope:
-            return _result(None, "L-V profile incomplete", target)
+            return _result(None, "F-V profile incomplete", target)
+        if not bm:
+            return _result(None, "athlete body mass not set", target)
         d = (target_param if target_param is not None else 0.0) / 100.0
         if d <= 0:
             return _result(None, "velocity-drop target must be > 0", target)
-        # fv_slope_per_kg is the velocity loss (m/s) per kg of added load;
-        # solve load = (desired absolute drop) / |slope|.
-        load = d * v0 / abs(slope)
+        # fv_slope_per_kg is the F-V PROFILE slope (-F0_rel/V0, N.s/m per kg
+        # of BODY mass), not a velocity-per-kg-of-load slope. On the linear
+        # F-V relation v = V0.(1 - F_rel/F0_rel), a fractional velocity drop
+        # d needs sustained horizontal force F_rel = d.F0_rel (N/kg), i.e. a
+        # cable load of  L = d . F0_rel . bm / g  kg. Friction and belt
+        # losses are ignored, so treat as a starting estimate.
+        if not f0_rel:
+            f0_rel = abs(slope) * v0  # F0_rel = |slope|.V0 by definition
+        load = d * f0_rel * bm / 9.81
         return _result(_clamp(load), None, target, v0_mps=v0,
+                       f0_rel_nkg=round(f0_rel, 2), body_mass_kg=bm,
                        fv_slope_per_kg=slope, velocity_drop_pct=d * 100)
 
     return _result(None, f"unknown target {target!r}", target)

@@ -164,6 +164,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
         ("time_to_max_v_s", "time_to_max_v_s REAL"),
         ("dist_to_max_v_m", "dist_to_max_v_m REAL"),
         ("v_dropoff_pct", "v_dropoff_pct REAL"),
+        ("time_to_90pct_v_s", "time_to_90pct_v_s REAL"),
+        ("dist_to_90pct_v_m", "dist_to_90pct_v_m REAL"),
+        # Mono-exponential fit time constant (sprint_model TAU = MSS/MAC).
+        ("tau_s", "tau_s REAL"),
         ("source", "source TEXT"),  # "live" | "xlsx_import" | etc
         ("step_events_json", "step_events_json TEXT"),
         ("total_steps", "total_steps INTEGER"),
@@ -599,11 +603,15 @@ def end_rep_with_aggregates(
                   max_extension_m = ?, drill = ?, splits_s_json = ?,
                   is_eccentric = ?, samples_json = ?, source = ?,
                   dist_to_max_v_m = ?, decel_time_s = ?,
+                  time_to_max_v_s = ?, v_dropoff_pct = ?,
+                  time_to_90pct_v_s = ?, dist_to_90pct_v_m = ?,
                   f0_n = ?, f0_rel_nkg = ?, v0_mps = ?,
                   pmax_w_morin = ?, pmax_rel_wkg = ?, fv_slope_per_kg = ?,
+                  tau_s = ?,
                   total_steps = ?, step_freq_hz = ?,
                   avg_step_length_m = ?, step_length_std_m = ?,
-                  step_confidence = ?
+                  flagged_steps = ?, step_confidence = ?,
+                  step_events_json = ?
                WHERE id = ?""",
             (
                 ended_at, t_offset_ms,
@@ -621,14 +629,19 @@ def end_rep_with_aggregates(
                 1 if agg.get("is_eccentric") else 0,
                 samples_json, "live",
                 agg.get("dist_to_max_v_m"), agg.get("decel_time_s"),
+                agg.get("time_to_max_v_s"), agg.get("v_dropoff_pct"),
+                agg.get("time_to_90pct_v_s"), agg.get("dist_to_90pct_v_m"),
                 # Gated F-V (NULL when the fit failed the validity gate) +
                 # step mechanics from the live-rep sprint analysis.
                 agg.get("f0_n"), agg.get("f0_rel_nkg"), agg.get("v0_mps"),
                 agg.get("pmax_w_morin"), agg.get("pmax_rel_wkg"),
                 agg.get("fv_slope_per_kg"),
+                agg.get("tau_s"),
                 agg.get("total_steps"), agg.get("step_freq_hz"),
                 agg.get("avg_step_length_m"), agg.get("step_length_std_m"),
-                agg.get("step_confidence"),
+                agg.get("flagged_steps"), agg.get("step_confidence"),
+                (_json.dumps(agg["step_events"])
+                 if agg.get("step_events") else None),
                 rep_id,
             ),
         )
@@ -774,7 +787,10 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                   is_eccentric = ?,
                   f0_n = ?, f0_rel_nkg = ?, v0_mps = ?,
                   pmax_w_morin = ?, pmax_rel_wkg = ?, fv_slope_per_kg = ?,
+                  tau_s = ?,
                   time_to_max_v_s = ?, dist_to_max_v_m = ?, v_dropoff_pct = ?,
+                  time_to_90pct_v_s = ?, dist_to_90pct_v_m = ?,
+                  decel_time_s = ?,
                   total_steps = ?, step_freq_hz = ?,
                   avg_step_length_m = ?, step_length_std_m = ?,
                   flagged_steps = ?, step_confidence = ?, asymmetry_json = ?,
@@ -792,7 +808,10 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                 1 if rep.get("is_eccentric") else 0,
                 rep.get("f0_n"), rep.get("f0_rel_nkg"), rep.get("v0_mps"),
                 rep.get("pmax_w_morin"), rep.get("pmax_rel_wkg"), rep.get("fv_slope_per_kg"),
+                rep.get("tau_s"),
                 rep.get("time_to_max_v_s"), rep.get("dist_to_max_v_m"), rep.get("v_dropoff_pct"),
+                rep.get("time_to_90pct_v_s"), rep.get("dist_to_90pct_v_m"),
+                rep.get("decel_time_s"),
                 rep.get("total_steps"), rep.get("step_freq_hz"),
                 rep.get("avg_step_length_m"), rep.get("step_length_std_m"),
                 rep.get("flagged_steps"), rep.get("step_confidence"), asymmetry_json,
@@ -806,15 +825,15 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
         if samples:
             # Unit factors mirror analytics.py (COUNTS_PER_METRE, PCT_PER_KG);
             # local import avoids any module-level cycle.
-            from analytics import COUNTS_PER_METRE, PCT_PER_KG
+            from analytics import COUNTS_PER_METRE, PCT_PER_KG, MPS_PER_RPM
             rows = []
             for s in samples:
                 t_ms = s.get("t_ms")
                 if t_ms is None: continue
                 speed_rpm = None
                 if "v_mps" in s:
-                    # 0.00576 m/s per RPM → speed_rpm = v_mps / 0.00576
-                    speed_rpm = int(round(s["v_mps"] / 0.00576))
+                    # speed_rpm = v_mps / MPS_PER_RPM (single source: analytics)
+                    speed_rpm = int(round(s["v_mps"] / MPS_PER_RPM))
                 pos_counts = None
                 if s.get("pos_m") is not None:
                     pos_counts = int(round(s["pos_m"] * COUNTS_PER_METRE))
