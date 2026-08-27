@@ -22,8 +22,11 @@ except Exception:
 
 # metric key -> (rep field, MDC % , higher_is_better)
 # MDC % pulled from insights.py where available, with sensible fallbacks.
+# Top speed uses the v0 (velocity) MDC — the 20 m SPLIT-TIME MDC (0.99%) is
+# a time reliability figure and was silently narrowing the speed corridor
+# vs the 1.45% synthesis uses for the same "real change?" question.
 METRICS = {
-    "top_speed":     ("top_speed",     _INS_MDC.get("split_20m", 2.0), True),
+    "top_speed":     ("top_speed",     _INS_MDC.get("v0_mps", 1.45),   True),
     "v0_ms":         ("v0_ms",         _INS_MDC.get("v0_mps", 1.45),   True),
     "f0_rel_nkg":    ("f0_rel_nkg",    _INS_MDC.get("f0_n", 3.02),     True),
     "pmax_rel_wkg":  ("pmax_rel_wkg",  _INS_MDC.get("pmax_w", 4.0),    True),
@@ -108,7 +111,7 @@ if __name__ == "__main__":
     sessions = [{"date": f"S{i+1}", "reps": [{"top_speed": v, "valid": True}]}
                 for i, v in enumerate(seq)]
     s = trend(sessions, "top_speed")
-    print("TOP SPEED trend (MDC 2%):")
+    print("TOP SPEED trend (MDC 1.45% — v0 reliability):")
     for p in s:
         tag = p["direction"]
         print(f"  {p['date']}: {p['value']} m/s  Δ{p['delta']}  band[{p['mdc_lo']},{p['mdc_hi']}]  -> {tag}")

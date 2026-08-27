@@ -174,12 +174,19 @@ def render_prescription(rx_id: str, rep: dict, view: str = "athlete") -> str:
     body_mass_kg = (rep.get("_meta") or {}).get("body_mass_kg")
     f0 = rep.get("f0_n")
     v0 = rep.get("v0_mps")
+    text = rx.get("athlete_text" if view == "athlete" else "coach_text", "")
+    if "{lopt" in text and not f0:
+        # No valid F-V for this rep — never render "0 kg on the cable".
+        if view == "athlete":
+            return (f"{rx.get('label', rx_id)} — your coach will set the "
+                    f"load (it needs a valid force-velocity profile first).")
+        return ("Lopt undosed — no valid F-V on this rep (f0_n missing). "
+                "Capture a 20-30 m resisted profile rep to dose per Cross 2017.")
     lopt_kg = (f0 / 2 / 9.81) if f0 else 0.0
     lopt_pct_bm = (lopt_kg / body_mass_kg * 100) if (lopt_kg and body_mass_kg) else 0.0
     ctx = {"lopt_kg": lopt_kg, "lopt_pct_bm": lopt_pct_bm,
            "f0_n": f0 or 0, "v0_mps": v0 or 0,
            "body_mass_kg": body_mass_kg or 0}
-    text = rx.get("athlete_text" if view == "athlete" else "coach_text", "")
     try:
         return text.format(**ctx)
     except Exception:
