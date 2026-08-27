@@ -684,10 +684,15 @@ def annotate_rep(conn: sqlite3.Connection, rep_id: int,
 
 def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                source: str = "xlsx_import",
-               session_notes: Optional[str] = None) -> dict:
+               session_notes: Optional[str] = None,
+               session_id: Optional[int] = None) -> dict:
     """Persist a fully-built rep dict (e.g. from an xlsx parser) into the DB.
 
     Creates a new session row + rep row + samples rows in one transaction.
+    Pass session_id to append the rep to an existing session instead (multi-rep
+    imports): the rep is stacked onto the session timeline after the previous
+    rep (5 s gap), so per-rep windows into the samples table stay disjoint and
+    the on-demand analytics recompute slices the right samples.
     Returns {session_id, rep_id, athlete_id}.
     """
     import json as _json
@@ -709,23 +714,36 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
         f"{source} | drill={drill or '?'} | source={source}"
     )
 
-    with conn:
-        # Close any open session first — import shouldn't bash an in-flight one
-        open_row = conn.execute(
-            "SELECT id FROM sessions WHERE ended_at IS NULL LIMIT 1"
-        ).fetchone()
-        if open_row:
-            conn.execute(
-                "UPDATE sessions SET ended_at = ?, recovered_at = ? WHERE id = ?",
-                (started_at, started_at, open_row["id"]),
-            )
+    appending = session_id is not None
 
-        cur = conn.execute(
-            "INSERT INTO sessions(athlete_id, started_at, ended_at, notes, hmi_load_kg) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (athlete_id, started_at, started_at, notes, None),
-        )
-        session_id = cur.lastrowid
+    with conn:
+        # Where this rep sits on the session timeline (0 for a fresh session;
+        # after the last rep + 5 s gap when appending).
+        base_ms = 0
+        if appending:
+            row = conn.execute(
+                "SELECT MAX(ended_t_offset_ms) AS m FROM reps WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+            base_ms = int(row["m"] or 0) + 5000
+
+        if not appending:
+            # Close any open session first — import shouldn't bash an in-flight one
+            open_row = conn.execute(
+                "SELECT id FROM sessions WHERE ended_at IS NULL LIMIT 1"
+            ).fetchone()
+            if open_row:
+                conn.execute(
+                    "UPDATE sessions SET ended_at = ?, recovered_at = ? WHERE id = ?",
+                    (started_at, started_at, open_row["id"]),
+                )
+
+            cur = conn.execute(
+                "INSERT INTO sessions(athlete_id, started_at, ended_at, notes, hmi_load_kg) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (athlete_id, started_at, started_at, notes, None),
+            )
+            session_id = cur.lastrowid
 
         # End-offset = duration in ms (samples are time-zero relative to rep start)
         t_end_ms = int(duration_s * 1000)
@@ -733,7 +751,7 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
         cur = conn.execute(
             "INSERT INTO reps(session_id, started_at, ended_at, "
             "started_t_offset_ms, ended_t_offset_ms) VALUES (?, ?, ?, ?, ?)",
-            (session_id, started_at, started_at, 0, t_end_ms),
+            (session_id, started_at, started_at, base_ms, base_ms + t_end_ms),
         )
         rep_id = cur.lastrowid
 
@@ -783,8 +801,12 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
             ),
         )
 
-        # Persist samples — each sample's t_ms becomes t_offset_ms.
+        # Persist samples — each sample's t_ms (rep-relative) lands at
+        # base_ms + t_ms so per-rep windows stay disjoint within the session.
         if samples:
+            # Unit factors mirror analytics.py (COUNTS_PER_METRE, PCT_PER_KG);
+            # local import avoids any module-level cycle.
+            from analytics import COUNTS_PER_METRE, PCT_PER_KG
             rows = []
             for s in samples:
                 t_ms = s.get("t_ms")
@@ -793,12 +815,18 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                 if "v_mps" in s:
                     # 0.00576 m/s per RPM → speed_rpm = v_mps / 0.00576
                     speed_rpm = int(round(s["v_mps"] / 0.00576))
+                pos_counts = None
+                if s.get("pos_m") is not None:
+                    pos_counts = int(round(s["pos_m"] * COUNTS_PER_METRE))
+                torque_pct = None
+                if s.get("F_N") is not None:
+                    torque_pct = round((s["F_N"] / 9.81) * PCT_PER_KG, 2)
                 rows.append((
-                    session_id, int(t_ms),
-                    None,  # status — not present in xlsx
+                    session_id, base_ms + int(t_ms),
+                    None,  # status — not present in imports
                     speed_rpm,
-                    None,  # torque_pct — not in xlsx
-                    None,  # position_counts — xlsx has mm, not encoder counts
+                    torque_pct,
+                    pos_counts,
                     None,  # bus_voltage_v
                 ))
             if rows:
