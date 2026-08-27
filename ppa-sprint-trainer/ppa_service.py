@@ -1993,6 +1993,24 @@ PHASE_C_HTML = """<!doctype html>
   #new-set-btn{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:0.04em;
                background:transparent;color:var(--accent);border:1px solid var(--accent);
                border-radius:7px;cursor:pointer;min-height:32px}
+  /* Session-target loop (targets.py) */
+  .reps-head-actions{display:flex;gap:8px;align-items:center}
+  #target-pill{padding:5px 12px;font-size:11px;font-weight:700;letter-spacing:0.04em;
+               background:transparent;color:var(--muted);border:1px solid var(--line-strong);
+               border-radius:7px;cursor:pointer;min-height:32px;
+               font-variant-numeric:tabular-nums}
+  #target-pill.set{color:var(--accent);border-color:var(--accent);
+                   background:var(--accent-soft)}
+  .target-summary{display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+                  font-size:12px;color:var(--muted);margin:-2px 0 10px;
+                  font-variant-numeric:tabular-nums}
+  .target-summary[hidden]{display:none}
+  .target-summary .ts-rate{font-weight:800;font-size:14px;color:var(--fg)}
+  .target-summary .ts-k{display:inline-flex;align-items:center;gap:5px}
+  .target-summary .ts-dot{width:8px;height:8px;border-radius:2px;display:inline-block}
+  .badge.tgt-reached{color:var(--good);background:rgba(51,209,122,.13);border-color:rgba(51,209,122,.45)}
+  .badge.tgt-near{color:#ffcf5c;background:rgba(255,207,92,.12);border-color:rgba(255,207,92,.4)}
+  .badge.tgt-missed{color:var(--muted);background:rgba(95,107,146,.10);border-color:var(--line-strong)}
 
   /* Bottom bar (sticky — scrolls with content, rests at the viewport bottom) */
   /* Primary control as a lifted, centred floating pill — off the bottom edge,
@@ -2567,8 +2585,12 @@ PHASE_C_HTML = """<!doctype html>
   <div class="card">
     <div class="reps-head">
       <span class="meta">Recent reps</span>
-      <button type="button" id="new-set-btn" title="Group following reps into a new set">+ New set</button>
+      <div class="reps-head-actions">
+        <button type="button" id="target-pill" title="Session target — tap to set, blank for auto (best + MDC)">Target —</button>
+        <button type="button" id="new-set-btn" title="Group following reps into a new set">+ New set</button>
+      </div>
     </div>
+    <div class="target-summary" id="target-summary" hidden></div>
     <div class="preset-target" id="preset-target" hidden></div>
     <div class="reps-list" id="reps-list"></div>
     <div class="past-sessions" id="past-sessions" style="display:none"></div>
@@ -4306,8 +4328,74 @@ function repBadgesHtml(r){
       out+='<span class="badge fv-rejected" title="F-V fit rejected: '+repEsc(why)+'">F-V rejected</span>';
     }
   }
+  // Target grade (targets.py): reached / near / missed vs the session target
+  const sc=window._targetScore;
+  const g=sc&&(sc.grades||[]).find(x=>x.rep_idx===r.rep_idx);
+  if(g&&g.status&&g.status!=='none'){
+    const cls={reached:'tgt-reached',near:'tgt-near',missed:'tgt-missed'}[g.status];
+    const sym={reached:'✓',near:'≈',missed:'✗'}[g.status];
+    if(cls) out+='<span class="badge '+cls+'" title="'+g.value+' vs target '+
+        g.target+' ('+(g.gap>=0?'+':'')+g.gap+')">'+sym+' '+g.status+'</span>';
+  }
   return out?('<div class="rep-badges">'+out+'</div>'):'';
 }
+
+// ---- Session target loop (targets.py) ----
+function renderTargetPill(){
+  const pill=document.getElementById('target-pill');
+  const sumEl=document.getElementById('target-summary');
+  if(!pill) return;
+  const sc=window._targetScore;
+  const tgt=(sc&&sc.target)||window._sessionTarget||null;
+  if(!tgt){
+    pill.textContent='Target —'; pill.classList.remove('set');
+    if(sumEl) sumEl.hidden=true;
+    return;
+  }
+  pill.classList.add('set');
+  pill.textContent='Target '+tgt.value+' '+(tgt.unit||'');
+  if(sumEl){
+    const s=sc&&sc.summary;
+    if(s&&s.reps>0){
+      sumEl.hidden=false;
+      sumEl.innerHTML=
+        '<span class="ts-rate">'+s.success_rate+'%</span>'+
+        '<span class="ts-k"><i class="ts-dot" style="background:var(--good)"></i>'+s.met+' met</span>'+
+        '<span class="ts-k"><i class="ts-dot" style="background:#ffcf5c"></i>'+s.near+' near</span>'+
+        '<span class="ts-k"><i class="ts-dot" style="background:var(--ink-faint,#5f6b92)"></i>'+s.missed+' missed</span>'+
+        (s.best!=null?('<span class="ts-k">best '+s.best+(s.best_hit?' ✓':'')+'</span>'):'');
+    } else sumEl.hidden=true;
+  }
+}
+document.getElementById('target-pill').onclick=async()=>{
+  let sug=null;
+  try{
+    const j=await(await fetch('/api/c/athletic/target?metric=top_speed')).json();
+    sug=j.suggestion;
+  }catch(e){}
+  const cur=(window._sessionTarget&&window._sessionTarget.value)||'';
+  const hint=sug?('suggested '+sug.value+' '+(sug.unit||'')+' ('+sug.method+', '+sug.source+')'):'no history for auto-suggest';
+  const raw=prompt('Top-speed target (m/s) — leave blank to auto-set: '+hint, cur);
+  if(raw===null) return;
+  let body;
+  if(raw.trim()===''){
+    if(!sug){ alert('No history to auto-suggest from yet'); return; }
+    body={metric:'top_speed', auto:true};
+  }else{
+    const v=parseFloat(raw);
+    if(!(v>0)){ alert('Enter a number, or leave blank for auto'); return; }
+    body={metric:'top_speed', value:v};
+  }
+  try{
+    const r=await fetch('/api/c/athletic/target',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j=await r.json();
+    if(!r.ok){ alert(j.detail||'Could not set target'); return; }
+    window._sessionTarget=j.target;
+    window._targetDirty=true;
+    renderTargetPill();
+  }catch(e){ alert('Network error'); }
+};
 
 function renderRepsList(reps){
   if(!reps.length){
@@ -5030,6 +5118,18 @@ async function refresh(){
     // off / standby — no chart
     hideChart();
     cachedSamples=[];
+  }
+
+  // Session-target score (targets.py) — refetch when the rep count changes
+  // or the coach just edited the target, then let the list render the grades.
+  if(window._targetDirty || window._targetScoreCount!==reps.length){
+    window._targetDirty=false; window._targetScoreCount=reps.length;
+    try{
+      const ts=await(await fetch('/api/c/athletic/session_score')).json();
+      window._targetScore=ts.ok?ts:null;
+      if(ts.ok) window._sessionTarget=ts.target;
+    }catch(e){ window._targetScore=null; }
+    renderTargetPill();
   }
 
   // Recent reps list + compare selects
@@ -6686,6 +6786,105 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                                  if best.get("pmax_rel_wkg") else None)),
             "bodymass_kg": bm,
         }
+
+    # ---- Target loop (targets.py): set a goal, grade every rep, score the session ----
+    _TARGET_FIELDS = {
+        # target metric -> (rep-dict field, DB progression column, unit)
+        "top_speed":    ("peak_speed_mps", "peak_speed_mps", "m/s"),
+        "pmax_rel_wkg": ("pmax_rel_wkg",   "pmax_rel_wkg",   "W/kg"),
+        "v0_ms":        ("v0_mps",         "v0_mps",         "m/s"),
+        "f0_rel_nkg":   ("f0_rel_nkg",     "f0_rel_nkg",     "N/kg"),
+    }
+
+    async def _target_suggestion(metric: str):
+        """Auto-suggest a target: athlete's recent session bests + one MDC
+        (targets.suggest_target 'stretch'); falls back to the current
+        session's rep values when there's no athlete history."""
+        field, col, unit = _TARGET_FIELDS[metric]
+        history = []
+        if state.athletic_athlete_id is not None and state.db is not None:
+            try:
+                pts = await state.db_call(
+                    persistence.athlete_progression,
+                    state.athletic_athlete_id, col, "MAX")
+                history = [p["value"] for p in pts if p.get("value") is not None]
+            except Exception as e:
+                log.warning("target history lookup failed: %s", e)
+        source = "history"
+        if not history:
+            history = [r.get(field) for r in state.athletic_reps
+                       if r.get("valid", True) is not False
+                       and r.get(field) is not None]
+            source = "session"
+        if not history:
+            return None
+        # trends metric key: top_speed / v0_ms / f0_rel_nkg / pmax_rel_wkg
+        tkey = {"top_speed": "top_speed", "v0_ms": "v0_ms",
+                "f0_rel_nkg": "f0_rel_nkg", "pmax_rel_wkg": "pmax_rel_wkg"}[metric]
+        val = targets_mod.suggest_target(history, tkey, method="stretch")
+        if val is None:
+            return None
+        return {"value": val, "method": "best + MDC", "source": source,
+                "n_history": len(history), "unit": unit}
+
+    @app.get("/api/c/athletic/target")
+    async def athletic_target_get(metric: str = "top_speed"):
+        if metric not in _TARGET_FIELDS:
+            raise HTTPException(400, f"unknown metric; known: {list(_TARGET_FIELDS)}")
+        return {"target": state.session_target,
+                "suggestion": await _target_suggestion(metric)}
+
+    @app.post("/api/c/athletic/target")
+    async def athletic_target_set(req: dict):
+        """Set/clear the session target.
+        Body: {metric, value} | {metric, auto: true} | {clear: true}"""
+        if req.get("clear"):
+            state.session_target = None
+            return {"ok": True, "target": None}
+        metric = req.get("metric", "top_speed")
+        if metric not in _TARGET_FIELDS:
+            raise HTTPException(400, f"unknown metric; known: {list(_TARGET_FIELDS)}")
+        unit = _TARGET_FIELDS[metric][2]
+        if req.get("auto"):
+            sug = await _target_suggestion(metric)
+            if not sug:
+                raise HTTPException(409, "no history to suggest a target from")
+            state.session_target = {"metric": metric, "value": sug["value"],
+                                    "unit": unit, "source": "auto"}
+        else:
+            try:
+                value = float(req.get("value"))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "value must be a number")
+            state.session_target = {"metric": metric, "value": value,
+                                    "unit": unit, "source": "manual"}
+        return {"ok": True, "target": state.session_target}
+
+    @app.get("/api/c/athletic/session_score")
+    async def athletic_session_score():
+        """Grade every (coach-valid) rep against the session target and roll
+        the session up to met/near/missed + success rate (targets.py)."""
+        tgt = state.session_target
+        if not tgt:
+            return {"ok": False, "reason": "no target set"}
+        metric = tgt["metric"]
+        field = _TARGET_FIELDS[metric][0]
+        tkey = metric
+        graded = []
+        values = []
+        for r in state.athletic_reps:
+            if r.get("valid", True) is False:
+                continue
+            v = r.get(field)
+            g = targets_mod.grade_rep(v, tgt["value"], tkey) if v is not None else \
+                {"status": "none", "value": None, "target": tgt["value"]}
+            g["rep_idx"] = r.get("rep_idx")
+            graded.append(g)
+            if v is not None:
+                values.append(float(v))
+        summary = targets_mod.score_session(values, tgt["value"], tkey)
+        summary.pop("grades", None)
+        return {"ok": True, "target": tgt, "grades": graded, "summary": summary}
 
     def _find_rep(idx: int):
         for r in state.athletic_reps:
