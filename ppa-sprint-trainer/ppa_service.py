@@ -1592,6 +1592,27 @@ PHASE_C_HTML = """<!doctype html>
                 border-radius:10px;padding:6px;min-width:210px;z-index:80;
                 box-shadow:0 8px 24px rgba(0,0,0,0.5);max-height:340px;overflow-y:auto}
   .athlete-menu[hidden]{display:none}
+  /* athlete avatar-grid switcher (upgrades the dropdown) */
+  .ath-scrim{position:fixed;inset:0;background:rgba(4,8,18,.6);opacity:0;pointer-events:none;transition:.2s;z-index:60}
+  .ath-scrim.on{opacity:1;pointer-events:auto}
+  .ath-sheet{position:fixed;left:0;right:0;bottom:0;max-width:640px;margin:0 auto;background:var(--card);
+    border-top:1px solid var(--line-strong);border-radius:22px 22px 0 0;padding:10px 16px 22px;
+    transform:translateY(105%);transition:transform .26s cubic-bezier(.2,.9,.3,1);z-index:61;max-height:78vh;
+    display:flex;flex-direction:column}
+  .ath-sheet.on{transform:none}
+  .ath-grab{width:40px;height:4px;border-radius:99px;background:var(--line-strong);margin:0 auto 12px}
+  .ath-sheet h4{font-size:14px;margin:0 0 12px}
+  .ath-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:14px 6px;overflow-y:auto;padding:4px 2px}
+  .ath-cell{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;padding:5px 2px;
+    border-radius:12px;background:none;border:0;color:var(--fg);text-decoration:none}
+  .ath-cell:hover{background:var(--accent-soft)}
+  .ath-cell .av{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;position:relative;
+    font-weight:800;font-size:18px;color:#08101f;background:linear-gradient(150deg,#6f80b8,#8b93c9)}
+  .ath-cell.sel .av{background:linear-gradient(150deg,var(--accent),#8b6bff);box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--accent)}
+  .ath-cell .ck{position:absolute;bottom:-2px;right:-2px;width:19px;height:19px;border-radius:50%;
+    background:var(--accent);border:2px solid var(--card);display:none;place-items:center;font-size:10px;color:#08101f;font-weight:800}
+  .ath-cell.sel .ck{display:grid}
+  .ath-cell .nm{font-size:11px;font-weight:600;text-align:center;line-height:1.15;max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .am-item{display:block;width:100%;text-align:left;padding:10px;background:transparent;border:0;
            color:var(--fg);font-size:13px;cursor:pointer;border-radius:6px;min-height:40px}
   .am-item:hover{background:var(--accent-soft)}
@@ -3023,25 +3044,36 @@ function renderAthleteChip(){
   document.getElementById('ath-chip-mass').textContent=
     [m?(m+' kg'):null, g||null].filter(Boolean).join(' · ');
 }
-document.getElementById('athlete-chip-btn').onclick=(e)=>{
-  e.stopPropagation();
-  const menu=document.getElementById('athlete-menu');
-  if(!menu.hidden){ menu.hidden=true; return; }
-  let h='';
+document.getElementById('athlete-chip-btn').onclick=(e)=>{ e.stopPropagation(); openAthleteSheet(); };
+function openAthleteSheet(){
+  let scrim=document.getElementById('ath-scrim'), sheet=document.getElementById('ath-sheet');
+  if(!scrim){
+    scrim=document.createElement('div'); scrim.id='ath-scrim'; scrim.className='ath-scrim';
+    sheet=document.createElement('div'); sheet.id='ath-sheet'; sheet.className='ath-sheet';
+    document.body.appendChild(scrim); document.body.appendChild(sheet);
+    scrim.onclick=closeAthleteSheet;
+  }
+  let cells='';
   for(const o of athleteSel.options){
     if(!o.value) continue;
-    h+='<button type="button" class="am-item'+(o.value===athleteSel.value?' active':'')+
-       '" data-aid="'+o.value+'">'+o.textContent+'</button>';
+    const nm=o.textContent, init=nm.trim().charAt(0).toUpperCase();
+    cells+='<button class="ath-cell'+(o.value===athleteSel.value?' sel':'')+'" data-aid="'+o.value+'">'+
+      '<span class="av">'+init+'<span class="ck">✓</span></span><span class="nm">'+nm+'</span></button>';
   }
-  h+='<a class="am-add" href="/setup">+ Add athlete</a>';
-  menu.innerHTML=h;
-  menu.querySelectorAll('.am-item').forEach(b=>b.onclick=()=>{
+  sheet.innerHTML='<div class="ath-grab"></div><h4>Assign athlete</h4><div class="ath-grid">'+cells+
+    '<a class="ath-cell" href="/setup"><span class="av" style="background:var(--raised);color:var(--muted)">+</span><span class="nm">Add</span></a></div>';
+  sheet.querySelectorAll('.ath-cell[data-aid]').forEach(b=>b.onclick=()=>{
     athleteSel.value=b.getAttribute('data-aid');
-    renderAthleteChip(); menu.hidden=true;
+    renderAthleteChip();
     if(typeof loadAthleteProfile==='function') loadAthleteProfile(athleteSel.value);
+    closeAthleteSheet();
   });
-  menu.hidden=false;
-};
+  requestAnimationFrame(()=>{ scrim.classList.add('on'); sheet.classList.add('on'); });
+}
+function closeAthleteSheet(){
+  const scrim=document.getElementById('ath-scrim'), sheet=document.getElementById('ath-sheet');
+  if(scrim) scrim.classList.remove('on'); if(sheet) sheet.classList.remove('on');
+}
 document.addEventListener('click',(e)=>{
   const chip=document.getElementById('athlete-chip');
   if(chip&&!chip.contains(e.target)) document.getElementById('athlete-menu').hidden=true;
