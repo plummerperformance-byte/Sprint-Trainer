@@ -529,6 +529,8 @@ def build_report(rep: dict, position_group: str = "back",
     structured report. Pmax + FV orientation always front the report
     (the verdict pair); other insights are ranked by severity then category.
     """
+    from quadrant import quadrants as _quadrants  # local import avoids import cycle
+
     body_mass_kg = (rep.get("_meta") or {}).get("body_mass_kg")
 
     candidates = [
@@ -587,4 +589,5 @@ def build_report(rep: dict, position_group: str = "back",
             "shows FV-optimised training does not consistently outperform "
             "general sprint training. Use these as a guide, not a guarantee."
         ),
+        "quadrants": _quadrants(rep, position_group),
     }
