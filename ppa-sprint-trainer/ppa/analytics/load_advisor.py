@@ -62,9 +62,30 @@ def suggest_load(profile: dict, target: str,
                        body_mass_kg=bm, pct=pct)
 
     if target == "vdec":
+        d = (target_param if target_param is not None else 0.0) / 100.0
+        if d <= 0:
+            return _result(None, "velocity-drop target must be > 0", target)
+        # PREFERRED basis: the empirical Load-Velocity regression (top speed
+        # vs actual cable load across a multi-load sweep). Its slope is a
+        # true m/s-per-kg-of-load figure with friction/losses baked in, so
+        # the classic vdec solve applies directly:
+        #   drop d.v0 = |slope|.L  ->  L = d.v0 / |slope|
+        reg = profile.get("lv_regression") or {}
+        if profile.get("lv_regression_quality") == "ok":
+            v0_lv = reg.get("v0_mps")
+            slope_lv = reg.get("slope_mps_per_kg")
+            if v0_lv and slope_lv:
+                load = d * v0_lv / abs(slope_lv)
+                return _result(_clamp(load), None, target, basis_model="lv_regression",
+                               v0_mps=v0_lv, slope_mps_per_kg=slope_lv,
+                               r2=reg.get("r2"), n=reg.get("n"),
+                               velocity_drop_pct=d * 100)
+        # FALLBACK: solve off the tether F-V profile (modelled, friction
+        # ignored) when no measured multi-load sweep exists yet.
         if profile.get("lv_profile_quality") != "ok":
-            return _result(None, "needs ≥3 valid reps across ≥2 loads",
-                           target, quality=profile.get("lv_profile_quality"))
+            return _result(None, "needs a multi-load sweep (or ≥3 valid F-V reps across ≥2 loads)",
+                           target, quality=profile.get("lv_profile_quality"),
+                           lv_regression_quality=profile.get("lv_regression_quality"))
         lv = profile.get("lv_profile") or {}
         v0 = lv.get("v0_mps")
         slope = lv.get("fv_slope_per_kg")
@@ -74,9 +95,6 @@ def suggest_load(profile: dict, target: str,
             return _result(None, "F-V profile incomplete", target)
         if not bm:
             return _result(None, "athlete body mass not set", target)
-        d = (target_param if target_param is not None else 0.0) / 100.0
-        if d <= 0:
-            return _result(None, "velocity-drop target must be > 0", target)
         # fv_slope_per_kg is the F-V PROFILE slope (-F0_rel/V0, N.s/m per kg
         # of BODY mass), not a velocity-per-kg-of-load slope. On the linear
         # F-V relation v = V0.(1 - F_rel/F0_rel), a fractional velocity drop
@@ -86,8 +104,8 @@ def suggest_load(profile: dict, target: str,
         if not f0_rel:
             f0_rel = abs(slope) * v0  # F0_rel = |slope|.V0 by definition
         load = d * f0_rel * bm / 9.81
-        return _result(_clamp(load), None, target, v0_mps=v0,
-                       f0_rel_nkg=round(f0_rel, 2), body_mass_kg=bm,
+        return _result(_clamp(load), None, target, basis_model="fv_profile",
+                       v0_mps=v0, f0_rel_nkg=round(f0_rel, 2), body_mass_kg=bm,
                        fv_slope_per_kg=slope, velocity_drop_pct=d * 100)
 
     return _result(None, f"unknown target {target!r}", target)

@@ -955,6 +955,13 @@ def _attach_rep_analysis(rep: dict, bodymass: Optional[float] = None,
                 rep[k] = st[k]
         if rep.get("step_events") is None and out.get("step_events"):
             rep["step_events"] = out["step_events"]
+        # Split report isn't persisted — rebuild it from the samples so
+        # hydrated/reloaded reps render the per-5 m breakdown too.
+        if rep.get("split_report") is None and samples[0].get("pos_m") is not None:
+            try:
+                rep["split_report"] = _build_split_report(samples, SPLIT_LENGTH_M)
+            except Exception:
+                pass
         rep["_analysis_bodymass_kg"] = bm
         rep["_analysis_bodymass_defaulted"] = not bm_known
     except Exception as e:
@@ -1260,6 +1267,12 @@ async def _athletic_loop(state: "ServiceState"):
                         else:
                             # Real rep — attach the validated sprint analysis
                             # (gated F-V, norm bands, step mechanics) off-loop.
+                            # Stamp the working cable load (resisted mode only —
+                            # other modes vary load within the rep) for the
+                            # per-rep load_kg column / L-V regression.
+                            if state.athletic_config.get("mode", "resisted") == "resisted":
+                                fin.setdefault("load_kg",
+                                               state.athletic_config.get("resist_kg"))
                             try:
                                 await asyncio.to_thread(
                                     _attach_rep_analysis, fin,
@@ -2627,6 +2640,11 @@ PHASE_C_HTML = """<!doctype html>
     <!-- Splits tab -->
     <div class="rd-panel" data-tab="splits" style="display:none">
       <table class="rd-splits-table" id="splits-table"></table>
+      <div class="meta" id="split-report-title" style="margin-top:16px;display:none">
+        Per-5 m breakdown · time, speed, force and power inside each 5 m window</div>
+      <div style="overflow-x:auto">
+        <table class="rd-splits-table" id="split-report-table" style="margin-top:6px"></table>
+      </div>
     </div>
 
     <!-- F-V tab -->
@@ -4415,6 +4433,7 @@ function renderSplitsTab(rep){
   const markers=[5,10,20,30,40].filter(m=>sx[String(m)]!=null);
   if(!markers.length){
     tbl.innerHTML='<tr><td class="meta" style="text-align:center;padding:30px 0">No splits — needs reps that cover ≥5 m</td></tr>';
+    renderSplitReport(rep);
     return;
   }
   // Session-best split per marker (valid reps only) for a delta-vs-best column
@@ -4447,6 +4466,41 @@ function renderSplitsTab(rep){
       '<td>'+segV.toFixed(2)+' m/s</td>'+
     '</tr>';
     prevT=t; prevM=m;
+  }
+  tbl.innerHTML=rows;
+  renderSplitReport(rep);
+}
+
+// Per-5 m split report (1080 "Split Analysis" parity) — the SplitReport the
+// backend builds from the trace: time + avg/peak speed, force, power inside
+// each uniform 5 m window. Highlights the best (fastest) window per column.
+function renderSplitReport(rep){
+  const title=document.getElementById('split-report-title');
+  const tbl=document.getElementById('split-report-table');
+  if(!title||!tbl) return;
+  const sr=rep&&rep.split_report;
+  const sp=(sr&&sr.splits)||[];
+  if(sp.length<1){ title.style.display='none'; tbl.innerHTML=''; return; }
+  title.style.display='';
+  const minT=Math.min.apply(null,sp.map(s=>s.time));
+  const maxV=Math.max.apply(null,sp.map(s=>s.peaks.peak_speed));
+  const maxP=Math.max.apply(null,sp.map(s=>s.peaks.peak_power));
+  const hi=v=>'<span style="color:var(--good);font-weight:700">'+v+'</span>';
+  let rows='<tr><th>Window</th><th>Time</th><th>Avg v</th><th>Peak v</th>'+
+           '<th>Avg F</th><th>Avg P</th><th>Peak P</th></tr>';
+  for(const s of sp){
+    const tTxt=s.time.toFixed(2)+' s';
+    const pvTxt=s.peaks.peak_speed.toFixed(2)+' m/s';
+    const ppTxt=s.peaks.peak_power.toFixed(0)+' W';
+    rows+='<tr>'+
+      '<td>'+s.start.toFixed(0)+'–'+s.end.toFixed(0)+' m</td>'+
+      '<td>'+(s.time===minT?hi(tTxt):tTxt)+'</td>'+
+      '<td>'+s.averages.avg_speed.toFixed(2)+' m/s</td>'+
+      '<td>'+(s.peaks.peak_speed===maxV?hi(pvTxt):pvTxt)+'</td>'+
+      '<td>'+s.averages.avg_force.toFixed(0)+' N</td>'+
+      '<td>'+s.averages.avg_power.toFixed(0)+' W</td>'+
+      '<td>'+(s.peaks.peak_power===maxP?hi(ppTxt):ppTxt)+'</td>'+
+    '</tr>';
   }
   tbl.innerHTML=rows;
 }
@@ -7571,6 +7625,9 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
                         # this, a session ended via the Stop button persisted
                         # its final rep with no F-V / step columns while its
                         # siblings had them.
+                        if state.athletic_config.get("mode", "resisted") == "resisted":
+                            rip.setdefault("load_kg",
+                                           state.athletic_config.get("resist_kg"))
                         try:
                             await asyncio.to_thread(
                                 _attach_rep_analysis, rip,
