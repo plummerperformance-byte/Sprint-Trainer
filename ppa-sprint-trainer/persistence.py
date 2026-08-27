@@ -168,6 +168,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
         ("dist_to_90pct_v_m", "dist_to_90pct_v_m REAL"),
         # Mono-exponential fit time constant (sprint_model TAU = MSS/MAC).
         ("tau_s", "tau_s REAL"),
+        # Working cable resistance for THIS rep (kg). Per-rep because a
+        # multi-load sweep varies load rep to rep — the session-level
+        # hmi_load_kg can't represent it (that stays as a legacy fallback).
+        # Feeds the empirical Load-Velocity regression + auto-load advisor.
+        ("load_kg", "load_kg REAL"),
         ("source", "source TEXT"),  # "live" | "xlsx_import" | etc
         ("step_events_json", "step_events_json TEXT"),
         ("total_steps", "total_steps INTEGER"),
@@ -607,7 +612,7 @@ def end_rep_with_aggregates(
                   time_to_90pct_v_s = ?, dist_to_90pct_v_m = ?,
                   f0_n = ?, f0_rel_nkg = ?, v0_mps = ?,
                   pmax_w_morin = ?, pmax_rel_wkg = ?, fv_slope_per_kg = ?,
-                  tau_s = ?,
+                  tau_s = ?, load_kg = ?,
                   total_steps = ?, step_freq_hz = ?,
                   avg_step_length_m = ?, step_length_std_m = ?,
                   flagged_steps = ?, step_confidence = ?,
@@ -636,7 +641,7 @@ def end_rep_with_aggregates(
                 agg.get("f0_n"), agg.get("f0_rel_nkg"), agg.get("v0_mps"),
                 agg.get("pmax_w_morin"), agg.get("pmax_rel_wkg"),
                 agg.get("fv_slope_per_kg"),
-                agg.get("tau_s"),
+                agg.get("tau_s"), agg.get("load_kg"),
                 agg.get("total_steps"), agg.get("step_freq_hz"),
                 agg.get("avg_step_length_m"), agg.get("step_length_std_m"),
                 agg.get("flagged_steps"), agg.get("step_confidence"),
@@ -787,7 +792,7 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                   is_eccentric = ?,
                   f0_n = ?, f0_rel_nkg = ?, v0_mps = ?,
                   pmax_w_morin = ?, pmax_rel_wkg = ?, fv_slope_per_kg = ?,
-                  tau_s = ?,
+                  tau_s = ?, load_kg = ?,
                   time_to_max_v_s = ?, dist_to_max_v_m = ?, v_dropoff_pct = ?,
                   time_to_90pct_v_s = ?, dist_to_90pct_v_m = ?,
                   decel_time_s = ?,
@@ -808,7 +813,7 @@ def import_rep(conn: sqlite3.Connection, athlete_id: int, rep: dict,
                 1 if rep.get("is_eccentric") else 0,
                 rep.get("f0_n"), rep.get("f0_rel_nkg"), rep.get("v0_mps"),
                 rep.get("pmax_w_morin"), rep.get("pmax_rel_wkg"), rep.get("fv_slope_per_kg"),
-                rep.get("tau_s"),
+                rep.get("tau_s"), rep.get("load_kg"),
                 rep.get("time_to_max_v_s"), rep.get("dist_to_max_v_m"), rep.get("v_dropoff_pct"),
                 rep.get("time_to_90pct_v_s"), rep.get("dist_to_90pct_v_m"),
                 rep.get("decel_time_s"),
@@ -966,7 +971,8 @@ def athlete_profile(conn: sqlite3.Connection, athlete_id: int,
 
     recent = conn.execute(
         """SELECT r.f0_rel_nkg, r.v0_mps, r.pmax_rel_wkg, r.fv_slope_per_kg,
-                  s.hmi_load_kg
+                  r.peak_speed_mps,
+                  COALESCE(r.load_kg, s.hmi_load_kg) AS load_kg
            FROM reps r JOIN sessions s ON s.id = r.session_id
            WHERE s.athlete_id = ? AND COALESCE(r.valid,1) = 1
            ORDER BY s.started_at DESC, r.id DESC
@@ -997,15 +1003,51 @@ def athlete_profile(conn: sqlite3.Connection, athlete_id: int,
 
     usable = [r for r in recent
               if r["fv_slope_per_kg"] is not None and r["v0_mps"] is not None]
-    loaded = [r for r in usable if r["hmi_load_kg"] is not None]
-    distinct_loads = {round(r["hmi_load_kg"], 1) for r in loaded}
+    loaded = [r for r in usable if r["load_kg"] is not None]
+    distinct_loads = {round(r["load_kg"], 1) for r in loaded}
     # When sessions carry load data, require a spread of ≥2 loads; when no
     # load data exists at all, gate on the valid-rep count alone.
     load_ok = len(distinct_loads) >= 2 if loaded else True
     quality = "ok" if len(usable) >= 3 and load_ok else "insufficient"
 
+    # ---- Empirical Load-Velocity regression (the 1080 auto-load basis) ----
+    # peak_speed vs the rep's actual cable load, straight from a multi-load
+    # sweep. Unlike the tether F-V medians above, this needs NO per-rep model
+    # fit — every rep with a measured load and a peak speed contributes, so
+    # short resisted reps whose F-V fit fails r2 still count. Slope is in
+    # m/s of top speed lost per kg of cable load (friction included, because
+    # it is measured, not modelled).
+    lv_pts = [(float(r["load_kg"]), float(r["peak_speed_mps"]))
+              for r in recent
+              if r["load_kg"] is not None and r["peak_speed_mps"] is not None]
+    lv_reg = None
+    lv_reg_quality = "insufficient"
+    if len(lv_pts) >= 4 and len({round(p[0], 1) for p in lv_pts}) >= 2:
+        n = len(lv_pts)
+        mx = sum(p[0] for p in lv_pts) / n
+        my = sum(p[1] for p in lv_pts) / n
+        sxx = sum((p[0] - mx) ** 2 for p in lv_pts)
+        sxy = sum((p[0] - mx) * (p[1] - my) for p in lv_pts)
+        if sxx > 0:
+            slope = sxy / sxx                     # m/s per kg (expect < 0)
+            v0_lv = my - slope * mx               # est. unloaded top speed
+            ss_tot = sum((p[1] - my) ** 2 for p in lv_pts)
+            ss_res = sum((p[1] - (v0_lv + slope * p[0])) ** 2 for p in lv_pts)
+            r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+            lv_reg = {
+                "v0_mps": round(v0_lv, 3),
+                "slope_mps_per_kg": round(slope, 4),
+                "r2": round(r2, 3),
+                "n": n,
+                "distinct_loads": sorted({round(p[0], 1) for p in lv_pts}),
+            }
+            if slope < 0 and r2 >= 0.75 and len(lv_reg["distinct_loads"]) >= 2:
+                lv_reg_quality = "ok"
+
     loads = conn.execute(
-        """SELECT r.drill AS drill, s.hmi_load_kg AS load_kg, MAX(s.started_at)
+        """SELECT r.drill AS drill,
+                  COALESCE(r.load_kg, s.hmi_load_kg) AS load_kg,
+                  MAX(s.started_at)
            FROM reps r JOIN sessions s ON s.id = r.session_id
            WHERE s.athlete_id = ? AND r.drill IS NOT NULL
            GROUP BY r.drill""",
@@ -1019,6 +1061,8 @@ def athlete_profile(conn: sqlite3.Connection, athlete_id: int,
         "prs": prs,
         "lv_profile": lv,
         "lv_profile_quality": quality,
+        "lv_regression": lv_reg,
+        "lv_regression_quality": lv_reg_quality,
         "recent_loads": recent_loads,
         "session_count": sc["session_count"] if sc else 0,
         "last_session_at": sc["last_session_at"] if sc else None,

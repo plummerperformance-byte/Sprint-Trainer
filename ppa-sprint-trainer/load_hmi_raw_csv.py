@@ -302,6 +302,10 @@ def build_rep(path: Path, rep_idx: int, start_foot: str = "left",
         "decel_start_ms": decel_start_ms,
         "is_eccentric": False,
         "drill": drill,
+        # Working cable load for THIS rep (median measured in the sprint
+        # zone) — feeds the per-rep load_kg column and the empirical
+        # Load-Velocity regression / auto-load advisor.
+        "load_kg": zone_load_kg,
         "splits_s": splits,
         "splits_s_extended": splits_extended,
         "split_report": split_report,
