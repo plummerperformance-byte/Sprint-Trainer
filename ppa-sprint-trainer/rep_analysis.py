@@ -23,6 +23,11 @@ from typing import Sequence, Optional
 import sprint_model
 
 try:
+    import filtering as filt
+except Exception:
+    filt = None
+
+try:
     import reference_norms as rn
 except Exception:
     rn = None
@@ -153,8 +158,18 @@ def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
                 out["steps"] = {"error": str(e)}
 
     # ---- gated force-velocity profile (accel phase only) ----
+    # Fit on the 1080-style 1.3 Hz smooth curve when the sample rate allows:
+    # the mono-exponential models the run TREND, and r2 against raw
+    # step-ripple rejects ordinary good reps for real gait oscillation.
+    # butter_lowpass refuses (returns raw, applied=False) at low rates.
+    v_fit = vel
+    if filt is not None and fs > 0:
+        try:
+            v_fit, _applied = filt.butter_lowpass(vel, filt.SMOOTH_HZ, fs)
+        except Exception:
+            v_fit = vel
     acc = slice(0, vmax_i + 1)
-    prof = sprint_model.profile_from_trace(t[acc], dist[acc], vel[acc],
+    prof = sprint_model.profile_from_trace(t[acc], dist[acc], v_fit[acc],
                                            bodymass=bodymass, resisted=resisted)
     if prof.get("ok"):
         fvp, m = prof["fvp"], prof["model"]

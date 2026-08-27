@@ -19,6 +19,8 @@ from typing import Optional
 
 import openpyxl
 
+import filtering as filt  # 1080-style Butterworth smoothing (pure-Python sibling module)
+
 SERVICE_URL = "http://127.0.0.1:8765"
 CHART_SAMPLE_BUDGET = 600  # decimate raw 1 kHz → ~600 chart points (≈50 Hz effective)
 SPLIT_LENGTH_M = 5.0       # 1080-style uniform split bucket
@@ -106,26 +108,54 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
     if len(times_s) < 2:
         raise ValueError("not enough samples in the run section")
 
-    # Aggregates (full-rate)
-    peak_v = max(speeds_mps)
-    peak_v_idx = speeds_mps.index(peak_v)
-    peak_f = max(forces_n)
-    peak_f_idx = forces_n.index(peak_f)
-    powers_w = [f * v for f, v in zip(forces_n, speeds_mps)]
-    peak_p = max(powers_w)
-
     n = len(speeds_mps)
+
+    # ---- 1080-style Butterworth filtering (see filtering.py) --------------
+    # The 1080 filters the SPEED signal before extracting peaks:
+    #   * top speed  <- 1.3 Hz "smooth" curve (overall run trend)
+    #   * de-noised instantaneous peaks (speed/force/power/accel) <- 6 Hz
+    #     "step" curve — NOT raw max(), which at ~1 kHz just grabs the single
+    #     largest noise spike and inflates every peak (accel worst of all).
+    # Averages / work / impulse / splits stay on the raw samples (robust to
+    # filter choice). On a low-rate stream (<~13 Hz) the 6 Hz filter refuses
+    # and these fall back to the raw signal — see filter_meta.step_applied.
+    fs_hz = filt.estimate_fs(times_s)
+    _flt = filt.sprint_filters(times_s, speeds_mps)
+    v_smooth = _flt["smooth_speed"]                       # 1.3 Hz
+    v_step = _flt["step_speed"]                           # 6 Hz (or raw if fs too low)
+    f_step, _ = filt.butter_lowpass(forces_n, filt.STEP_HZ, fs_hz)
+    a_smooth = filt.derivative(times_s, v_smooth)        # acceleration ENVELOPE (trend,
+                                                          # not the 6 Hz step-ripple derivative)
+    powers_w = [f * v for f, v in zip(forces_n, speeds_mps)]   # raw — for avg/work
+    p_step = [f * v for f, v in zip(f_step, v_step)]           # de-noised power
+    filter_meta = _flt["meta"]
+
+    # Peaks from the filtered curves. Top speed = peak of the smooth curve; the
+    # 6 Hz curve's peak is a cable slack/snap spike on this hardware (validated
+    # against a real export: 6 Hz peak 10.6 vs device Max V 9.2), so speed peaks
+    # use the smooth curve too. Force/power still use the 6 Hz curve.
+    top_v = max(v_smooth); top_v_idx = v_smooth.index(top_v)   # 1080 "Top Speed"
+    peak_v = top_v; peak_v_idx = top_v_idx
+    peak_f = max(f_step);  peak_f_idx = f_step.index(peak_f)
+    peak_p = max(p_step)
+    # Raw peaks retained for audit (what the old raw-max() path reported).
+    peak_v_raw = max(speeds_mps)
+    peak_f_raw = max(forces_n)
+    peak_p_raw = max(powers_w)
+
     avg_v = sum(speeds_mps) / n
     avg_f = sum(forces_n) / n
     avg_p = sum(powers_w) / n
 
-    # Acceleration (Δv / Δt)
+    # Acceleration (Δv / Δt) — raw series kept for the chart + average; the
+    # PEAK comes from the de-noised curve (raw 1 kHz Δv/Δt is almost all noise).
     accs = []
     for i in range(1, n):
         dt = times_s[i] - times_s[i - 1]
         if dt > 0:
             accs.append((speeds_mps[i] - speeds_mps[i - 1]) / dt)
-    peak_a = max(accs) if accs else 0.0
+    peak_a = max(a_smooth) if a_smooth else 0.0
+    peak_a_raw = max(accs) if accs else 0.0
     avg_a = sum(accs) / len(accs) if accs else 0.0
 
     # ∫F·v dt  and  ∫F dt
@@ -150,32 +180,39 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
                 splits[str(marker)] = round(times_s[i], 3)
                 break
 
-    # Sprint phase segmentation (90% / 95% of peak v)
+    # Sprint phase segmentation (90% / 95% of top speed, on the smooth curve —
+    # raw speed jitters across the threshold and gives unstable phase edges).
     accel_end_ms = None
     decel_start_ms = None
     past_peak = False
-    for i, v in enumerate(speeds_mps):
-        if accel_end_ms is None and v >= 0.90 * peak_v:
+    for i, v in enumerate(v_smooth):
+        if accel_end_ms is None and v >= 0.90 * top_v:
             accel_end_ms = int(times_s[i] * 1000)
-        if v >= peak_v:
+        if v >= top_v:
             past_peak = True
-        if past_peak and decel_start_ms is None and v < 0.95 * peak_v:
+        if past_peak and decel_start_ms is None and v < 0.95 * top_v:
             decel_start_ms = int(times_s[i] * 1000)
 
     # ---- 1080-App sprint metric extensions ----
     # Time / distance to peak v + 90% peak v (acceleration profile shape)
-    time_to_max_v_s = times_s[peak_v_idx]
-    dist_to_max_v_m = pos_m[peak_v_idx]
+    # "Reached max V" = first time the smooth speed comes within 1% of its peak.
+    # argmax wanders across the flat top (validated vs a real export: argmax gave
+    # 5.20 s / 36.5 m, plateau-onset gives ~4.26 s / 28.1 m, matching the device).
+    maxv_onset_idx = next(
+        (i for i, v in enumerate(v_smooth) if v >= 0.99 * top_v), top_v_idx
+    )
+    time_to_max_v_s = times_s[maxv_onset_idx]
+    dist_to_max_v_m = pos_m[maxv_onset_idx]
     time_to_90pct_v_s = None
     dist_to_90pct_v_m = None
-    target_90 = 0.90 * peak_v
-    for i, v in enumerate(speeds_mps):
+    target_90 = 0.90 * top_v
+    for i, v in enumerate(v_smooth):
         if v >= target_90:
             time_to_90pct_v_s = times_s[i]
             dist_to_90pct_v_m = pos_m[i]
             break
-    end_v = speeds_mps[-1]
-    v_dropoff_pct = (peak_v - end_v) / peak_v * 100 if peak_v > 0 else 0.0
+    end_v = v_smooth[-1]
+    v_dropoff_pct = (top_v - end_v) / top_v * 100 if top_v > 0 else 0.0
 
     # Splits extended to 5/10/20/30/40 m
     splits_extended = {}
@@ -215,7 +252,7 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
 
     # Time-to-peak metrics (ms)
     ttpf_ms = int(times_s[peak_f_idx] * 1000)
-    ttps_ms = int(times_s[peak_v_idx] * 1000)
+    ttps_ms = int(times_s[maxv_onset_idx] * 1000)
 
     # Decimate to ~CHART_SAMPLE_BUDGET points for the UI chart
     step = max(1, n // CHART_SAMPLE_BUDGET)
@@ -225,6 +262,8 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
         samples.append({
             "t_ms": int(times_s[i] * 1000),
             "v_mps": round(speeds_mps[i], 3),
+            "v_smooth_mps": round(v_smooth[i], 3),   # 1.3 Hz trend (overlay)
+            "v_step_mps": round(v_step[i], 3),       # 6 Hz de-noised (overlay)
             "F_N": round(forces_n[i], 1),
             "P_W": round(powers_w[i], 1),
             "a_mps2": round(a, 3),
@@ -241,8 +280,8 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
         "max_extension_m": round(max_extension_m, 3),
         "total_distance_m": round(max_extension_m, 3),
         "total_time_s": round(duration_s, 3),
-        "peak_speed_mps": round(peak_v, 3),
-        "top_speed_mps": round(peak_v, 3),
+        "peak_speed_mps": round(peak_v, 3),       # = top speed (smooth 1.3 Hz); cable spikes excluded
+        "top_speed_mps": round(top_v, 3),         # 1080 "Top Speed" — smooth curve (1.3 Hz)
         "peak_force_n": round(peak_f, 1),
         "peak_power_w": round(peak_p, 1),
         "peak_power_rel_wkg": peak_power_rel_wkg,
@@ -292,6 +331,15 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
             "body_mass_kg": body_mass_kg,
             "raw_sample_count": n,
             "sprint_start_index": sprint_start_idx,
+            # 1080-style Butterworth filtering applied to the peak metrics.
+            "filtering": filter_meta,
+            # What the old raw-max() path would have reported (audit trail).
+            "raw_peaks": {
+                "peak_speed_mps": round(peak_v_raw, 3),
+                "peak_force_n": round(peak_f_raw, 1),
+                "peak_power_w": round(peak_p_raw, 1),
+                "peak_acceleration_mps2": round(peak_a_raw, 3),
+            },
         },
     }
     return rep
