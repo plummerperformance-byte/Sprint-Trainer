@@ -1536,7 +1536,7 @@ PHASE_C_HTML = """<!doctype html>
   #cfg-autoload-param{width:80px}
   .resist-suggest{flex:1 1 100%;font-size:11px;color:var(--muted);min-height:14px}
   .resist-suggest.has{color:var(--accent);font-weight:600}
-  .preset-target{background:#0a0a0c;border:1px solid var(--line);border-radius:8px;
+  .preset-target{background:#0e1626;border:1px solid var(--line);border-radius:8px;
                  padding:10px 12px;margin-bottom:10px;font-size:12px}
   .preset-target[hidden]{display:none}
   .pt-label{color:var(--fg);font-weight:600;margin-bottom:6px}
@@ -1562,7 +1562,7 @@ PHASE_C_HTML = """<!doctype html>
   /* Stepper — − [value] + for numeric fields */
   .stepper{display:flex;align-items:stretch;gap:6px}
   .stepper button{flex:0 0 46px;padding:0;font-size:22px;font-weight:700;line-height:1;
-                  min-height:46px;background:#0a0a0c;color:var(--accent);
+                  min-height:46px;background:#0e1626;color:var(--accent);
                   border:1px solid var(--line);border-radius:8px;cursor:pointer}
   .stepper button:hover{border-color:var(--accent)}
   .stepper button:active{background:var(--accent-soft)}
@@ -1585,11 +1585,11 @@ PHASE_C_HTML = """<!doctype html>
   /* Variable-resistance template picker */
   .vr-presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
   .vr-preset{padding:6px 10px;font-size:11px;font-weight:600;min-height:32px;
-             background:#0a0a0c;color:var(--muted);border:1px solid var(--line);
+             background:#0e1626;color:var(--muted);border:1px solid var(--line);
              border-radius:7px;cursor:pointer}
   .vr-preset:hover{color:var(--fg);border-color:var(--accent)}
   .vr-preset.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
-  .vr-preview{display:block;width:100%;height:90px;background:#0a0a0c;
+  .vr-preview{display:block;width:100%;height:90px;background:#0e1626;
              border:1px solid var(--line);border-radius:8px}
   .card{background:var(--card);border:1px solid var(--line);
         border-radius:14px;padding:18px;margin-bottom:14px}
@@ -1604,7 +1604,7 @@ PHASE_C_HTML = """<!doctype html>
          border:1px solid var(--accent)}
   button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
   button:disabled{opacity:0.4;cursor:not-allowed}
-  input[type=number],input[type=text],select{padding:9px;font-size:14px;background:#0a0a0c;color:var(--fg);
+  input[type=number],input[type=text],select{padding:9px;font-size:14px;background:#0e1626;color:var(--fg);
          border:1px solid var(--line);border-radius:6px}
   label{display:block;color:var(--muted);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;margin:0 0 4px}
 
@@ -1637,7 +1637,7 @@ PHASE_C_HTML = """<!doctype html>
             border:1px solid var(--line);border-radius:9px;cursor:pointer;min-height:44px}
   .mi-never:hover{color:var(--fg)}
   .chart-empty{color:var(--muted);text-align:center;font-size:14px;padding:60px 0}
-  #live-chart{width:100%;height:auto;flex:1 1 auto;min-height:220px;
+  #live-chart{width:100%;height:280px;flex:1 1 auto;min-height:220px;
               background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px}
 
   /* Stats card */
@@ -1654,7 +1654,7 @@ PHASE_C_HTML = """<!doctype html>
   @media (max-width:767px){ .stat-line .v.primary{font-size:56px} }
   /* Current / Peak / Avg toggle above the headline Speed metric */
   .speed-toggle{display:inline-flex;align-self:flex-start;gap:2px;padding:3px;
-                background:#0a0a0c;border:1px solid var(--line);border-radius:8px}
+                background:#0e1626;border:1px solid var(--line);border-radius:8px}
   .sp-tog{padding:5px 12px;font-size:11px;font-weight:600;letter-spacing:0.06em;
           text-transform:uppercase;background:transparent;color:var(--muted);
           border:0;border-radius:6px;cursor:pointer;min-height:30px}
@@ -1764,13 +1764,13 @@ PHASE_C_HTML = """<!doctype html>
   .rd-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
   @media (max-width:767px){ .rd-grid{grid-template-columns:1fr} .rd-tabs{flex-wrap:wrap} }
   .rd-section .rd-h{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;font-weight:600}
-  .rd-row{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;font-size:13px;border-bottom:1px solid #1f1f26}
+  .rd-row{display:flex;justify-content:space-between;align-items:baseline;padding:4px 0;font-size:13px;border-bottom:1px solid var(--line)}
   .rd-row:last-child{border-bottom:0}
   .rd-row .rd-l{color:var(--muted)}
   .rd-row .rd-v{color:var(--fg);font-weight:500;font-variant-numeric:tabular-nums}
   /* Insights tab — toolbar + view toggle */
   .ins-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px}
-  .ins-view-toggle{display:inline-flex;background:#0a0a0c;border:1px solid var(--line);border-radius:8px;padding:3px}
+  .ins-view-toggle{display:inline-flex;background:#0e1626;border:1px solid var(--line);border-radius:8px;padding:3px}
   .ins-view-btn{padding:6px 16px;font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;background:transparent;color:var(--muted);border:0;cursor:pointer;border-radius:6px}
   .ins-view-btn.active{background:var(--accent);color:#0a0a0c}
   /* Athlete history drawer */
@@ -1780,7 +1780,7 @@ PHASE_C_HTML = """<!doctype html>
   .hist-chart-controls select{flex:1;min-width:140px}
   .hist-list{display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto}
   .hist-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
-            padding:10px 12px;background:#0a0a0c;border:1px solid var(--line);border-radius:6px;
+            padding:10px 12px;background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-radius:6px;
             font-size:13px;cursor:pointer;transition:border-color 120ms}
   .hist-row:hover{border-color:var(--accent)}
   .hist-row .hist-date{color:var(--muted);font-weight:500;font-variant-numeric:tabular-nums;font-size:12px}
@@ -1795,7 +1795,7 @@ PHASE_C_HTML = """<!doctype html>
   .ath-section{margin-bottom:22px}
   .ath-section-h{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;font-weight:600}
   .ath-rx-list{display:flex;flex-direction:column;gap:10px}
-  .ath-rx{background:#0a0a0c;border:1px solid var(--line);border-radius:8px;padding:14px}
+  .ath-rx{background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-radius:8px;padding:14px}
   .ath-rx-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
   .ath-rx-num{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:0.08em}
   .ath-rx-day{font-size:11px;color:var(--accent);font-weight:600}
@@ -1825,7 +1825,7 @@ PHASE_C_HTML = """<!doctype html>
   .ins-controls label{display:flex;flex-direction:column;gap:3px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)}
   .ins-controls select{margin-top:0}
   .ins-list{display:flex;flex-direction:column;gap:8px;margin-top:8px}
-  .ins-card{background:#0a0a0c;border:1px solid var(--line);border-left-width:3px;border-radius:6px;padding:12px}
+  .ins-card{background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-left-width:3px;border-radius:6px;padding:12px}
   .ins-card.high{border-left-color:var(--bad)}
   .ins-card.warn{border-left-color:var(--warn)}
   .ins-card.info{border-left-color:var(--accent)}
@@ -1842,13 +1842,26 @@ PHASE_C_HTML = """<!doctype html>
 
   /* Steps tab meta strip */
   .rd-meta-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-  .rd-meta-strip > div{text-align:center;padding:8px;background:#0a0a0c;border:1px solid var(--line);border-radius:6px}
+  .rd-meta-strip > div{text-align:center;padding:8px;background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-radius:6px}
   .rd-meta-strip .rd-l{display:block;font-size:9px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
   .rd-meta-strip .rd-v{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+  /* MuscleLab-style FFT cadence cross-check under the counted step frequency */
+  .st-fft{display:block;font-size:9px;font-weight:700;letter-spacing:.03em;margin-top:3px;font-variant-numeric:tabular-nums}
+  .st-fft.ok{color:var(--ok,#43c59e)} .st-fft.warn{color:var(--warm)} .st-fft.off{color:var(--ink-3)}
+  /* persistent velocity trace under the tab bar */
+  .rd-trace{margin:12px 0 4px}
+  /* step length broken into distance zones */
+  .st-zones{margin:12px 0 4px}
+  .stz-h{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;font-weight:700}
+  .stz-row{display:flex;gap:8px;flex-wrap:wrap}
+  .stz{flex:1 1 90px;min-width:78px;background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;text-align:center}
+  .stz-z{display:block;font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+  .stz-v{display:block;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--fg);margin:2px 0}
+  .stz-n{display:block;font-size:9px;color:var(--muted)}
   /* Splits table */
   .rd-splits-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
   .rd-splits-table th{text-align:left;color:var(--muted);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;font-weight:600;padding:8px 4px;border-bottom:1px solid var(--line)}
-  .rd-splits-table td{padding:10px 4px;color:var(--fg);border-bottom:1px solid #1f1f26}
+  .rd-splits-table td{padding:10px 4px;color:var(--fg);border-bottom:1px solid var(--line)}
   .rd-splits-table td:last-child,.rd-splits-table th:last-child{text-align:right}
 
   /* Recent reps list */
@@ -2040,6 +2053,12 @@ PHASE_C_HTML = """<!doctype html>
     background:transparent;color:var(--muted);border:0;border-radius:6px;cursor:pointer;min-height:26px}
   .cm-tog:hover{color:var(--fg)}
   .cm-tog.active{color:#08122a}
+  /* live-chart x-axis toggle (Time / Distance) — APEX-style dual-axis view */
+  .chart-x-toggle{position:absolute;top:6px;left:6px;z-index:3;display:inline-flex;gap:2px;padding:3px;
+    background:rgba(4,8,20,.6);border:1px solid var(--line);border-radius:8px;backdrop-filter:blur(4px)}
+  .cx-tog{padding:4px 10px;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    background:transparent;color:var(--muted);border:0;border-radius:6px;cursor:pointer;min-height:26px}
+  .cx-tog:hover{color:var(--fg)} .cx-tog.active{background:var(--accent);color:#fff}
   .cm-tog[data-metric="speed"].active{background:var(--warm)}
   .cm-tog[data-metric="force"].active{background:var(--accent);color:#fff}
   .cm-tog[data-metric="accel"].active{background:var(--cool)}
@@ -2175,6 +2194,14 @@ PHASE_C_HTML = """<!doctype html>
   .asym-delta{margin-top:10px;font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .dchip{font-size:11px;font-weight:800;font-variant-numeric:tabular-nums;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.05)}
   .dchip.pos{color:var(--warm)} .dchip.neg{color:var(--cool)} .dchip.zero{color:var(--muted)}
+  /* stride L/R headline — the trustworthy same-foot comparison */
+  .stride-asym{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 12px;
+    padding:11px 13px;background:rgba(255,255,255,.05);border:1px solid var(--line-strong);border-radius:12px}
+  .stride-asym .sa-lab{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--fg)}
+  .sa-chip{font-size:12px;font-weight:800;font-variant-numeric:tabular-nums;padding:4px 10px;border-radius:999px;background:rgba(0,0,0,.18)}
+  .sa-chip small{font-size:10px;font-weight:600;color:var(--muted);margin-left:3px}
+  .sa-chip.pos{color:var(--warm)} .sa-chip.neg{color:var(--cool)} .sa-chip.zero{color:var(--ok,#43c59e)}
+  .sa-verdict{font-size:12px;font-weight:700;color:var(--ok,#43c59e);margin-left:auto}
 
   /* ===== Phone port — 1080-Go-style control + display (approved mockup) =====
      Full-bleed app: the hero fills the screen and the live trace grows into the
@@ -2271,6 +2298,10 @@ PHASE_C_HTML = """<!doctype html>
           <button type="button" class="cm-tog" data-metric="force">Force</button>
           <button type="button" class="cm-tog" data-metric="accel">Accel</button>
         </div>
+        <div class="chart-x-toggle" id="chart-x-toggle" role="group" aria-label="Chart x-axis" style="display:none">
+          <button type="button" class="cx-tog active" data-x="time">Time</button>
+          <button type="button" class="cx-tog" data-x="dist">Dist</button>
+        </div>
         <div class="chart-empty" id="chart-empty">Start a drill to see the live trace</div>
         <svg id="live-chart" viewBox="0 0 600 240" preserveAspectRatio="none" style="display:none"></svg>
         <div class="mode-intro" id="mode-intro" hidden>
@@ -2310,6 +2341,19 @@ PHASE_C_HTML = """<!doctype html>
         <button class="rd-tab" data-tab="splits">Splits</button>
         <button class="rd-tab" data-tab="fv">F · V</button>
       </div>
+    </div>
+
+    <!-- Persistent velocity trace for the selected rep — visible on every tab -->
+    <div class="rd-trace">
+      <div id="steps-legend" class="steps-legend" style="display:none">
+        <span class="sl-item"><i class="sl-dot" style="background:var(--warm)"></i>Left</span>
+        <span class="sl-item"><i class="sl-dot" style="background:var(--cool)"></i>Right</span>
+        <span class="sl-item"><i class="sl-dot sl-flag"></i>Flagged</span>
+        <span id="st-conf" class="sl-conf"></span>
+      </div>
+      <div id="steps-chart"
+           style="width:100%;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:6px;padding:8px 6px 2px"></div>
+      <div id="steps-empty" class="meta" style="display:none;text-align:center;padding:22px 0">No trace for this rep — needs a 1 kHz xlsx import (tether speed/position)</div>
     </div>
 
     <!-- Profile tab -->
@@ -2405,19 +2449,11 @@ PHASE_C_HTML = """<!doctype html>
     <div class="rd-panel" data-tab="steps" style="display:none">
       <div class="rd-meta-strip">
         <div><span class="rd-l">Steps</span><span class="rd-v" id="st-strides">–</span></div>
-        <div><span class="rd-l">Step freq</span><span class="rd-v" id="st-sf">–</span></div>
+        <div><span class="rd-l">Step freq</span><span class="rd-v" id="st-sf">–</span><span class="st-fft off" id="st-fft"></span></div>
         <div><span class="rd-l">Avg length</span><span class="rd-v" id="st-sl">–</span></div>
         <div><span class="rd-l">Consistency</span><span class="rd-v" id="st-slstd">–</span></div>
       </div>
-      <div id="steps-legend" class="steps-legend" style="display:none">
-        <span class="sl-item"><i class="sl-dot" style="background:var(--warm)"></i>Left</span>
-        <span class="sl-item"><i class="sl-dot" style="background:var(--cool)"></i>Right</span>
-        <span class="sl-item"><i class="sl-dot sl-flag"></i>Flagged</span>
-        <span id="st-conf" class="sl-conf"></span>
-      </div>
-      <div id="steps-chart"
-           style="width:100%;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px;padding:8px 6px 2px"></div>
-      <div id="steps-empty" class="meta" style="display:none;text-align:center;padding:30px 0">No step data — needs a 1 kHz xlsx import (tether speed/force)</div>
+      <div id="st-zones" class="st-zones" style="display:none"></div>
       <details id="steps-table-wrap" class="steps-table-details" style="display:none">
         <summary>Per-step table <span class="st-count" id="st-tbl-count"></span></summary>
         <div class="steps-table-scroll">
@@ -3480,7 +3516,7 @@ document.getElementById('cmp-go').onclick=async()=>{
 };
 function renderCompare(sa,sb,la,lb){
   const svg=document.getElementById('cmp-chart');
-  if(!sa.length||!sb.length){svg.innerHTML='<text x="300" y="70" fill="#5a5a64" text-anchor="middle">No data for one of the reps</text>';return;}
+  if(!sa.length||!sb.length){svg.innerHTML='<text x="300" y="70" fill="#56618a" text-anchor="middle">No data for one of the reps</text>';return;}
   const W=600,H=140,PAD=8;
   const all=sa.concat(sb);
   const tMax=Math.max(...all.map(s=>s.t_ms))||1;
@@ -3497,7 +3533,7 @@ function renderCompare(sa,sb,la,lb){
     '<path d="'+path(sb,s=>yF(s.F_N))+'" stroke="#58a6ff" stroke-width="2" stroke-dasharray="4,3" fill="none"/>'+
     '<text x="6" y="14" fill="#5b8bff" font-size="10">speed · Rep '+la+' solid · Rep '+lb+' dashed</text>'+
     '<text x="6" y="26" fill="#58a6ff" font-size="10">force · same lines</text>'+
-    '<text x="'+(W-6)+'" y="'+(H-4)+'" fill="#5a5a64" font-size="10" text-anchor="end">'+(tMax/1000).toFixed(1)+' s</text>';
+    '<text x="'+(W-6)+'" y="'+(H-4)+'" fill="#56618a" font-size="10" text-anchor="end">'+(tMax/1000).toFixed(1)+' s</text>';
 }
 
 // ---- FV report ----
@@ -3523,27 +3559,33 @@ function renderFV(j){
   const line='M'+xs(0).toFixed(1)+','+ys(j.F0_n).toFixed(1)+' L'+xs(j.V0_mps).toFixed(1)+','+ys(0).toFixed(1);
   const dots=pts.map(p=>'<circle cx="'+xs(p.v).toFixed(1)+'" cy="'+ys(p.F).toFixed(1)+'" r="4" fill="#5b8bff"/>').join('');
   svg.innerHTML=
-    '<line x1="'+PAD+'" y1="'+(H-PAD)+'" x2="'+(W-PAD)+'" y2="'+(H-PAD)+'" stroke="#3a3a44"/>'+
-    '<line x1="'+PAD+'" y1="'+PAD+'" x2="'+PAD+'" y2="'+(H-PAD)+'" stroke="#3a3a44"/>'+
+    '<line x1="'+PAD+'" y1="'+(H-PAD)+'" x2="'+(W-PAD)+'" y2="'+(H-PAD)+'" stroke="#33436b"/>'+
+    '<line x1="'+PAD+'" y1="'+PAD+'" x2="'+PAD+'" y2="'+(H-PAD)+'" stroke="#33436b"/>'+
     '<path d="'+line+'" stroke="#58a6ff" stroke-width="2" fill="none"/>'+
     dots+
-    '<text x="'+PAD+'" y="14" fill="#5a5a64" font-size="10">F (N)</text>'+
-    '<text x="'+(W-PAD)+'" y="'+(H-6)+'" fill="#5a5a64" font-size="10" text-anchor="end">v (m/s)</text>';
+    '<text x="'+PAD+'" y="14" fill="#56618a" font-size="10">F (N)</text>'+
+    '<text x="'+(W-PAD)+'" y="'+(H-6)+'" fill="#56618a" font-size="10" text-anchor="end">v (m/s)</text>';
 }
 
 // ---- Live chart ----
 function renderLiveChart(samples, opts){
   opts = opts || {};
   const cmTog=document.getElementById('chart-metric-toggle');
+  const cxTog=document.getElementById('chart-x-toggle');
   if(samples && samples.length>=2){ window._liveChartSamples=samples; window._liveChartOpts=opts; }
   if(!samples||samples.length<2){
-    chartEmpty.style.display='block'; liveChart.style.display='none'; if(cmTog) cmTog.style.display='none'; return;
+    chartEmpty.style.display='block'; liveChart.style.display='none'; if(cmTog) cmTog.style.display='none'; if(cxTog) cxTog.style.display='none'; return;
   }
   chartEmpty.style.display='none'; liveChart.style.display='block'; if(cmTog) cmTog.style.display='inline-flex';
+  const hasPos=samples.every(s=>s.pos_m!=null);
+  if(cxTog) cxTog.style.display=hasPos?'inline-flex':'none';
   const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const metric=window._chartMetric||'speed';
   const W=600,H=240,PADL=48,PADR=18,PADT=24,PADB=26;
-  const tMax=Math.max(...samples.map(s=>s.t_ms))||1, tAxMax=tMax/1000;
+  // APEX-style x-axis: plot the metric over time OR over distance (position)
+  const xmode=(window._chartXAxis==='dist' && hasPos)?'dist':'time';
+  const xv=s=>xmode==='dist'?s.pos_m:s.t_ms;
+  const xMax=Math.max(...samples.map(xv))||1, xAxMax=xmode==='dist'?xMax:xMax/1000, xUnit=xmode==='dist'?'m':'s';
   // acceleration from the velocity trend (stored a_mps2 is zeroed), smoothed
   const accRaw=samples.map((s,i)=>{ if(i<1) return 0; const dt=(samples[i].t_ms-samples[i-1].t_ms)/1000; return dt>0?(samples[i].v_mps-samples[i-1].v_mps)/dt:0; });
   const accArr=accRaw.map((v,i)=>{ let a=0,c=0; for(let j=Math.max(0,i-4);j<=Math.min(accRaw.length-1,i+4);j++){a+=accRaw[j];c++;} return a/c; });
@@ -3558,7 +3600,7 @@ function renderLiveChart(samples, opts){
     const n=m<=1?1:m<=1.2?1.2:m<=1.5?1.5:m<=2?2:m<=2.5?2.5:m<=3?3:m<=4?4:m<=5?5:m<=6?6:m<=8?8:10;return e*n;};
   const yMax=niceMax(Math.max(...series,0.1)*1.08);
   const gl=cssv('--line')||'#243157', mut=cssv('--ink-3')||'#818eae';
-  const xs=t=>PADL+(t/tMax)*(W-PADL-PADR);
+  const xs=x=>PADL+(x/xMax)*(W-PADL-PADR);
   const ys=v=>H-PADB-((v-yMin)/((yMax-yMin)||1))*(H-PADT-PADB);
   let grid='';
   for(let i=0;i<=4;i++){
@@ -3567,23 +3609,30 @@ function renderLiveChart(samples, opts){
     grid+='<text x="'+(PADL-6)+'" y="'+(y+3)+'" fill="'+mut+'" font-size="10" text-anchor="end">'+val.toFixed(mm.dp)+'</text>';
   }
   for(let i=0;i<=4;i++){
-    const x=PADL+i*(W-PADL-PADR)/4, t=tAxMax*i/4;
+    const x=PADL+i*(W-PADL-PADR)/4, xa=xAxMax*i/4;
     grid+='<line x1="'+x+'" y1="'+(H-PADB)+'" x2="'+x+'" y2="'+(H-PADB+4)+'" stroke="'+gl+'"/>';
-    grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="'+mut+'" font-size="10" text-anchor="middle">'+t.toFixed(1)+'s</text>';
+    grid+='<text x="'+x+'" y="'+(H-PADB+15)+'" fill="'+mut+'" font-size="10" text-anchor="middle">'+xa.toFixed(xmode==='dist'?0:1)+xUnit+'</text>';
   }
   grid+='<text x="4" y="'+(PADT-8)+'" fill="'+mm.color+'" font-size="10" font-weight="700">'+mm.unit+'</text>';
-  grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="'+mut+'" font-size="10" text-anchor="end">time</text>';
+  grid+='<text x="'+(W-12)+'" y="'+(H-8)+'" fill="'+mut+'" font-size="10" text-anchor="end">'+(xmode==='dist'?'distance':'time')+'</text>';
   if(yMin<0){ const zy=ys(0); grid+='<line x1="'+PADL+'" y1="'+zy.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+zy.toFixed(1)+'" stroke="'+mut+'" opacity="0.4" stroke-dasharray="3 2"/>'; }
-  let d='', area='M'+xs(samples[0].t_ms).toFixed(1)+','+ys(yMin).toFixed(1);
-  samples.forEach((s,i)=>{ const x=xs(s.t_ms).toFixed(1), y=ys(series[i]).toFixed(1); d+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
-  area+=' L'+xs(samples[samples.length-1].t_ms).toFixed(1)+','+ys(yMin).toFixed(1)+' Z';
+  let d='', area='M'+xs(xv(samples[0])).toFixed(1)+','+ys(yMin).toFixed(1);
+  samples.forEach((s,i)=>{ const x=xs(xv(s)).toFixed(1), y=ys(series[i]).toFixed(1); d+=(i?'L':'M')+x+','+y; area+=' L'+x+','+y; });
+  area+=' L'+xs(xv(samples[samples.length-1])).toFixed(1)+','+ys(yMin).toFixed(1)+' Z';
   let pi=0; for(let i=1;i<series.length;i++) if(series[i]>series[pi]) pi=i;
+  // Peak-vs-RMS (APEX): dashed RMS baseline beside the peak marker
+  const rms=Math.sqrt(series.reduce((a,v)=>a+v*v,0)/series.length);
+  const ryv=ys(rms);
+  const rmsMk=(isFinite(ryv)&&rms>0)?('<line x1="'+PADL+'" y1="'+ryv.toFixed(1)+'" x2="'+(W-PADR)+'" y2="'+ryv.toFixed(1)+'" stroke="'+mm.color+'" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>'
+    +'<text x="'+(PADL+4)+'" y="'+(ryv-4).toFixed(1)+'" fill="'+mm.color+'" font-size="9" font-weight="700" opacity="0.9">RMS '+rms.toFixed(mm.dp)+'</text>'):'';
+  const pkx=xs(xv(samples[pi]));
   liveChart.innerHTML=grid
     +'<defs><linearGradient id="lcg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="'+mm.color+'" stop-opacity="0.22"/><stop offset="1" stop-color="'+mm.color+'" stop-opacity="0"/></linearGradient></defs>'
     +'<path d="'+area+'" fill="url(#lcg)"/>'
     +'<path d="'+d+'" fill="none" stroke="'+mm.color+'" stroke-width="2.2" stroke-linejoin="round"/>'
-    +'<circle cx="'+xs(samples[pi].t_ms).toFixed(1)+'" cy="'+ys(series[pi]).toFixed(1)+'" r="3.5" fill="'+mm.color+'"/>'
-    +'<text x="'+Math.min(xs(samples[pi].t_ms)+8, W-72).toFixed(1)+'" y="'+(ys(series[pi])-5).toFixed(1)+'" fill="'+mm.color+'" font-size="10" font-weight="700">'+series[pi].toFixed(mm.dp)+' '+mm.unit+'</text>';
+    +rmsMk
+    +'<circle cx="'+pkx.toFixed(1)+'" cy="'+ys(series[pi]).toFixed(1)+'" r="3.5" fill="'+mm.color+'"/>'
+    +'<text x="'+Math.min(pkx+8, W-72).toFixed(1)+'" y="'+(ys(series[pi])-5).toFixed(1)+'" fill="'+mm.color+'" font-size="10" font-weight="700">'+series[pi].toFixed(mm.dp)+' '+mm.unit+'</text>';
 }
 // Live-chart metric toggle (Speed / Force / Accel) → re-render the last trace
 window._chartMetric='speed';
@@ -3592,6 +3641,16 @@ window._chartMetric='speed';
   tog.querySelectorAll('.cm-tog').forEach(function(b){ b.addEventListener('click',function(){
     window._chartMetric=b.getAttribute('data-metric');
     tog.querySelectorAll('.cm-tog').forEach(function(x){ x.classList.toggle('active', x===b); });
+    if(window._liveChartSamples) renderLiveChart(window._liveChartSamples, window._liveChartOpts||{});
+  }); });
+})();
+// Live-chart x-axis toggle (Time / Distance) → re-render the last trace
+window._chartXAxis='time';
+(function(){
+  const tog=document.getElementById('chart-x-toggle'); if(!tog) return;
+  tog.querySelectorAll('.cx-tog').forEach(function(b){ b.addEventListener('click',function(){
+    window._chartXAxis=b.getAttribute('data-x');
+    tog.querySelectorAll('.cx-tog').forEach(function(x){ x.classList.toggle('active', x===b); });
     if(window._liveChartSamples) renderLiveChart(window._liveChartSamples, window._liveChartOpts||{});
   }); });
 })();
@@ -3643,14 +3702,17 @@ function renderRunDetail(rep){
     note.textContent='Steps from tether speed-residual peaks. Foot labels are declared + alternated (not measured); L/R asymmetry is experimental until strikes are validated by video or manual correction. GCT / flight time still need a foot sensor.';
   } else { note.textContent=''; }
 
+  // Persistent velocity trace: the chart lives above the tabs, so render it on
+  // every rep load (not only when the Steps tab is open).
+  renderStepsTab(rep);
   // Render the active tab's content (lazy — only what's visible)
   renderTab(activeTab);
 }
 
 function renderTab(name){
   if(!currentRep) return;
-  if(name==='steps') renderStepsTab(currentRep);
-  else if(name==='splits') renderSplitsTab(currentRep);
+  // 'steps' chart/table/asymmetry already rendered in renderRunDetail (persistent trace)
+  if(name==='splits') renderSplitsTab(currentRep);
   else if(name==='fv') renderFVRepTab(currentRep);
   else if(name==='insights') renderInsightsTab(currentRep);
   // 'profile' is static DOM, already populated in renderRunDetail
@@ -3767,6 +3829,35 @@ document.querySelectorAll('.ins-view-btn').forEach(btn=>{
   });
 });
 
+// MuscleLab-style cadence cross-check (LaserCalc.cs): in the top-speed window each
+// foot strike ripples the velocity trace, so the dominant frequency of velocity IS
+// the step cadence. A frequency-domain read that is independent of our time-domain
+// speed-residual peak detector — if the two disagree, a strike was missed or doubled.
+// Non-uniform-sampling DFT scan of the 2.5-6 Hz band over the contiguous max-V plateau.
+function fftCadence(samples, peakV){
+  if(!samples || samples.length<20 || !(peakV>0)) return null;
+  const thr=0.80*peakV;
+  // whole near-top-speed region: first-to-last sample above threshold. The dips
+  // between strikes ARE the velocity ripples whose frequency = step cadence, so we
+  // must keep them (a contiguous window around the single peak spike is far too short).
+  let a=-1,b=-1;
+  for(let i=0;i<samples.length;i++){ if((samples[i].v_mps||0)>=thr){ if(a<0)a=i; b=i; } }
+  if(a<0 || b<=a) return null;
+  const win=samples.slice(a,b+1).filter(s=>s.t_ms!=null && s.v_mps!=null);
+  if(win.length<20) return null;
+  const t0=win[0].t_ms, span=(win[win.length-1].t_ms-t0)/1000;
+  if(span<0.5) return null;
+  const mean=win.reduce((s,x)=>s+x.v_mps,0)/win.length;
+  const t=win.map(s=>(s.t_ms-t0)/1000), v=win.map(s=>s.v_mps-mean);
+  let bestF=0, bestM=-1;
+  for(let f=2.5; f<=6.0; f+=0.02){
+    let re=0, im=0; const w=2*Math.PI*f;
+    for(let i=0;i<t.length;i++){ re+=v[i]*Math.cos(w*t[i]); im-=v[i]*Math.sin(w*t[i]); }
+    const m=re*re+im*im;
+    if(m>bestM){ bestM=m; bestF=f; }
+  }
+  return {hz:bestF, n:win.length, span:span};
+}
 function renderStepsTab(rep){
   const svg=document.getElementById('steps-chart');
   const empty=document.getElementById('steps-empty');
@@ -3776,9 +3867,11 @@ function renderStepsTab(rep){
   const events=rep.step_events||[];
   const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const warm=cssv('--warm')||'#ff9440', cool=cssv('--cool')||'#2bd0e2';
+  const zoneEl=document.getElementById('st-zones');
   if(!events.length || events.length<2){
     svg.style.display='none'; empty.style.display='block';
     legend.style.display='none'; twrap.style.display='none'; asymEl.style.display='none';
+    if(zoneEl) zoneEl.style.display='none';
     return;
   }
   svg.style.display='block'; empty.style.display='none';
@@ -3786,6 +3879,19 @@ function renderStepsTab(rep){
   // ---- Speed vs Position via uPlot: crisp canvas + hover crosshair + drag-zoom ----
   const gl=cssv('--line')||'#243157', mut=cssv('--ink-3')||'#818eae', acc=cssv('--accent')||'#5b8bff', bad=cssv('--bad')||'#ff5a5f';
   const samples=(window._lastSamples||[]).filter(s=>s.pos_m!=null&&s.v_mps!=null);
+  // FFT cadence cross-check (MuscleLab): compare to the counted step frequency
+  const fftEl=document.getElementById('st-fft');
+  if(fftEl){
+    const pv=rep.peak_speed_mps||(samples.length?samples.reduce((m,s)=>Math.max(m,s.v_mps||0),0):0);
+    const fc=fftCadence(samples, pv), counted=rep.step_freq_hz;
+    if(fc && counted){
+      const ok=Math.abs(fc.hz-counted)/counted<=0.08;
+      fftEl.className='st-fft '+(ok?'ok':'warn');
+      fftEl.textContent='FFT '+fc.hz.toFixed(2)+' Hz '+(ok?'✓':'⚠ check strikes');
+    } else if(fc){
+      fftEl.className='st-fft off'; fftEl.textContent='FFT '+fc.hz.toFixed(2)+' Hz';
+    } else { fftEl.className='st-fft off'; fftEl.textContent=''; }
+  }
   if(window._stepsU){ try{window._stepsU.destroy();}catch(e){} window._stepsU=null; }
   svg.innerHTML='';
   if(samples.length && typeof uPlot!=='undefined'){
@@ -3827,6 +3933,20 @@ function renderStepsTab(rep){
     (rep.step_confidence!=null?('confidence '+rep.step_confidence):'')
     +(rep.flagged_steps?(' · '+rep.flagged_steps+' flagged'):'');
 
+  // Step length broken into 10 m distance zones — shows how length develops through the run
+  if(zoneEl){
+    const ZW=10, zones={};
+    for(const e of events){ if(e.pos_m==null||e.step_length_m==null) continue;
+      const z=Math.floor(e.pos_m/ZW); (zones[z]=zones[z]||[]).push(e.step_length_m); }
+    const keys=Object.keys(zones).map(Number).sort((a,b)=>a-b);
+    if(keys.length){
+      zoneEl.innerHTML='<div class="stz-h">Step length by zone</div><div class="stz-row">'+
+        keys.map(z=>{const a=zones[z], m=a.reduce((s,x)=>s+x,0)/a.length;
+          return '<div class="stz"><span class="stz-z">'+(z*ZW)+'–'+((z+1)*ZW)+' m</span><span class="stz-v">'+m.toFixed(2)+' m</span><span class="stz-n">'+a.length+' step'+(a.length!==1?'s':'')+'</span></div>';}).join('')+'</div>';
+      zoneEl.style.display='block';
+    } else { zoneEl.style.display='none'; }
+  }
+
   // Per-step table (all events, including the un-paired first strike)
   let rows='<tr><th>#</th><th>Foot</th><th>Pos</th><th>Length</th><th>Stride</th><th>Period</th><th>Freq</th><th>Force</th><th>Flags</th></tr>';
   for(const e of events){
@@ -3854,14 +3974,41 @@ function renderStepsTab(rep){
 // steady-state steps is the honest fix for the acceleration bias in the globals.
 function renderAsymCards(rep, lastN){
   const asymEl=document.getElementById('steps-asym');
-  const all=(rep.step_events||[]).filter(e=>e.foot && e.step_length_m!=null);
-  if(all.length<2){ asymEl.style.display='none'; return; }
-  const sel = lastN ? all.slice(-lastN) : all;
+  // Clean steps only (drop flagged/recovered) — an interpolated strike has an
+  // approximate position that would corrupt a stride.
+  const clean=(rep.step_events||[]).filter(e=>e.foot && e.step_length_m!=null && !(e.flags&&e.flags.length));
+  if(clean.length<4){ asymEl.style.display='none'; return; }
+  const sel = lastN ? clean.slice(-lastN) : clean;
   const L=sel.filter(s=>s.foot==='left'), R=sel.filter(s=>s.foot==='right');
   const totDist=sel.reduce((a,s)=>a+(s.step_length_m||0),0);
   const fVals=sel.map(s=>s.peak_force_n).filter(x=>x!=null); const avgF=fVals.length?fVals.reduce((a,b)=>a+b,0)/fVals.length:null;
   const mean=(arr,k)=>{const v=arr.map(s=>s[k]).filter(x=>x!=null); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
   const asym=(l,r)=>(l==null||r==null||(l+r)===0)?null:Math.round(2000*(l-r)/(l+r))/10;
+  // --- stride (same-foot) asymmetry: the TRUSTWORTHY metric. A single step is
+  // the wrong unit — the detector splits each gait cycle unevenly, so steps
+  // alternate long/short even for a symmetric athlete. Same-foot strides (L->L
+  // vs R->R) sidestep that; pairing overlapping strides cancels acceleration. ---
+  const strideAsym=(steps)=>{
+    const seq=f=>steps.filter(s=>s.foot===f).sort((a,b)=>a.step_number-b.step_number);
+    const str=arr=>{const o=[]; for(let i=1;i<arr.length;i++){ if(arr[i].step_number-arr[i-1].step_number===2 && arr[i].pos_m!=null && arr[i].t_strike_s!=null)
+      o.push({len:arr[i].pos_m-arr[i-1].pos_m, per:(arr[i].t_strike_s-arr[i-1].t_strike_s)*1000}); } return o;};
+    const Ls=str(seq('left')), Rs=str(seq('right')), n=Math.min(Ls.length,Rs.length);
+    if(n<2) return null;
+    const si=(l,r)=>(l+r)?2000*(l-r)/(l+r)/10:null;
+    let lp=0,pp=0,ld=0,c=0;
+    for(let i=0;i<n;i++){ const a=si(Ls[i].len,Rs[i].len); if(a==null) continue; lp+=a; pp+=si(Ls[i].per,Rs[i].per); ld+=(Ls[i].len-Rs[i].len); c++; }
+    return c?{len:lp/c, per:pp/c, lenDiff:ld/c, n:c}:null;
+  };
+  const sa=strideAsym(sel);
+  const saChip=(lab,v,unit,extra)=>{ const cls=v==null?'zero':(Math.abs(v)<3?'zero':(v>0?'pos':'neg'));
+    return '<span class="sa-chip '+cls+'">'+lab+' '+(v==null?'–':((v>0?'+':'')+v.toFixed(1)+unit))+(extra||'')+'</span>'; };
+  const strideHead = sa ? (
+    '<div class="stride-asym">'
+    +'<span class="sa-lab">Stride L/R</span>'
+    +saChip('Length', sa.len, '%', '<small>'+(sa.lenDiff>=0?'+':'')+(sa.lenDiff*100).toFixed(0)+' cm</small>')
+    +saChip('Timing', sa.per, '%', '')
+    +'<span class="sa-verdict">'+((Math.abs(sa.len)<3&&Math.abs(sa.per)<3)?'≈ symmetric':(Math.abs(sa.len)<6?'mild':'notable'))+' · '+sa.n+' strides</span>'
+    +'</div>') : '';
   const METRICS=[['step_length_m','Length','m',2],['step_frequency_hz','Freq','Hz',1],['peak_force_n','Force','N',0],['step_speed_mps','Speed','m/s',2]];
   const fmt=(v,d)=>v==null?'–':v.toFixed(d);
   const card=(side,arr)=>{
@@ -3874,14 +4021,15 @@ function renderAsymCards(rep, lastN){
     deltas+='<span class="dchip '+cls+'">'+lab+' '+(a==null?'–':((a>0?'+':'')+a+'%')) +'</span>'; }
   const opts=[['All',null],['Last 10',10],['Last 6',6]];
   const buttons=opts.map(o=>'<button class="'+(lastN===o[1]?'on':'')+'" data-n="'+(o[1]==null?'':o[1])+'">'+o[0]+'</button>').join('');
-  const startFoot=(rep.asymmetry&&rep.asymmetry.start_foot)||all[0].foot;
+  const startFoot=(rep.asymmetry&&rep.asymmetry.start_foot)||clean[0].foot;
   asymEl.innerHTML=
     '<div class="asym-head">L/R asymmetry <span class="exp-badge">experimental</span></div>'
-    +'<div class="asym-note">Declared start foot <b>'+startFoot+'</b>, alternated — the tether cannot verify which foot struck, so magnitudes are indicative. Select the steady-state steps (Last 10/6) to cut the acceleration bias.</div>'
     +'<div class="asym-select">'+buttons+'</div>'
+    +strideHead
+    +'<div class="asym-note"><b>Stride L/R</b> compares same-foot strides — the reliable read. The per-step cards below alternate long/short because the tether splits each stride unevenly, so treat the step-level deltas as indicative only. Foot identity is declared (start <b>'+startFoot+'</b>), not measured, so which side is + is a label, not a fact.</div>'
     +'<div class="asym-summary">'+sel.length+' steps · '+totDist.toFixed(1)+' m · avg force '+(avgF!=null?avgF.toFixed(0)+' N':'–')+'</div>'
     +'<div class="asym-cards">'+card('left',L)+card('right',R)+'</div>'
-    +'<div class="asym-delta">L vs R: '+deltas+' <span class="muted">(+ = left larger)</span></div>';
+    +'<div class="asym-delta">per-step L vs R: '+deltas+' <span class="muted">(split-artifact — see above)</span></div>';
   asymEl.style.display='block';
   asymEl.querySelectorAll('.asym-select button').forEach(b=>b.onclick=()=>{ const n=b.getAttribute('data-n'); renderAsymCards(rep, n?parseInt(n,10):null); });
 }
@@ -4912,7 +5060,7 @@ SETUP_HTML = """<!doctype html>
          color:#0a0a0c;border:0;border-radius:9px;font-weight:600;cursor:pointer;min-height:44px}
   button.secondary{background:transparent;color:var(--accent);border:1px solid var(--accent)}
   button.ghost{background:transparent;color:var(--muted);border:1px solid var(--line)}
-  input[type=number],input[type=text],select{padding:9px;font-size:14px;background:#0a0a0c;
+  input[type=number],input[type=text],select{padding:9px;font-size:14px;background:#0e1626;
          color:var(--fg);border:1px solid var(--line);border-radius:6px}
   label{display:block;color:var(--muted);font-size:11px;letter-spacing:0.12em;
         text-transform:uppercase;margin:0 0 4px}
@@ -4940,14 +5088,14 @@ SETUP_HTML = """<!doctype html>
   .curve-axis-btn{flex:1;padding:8px;border:none;border-radius:5px;font-size:11px;
                   cursor:pointer;min-height:36px}
   .seg-btn{flex:1;padding:9px;font-size:12px;font-weight:600;cursor:pointer;
-           background:#0a0a0c;color:var(--muted);border:1px solid var(--line);
+           background:#0e1626;color:var(--muted);border:1px solid var(--line);
            border-radius:6px;min-height:38px}
   .seg-btn:hover{color:var(--fg);border-color:var(--accent)}
   .seg-btn.active{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
   .hist-editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .hist-list{display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto}
   .hist-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
-            padding:10px 12px;background:#0a0a0c;border:1px solid var(--line);
+            padding:10px 12px;background:#0e1626;border:1px solid var(--line);
             border-radius:6px;font-size:13px;cursor:pointer}
   .hist-row:hover{border-color:var(--accent)}
   .hist-date{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
@@ -5341,8 +5489,8 @@ async function loadProgressionChart(aid){
   for(let i=0;i<=3;i++){
     const y=PADT+i*(H-PADT-PADB)/3;
     const v=yMax-(yMax-yMin)*(i/3);
-    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#1f1f26"/>';
-    grid+='<text x="'+(PADL-4)+'" y="'+(y+3)+'" fill="#5a5a64" font-size="9" text-anchor="end">'+v.toFixed(2)+'</text>';
+    grid+='<line x1="'+PADL+'" y1="'+y+'" x2="'+(W-PADR)+'" y2="'+y+'" stroke="#243157"/>';
+    grid+='<text x="'+(PADL-4)+'" y="'+(y+3)+'" fill="#56618a" font-size="9" text-anchor="end">'+v.toFixed(2)+'</text>';
   }
   const path=points.map((pt,i)=>(i?'L':'M')+xs(i).toFixed(1)+','+ys(pt.value).toFixed(1)).join(' ');
   const dots=points.map((pt,i)=>'<circle cx="'+xs(i).toFixed(1)+'" cy="'+ys(pt.value).toFixed(1)+'" r="3" fill="#5b8bff"/>').join('');

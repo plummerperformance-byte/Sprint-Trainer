@@ -430,6 +430,64 @@ def _step_flags(period_ms, length_m):
     return flags
 
 
+def _recover_missed_strikes(accepted, t_s, sig, min_period_s, gap_split_ratio=1.6):
+    """Split over-long steps that swallowed a missed strike.
+
+    A single missed strike doubles a step's length and period — e.g. Tyrone's
+    end-of-run 3.98 m 'step', where the real foot strike fell ~0.01 below the
+    adaptive accept threshold during deceleration and got merged into its
+    neighbour. Loosening the global threshold to catch it spawns false positives
+    elsewhere; instead, for every gap longer than `gap_split_ratio` x the LOCAL
+    median step period, estimate how many strikes are missing
+    (round(gap / local_median) - 1) and re-insert that many at the tallest
+    sub-threshold residual maxima inside the gap. When the signal offers no clear
+    peak (a true data drop-out), fall back to even time subdivision. Returns
+    (new_accepted, recovered_index_set) so callers can flag the inserted strikes
+    as lower-confidence."""
+    if len(accepted) < 4:
+        return accepted, set()
+    gaps = sorted(t_s[accepted[i]] - t_s[accepted[i - 1]] for i in range(1, len(accepted)))
+    global_med = gaps[len(gaps) // 2] or min_period_s
+
+    def local_med(k):
+        lo = max(1, k - 3); hi = min(len(accepted), k + 4)
+        w = sorted(t_s[accepted[j]] - t_s[accepted[j - 1]] for j in range(lo, hi))
+        return (w[len(w) // 2] if w else global_med) or global_med
+
+    recovered = set()
+    out = [accepted[0]]
+    for k in range(1, len(accepted)):
+        a, b = accepted[k - 1], accepted[k]
+        gap = t_s[b] - t_s[a]
+        med = local_med(k)
+        n_expected = int(round(gap / med)) if med > 0 else 1
+        if gap > gap_split_ratio * med and n_expected >= 2:
+            n_missing = n_expected - 1
+            cands = sorted((i for i in range(a + 1, b)
+                            if sig[i] > sig[i - 1] and sig[i] >= sig[i + 1]),
+                           key=lambda i: sig[i], reverse=True)
+            picks = []
+            for i in cands:
+                if (t_s[i] - t_s[a]) < min_period_s or (t_s[b] - t_s[i]) < min_period_s:
+                    continue
+                if any(abs(t_s[i] - t_s[p]) < min_period_s for p in picks):
+                    continue
+                picks.append(i)
+                if len(picks) >= n_missing:
+                    break
+            if len(picks) < n_missing:                 # data drop-out: subdivide evenly
+                for m in range(1, n_expected):
+                    tt = t_s[a] + gap * m / n_expected
+                    j = min(range(a + 1, b), key=lambda i: abs(t_s[i] - tt))
+                    if j not in picks:
+                        picks.append(j)
+            for i in sorted(picks)[:n_missing]:
+                recovered.add(i)
+                out.append(i)
+        out.append(b)
+    return out, recovered
+
+
 # Speed-residual defaults validated by A/B against the force detector on the
 # Tyrone 1080 workbook (short 25 ms / long 200 ms / no prominence floor gave 23
 # clean detections + 3 flagged gaps ≈ 26 true steps, matching the doc's 25-26 /
@@ -437,7 +495,8 @@ def _step_flags(period_ms, length_m):
 # past ~300 ms starts spanning whole steps and cancels the step signal.
 def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
                                 min_period_s=0.11, min_step_len_m=STEP_MIN_LEN_M,
-                                adaptive_k=0.2, thr_win_ms=400, min_prominence_mps=None):
+                                adaptive_k=0.2, thr_win_ms=400, min_prominence_mps=None,
+                                gap_split_ratio=1.6):
     """Doc §2 speed-residual step detector (the doc's recommended first pass).
 
     Removes the broad acceleration trend from the tether speed and keeps the
@@ -486,6 +545,14 @@ def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
                 continue
         accepted.append(idx)
 
+    # Recover strikes the accept threshold missed inside an over-long gap, so a
+    # single miss no longer reads as one impossible 3.9 m step (see helper).
+    if gap_split_ratio:
+        accepted, recovered = _recover_missed_strikes(
+            accepted, t_s, sig, min_period_s, gap_split_ratio)
+    else:
+        recovered = set()
+
     steps = []
     for i, idx in enumerate(accepted):
         prev_idx = accepted[i - 1] if i > 0 else None
@@ -494,6 +561,9 @@ def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
         inst_freq = round(1000 / period_ms, 2) if period_ms and period_ms > 0 else None
         step_speed = (round(length_m / (period_ms / 1000.0), 3)
                       if (length_m is not None and period_ms) else None)
+        flags = _step_flags(period_ms, length_m)
+        if idx in recovered:
+            flags.append("recovered")
         steps.append({
             "step_number": i + 1,
             "t_strike_s": round(t_s[idx], 4),
@@ -503,7 +573,7 @@ def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
             "step_length_m": length_m,
             "step_frequency_hz": inst_freq,
             "step_speed_mps": step_speed,
-            "flags": _step_flags(period_ms, length_m),
+            "flags": flags,
         })
     return steps
 
@@ -586,7 +656,14 @@ def compute_asymmetry(steps, zone_len_m=10.0):
       * zones    — asymmetry within 0-10 / 10-20 / … m distance buckets
     Returns None if fewer than two labelled steps.
     """
-    labelled = [s for s in steps if s.get("foot") and s.get("step_period_ms") is not None]
+    # Only clean steps feed the L/R comparison. A flagged step — above all a
+    # `recovered` (interpolated) strike — has an approximate position/timing, so
+    # including it would fabricate a metre-scale left-vs-right difference that
+    # isn't real. Aggregates (avg length etc.) still use every step; asymmetry
+    # is deliberately stricter.
+    labelled = [s for s in steps
+                if s.get("foot") and s.get("step_period_ms") is not None
+                and not s.get("flags")]
     if len(labelled) < 2:
         return None
     METRICS = ("step_length_m", "step_period_ms", "step_frequency_hz",
@@ -627,6 +704,40 @@ def compute_asymmetry(steps, zone_len_m=10.0):
             row[k] = _asym_pct(mean([s.get(k) for s in zl]), mean([s.get(k) for s in zr]))
         zones.append(row)
 
+    # --- stride (same-foot) asymmetry: the trustworthy view ---
+    # A single step is the wrong unit for L/R comparison: the detector splits each
+    # gait cycle into two steps at a slightly uneven point, so consecutive steps
+    # alternate long/short even when the athlete is symmetric (Tyrone's ~2.0/1.9 m
+    # split of a symmetric ~4.4 m stride). Comparing SAME-FOOT strides (L->L vs
+    # R->R) sidesteps that entirely, and pairing each left stride with the
+    # overlapping right stride cancels the acceleration trend (both cover almost
+    # the same ground). This is what makes the number match reality instead of the
+    # ~20% the raw step comparison invents.
+    def _foot_strides(foot):
+        seq = [s for s in labelled if s["foot"] == foot]
+        return [(seq[i]["pos_m"] - seq[i - 1]["pos_m"],                      # stride length m
+                 (seq[i]["t_strike_s"] - seq[i - 1]["t_strike_s"]) * 1000.0)  # stride period ms
+                for i in range(1, len(seq))]
+
+    Ls, Rs = _foot_strides("left"), _foot_strides("right")
+    stride = {}
+    if len(Ls) >= 2 and len(Rs) >= 2:
+        npair = min(len(Ls), len(Rs))
+        len_p = [_asym_pct(Ls[i][0], Rs[i][0]) for i in range(npair)]
+        per_p = [_asym_pct(Ls[i][1], Rs[i][1]) for i in range(npair)]
+        len_p = [p for p in len_p if p is not None]
+        per_p = [p for p in per_p if p is not None]
+        lmean = sum(Ls[i][0] for i in range(npair)) / npair
+        rmean = sum(Rs[i][0] for i in range(npair)) / npair
+        stride = {
+            "n_pairs": npair,
+            "step_length_m": round(sum(len_p) / len(len_p), 1) if len_p else None,
+            "step_period_ms": round(sum(per_p) / len(per_p), 1) if per_p else None,
+            "len_diff_m": round(lmean - rmean, 3),   # L - R, native metres
+            "left_stride_m": round(lmean, 3),
+            "right_stride_m": round(rmean, 3),
+        }
+
     return {
         "start_foot": (steps[0].get("foot") if steps else labelled[0]["foot"]),
         "declared": True,
@@ -634,6 +745,8 @@ def compute_asymmetry(steps, zone_len_m=10.0):
         "global_confidence": "low (acceleration-biased)",
         "pairwise_mean": pairwise_mean,
         "zones": zones,
+        "stride": stride,
+        "stride_confidence": "same-foot stride, acceleration-controlled (trustworthy)",
     }
 
 
