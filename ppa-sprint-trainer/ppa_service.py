@@ -2721,6 +2721,7 @@ PHASE_C_HTML = """<!doctype html>
       <button type="button" class="an-tab active" data-an="compare" role="tab">Compare reps</button>
       <button type="button" class="an-tab" data-an="fv" role="tab">Force–Velocity</button>
       <button type="button" class="an-tab" data-an="trends" role="tab">Trends</button>
+      <button type="button" class="an-tab" data-an="race" role="tab">Race</button>
     </div>
     <div class="an-panel" data-an="compare">
       <div class="meta">Speed + force overlaid across the two reps.</div>
@@ -2757,6 +2758,16 @@ PHASE_C_HTML = """<!doctype html>
         <span style="color:var(--muted)">●</span> within noise ·
         <span style="color:var(--accent)">▮</span> MDC corridor
       </div>
+    </div>
+    <div class="an-panel" data-an="race" hidden>
+      <div class="meta">Race this athlete's best run from each recent session against each other — beat your past self. Newest run in the brightest lane.</div>
+      <div id="race-status" class="meta" style="margin-top:8px"></div>
+      <canvas id="race-canvas" style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:8px"></canvas>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <button id="race-play" class="secondary">▶ Play</button>
+        <button id="race-reset" class="secondary">↺</button>
+      </div>
+      <div id="race-board" style="margin-top:8px;font-size:12px"></div>
     </div>
   </div>
 
@@ -3894,6 +3905,70 @@ async function renderTrends(){
     const p=document.querySelector('.an-panel[data-an="trends"]');
     if(p&&!p.hidden) renderTrends();
   });
+})();
+// ---- Ghost race: race the athlete's dated best runs (race your past self) ----
+window._raceData=null; window._raceT=0; window._racePlaying=false; window._raceLast=0;
+function _rcv(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();}
+async function renderGhostRace(){
+  const st=document.getElementById('race-status'); if(!st) return;
+  const aid=document.getElementById('athlete-select').value;
+  if(!aid){ st.textContent='Select an athlete to race their past sessions.'; window._raceData=null; drawRace(); renderRaceBoard(); return; }
+  let j; try{ j=await(await fetch('/api/athletes/'+aid+'/ghost_runs?n=4')).json(); }
+  catch(e){ st.textContent='Could not load runs'; return; }
+  const runs=j.runs||[];
+  if(runs.length<2){ st.textContent='Need at least 2 sessions with a valid run to race.'; window._raceData=null; drawRace(); renderRaceBoard(); return; }
+  const COLS=['#37405f','#495681','#5a72b8','#5b8bff']; const n=runs.length;
+  runs.forEach((r,i)=>{ r.color=COLS[Math.max(0,COLS.length-n+i)]||'#5b8bff'; r.t_end=r.trace[r.trace.length-1][0]; });
+  const dist=Math.max.apply(null,runs.map(r=>r.dist_m))||1;
+  window._raceData={runs:runs,dist:dist,tmax:Math.max.apply(null,runs.map(r=>r.t_end))+0.15};
+  st.textContent=n+' sessions \u00b7 race distance '+dist.toFixed(0)+' m';
+  window._raceT=0; racePause(); drawRace(); renderRaceBoard();
+}
+function _distAt(r,t){ const g=r.trace; if(t>=r.t_end) return g[g.length-1][1];
+  let k=0; while(k<g.length-1 && g[k+1][0]<=t) k++; if(k>=g.length-1) return g[g.length-1][1];
+  const seg=(g[k+1][0]-g[k][0])||1e-6; return g[k][1]+(g[k+1][1]-g[k][1])*(t-g[k][0])/seg; }
+function drawRace(){
+  const cv=document.getElementById('race-canvas'); if(!cv) return; const ctx=cv.getContext('2d');
+  const DPR=Math.min(2,window.devicePixelRatio||1), W=cv.clientWidth||600, H=200;
+  cv.width=W*DPR; cv.height=H*DPR; cv.style.height=H+'px'; ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,W,H);
+  const D=window._raceData; if(!D) return;
+  const pl=54,pr=22,pt=16,pb=22, laneN=D.runs.length, trackW=W-pl-pr, laneGap=(H-pt-pb)/laneN, fx=pl+trackW, t=window._raceT;
+  const order=D.runs.map((r,i)=>({r:r,i:i})).sort((a,b)=>_distAt(b.r,t)-_distAt(a.r,t));
+  const rank={}; order.forEach((o,i)=>{rank[o.i]=i+1;});
+  ctx.setLineDash([4,4]); ctx.strokeStyle=_rcv('--accent')||'#5b8bff'; ctx.globalAlpha=.45;
+  ctx.beginPath(); ctx.moveTo(fx,pt); ctx.lineTo(fx,H-pb); ctx.stroke(); ctx.globalAlpha=1; ctx.setLineDash([]);
+  D.runs.forEach((r,li)=>{
+    const cy=pt+laneGap*li+laneGap/2, d=_distAt(r,t), x=pl+(d/D.dist)*trackW, newest=li===laneN-1;
+    ctx.strokeStyle=_rcv('--line')||'#243157'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pl,cy); ctx.lineTo(fx,cy); ctx.stroke();
+    ctx.strokeStyle=r.color; ctx.globalAlpha=newest?.7:.4; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(pl,cy); ctx.lineTo(x,cy); ctx.stroke(); ctx.globalAlpha=1;
+    if(newest){ctx.shadowColor=r.color;ctx.shadowBlur=10;}
+    ctx.fillStyle=r.color; ctx.beginPath(); ctx.arc(x,cy,newest?6:5,0,7); ctx.fill(); ctx.shadowBlur=0;
+    ctx.fillStyle='#08101f'; ctx.font='700 8px system-ui'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(rank[li]),x,cy); ctx.textBaseline='alphabetic';
+    ctx.fillStyle=newest?(_rcv('--fg')||'#eef2fb'):(_rcv('--muted')||'#818eae'); ctx.font='10px system-ui'; ctx.textAlign='right'; ctx.fillText(String(r.date).slice(5),pl-6,cy+3);
+    if(t>=r.t_end){ ctx.fillStyle=r.color; ctx.font='600 9px monospace'; ctx.textAlign='left'; ctx.fillText(r.t_end.toFixed(2)+'s',fx+4,cy+3); }
+  });
+}
+function renderRaceBoard(){ const el=document.getElementById('race-board'); const D=window._raceData;
+  if(!el){return;} if(!D){el.innerHTML='';return;}
+  const ranked=D.runs.slice().sort((a,b)=>a.t_end-b.t_end), best=ranked[0];
+  el.innerHTML=ranked.map(function(r,i){ return '<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-top:1px solid var(--line)">'+
+    '<b style="width:18px;text-align:center;color:'+(i===0?'var(--accent)':'var(--muted)')+'">'+(i+1)+'</b>'+
+    '<span style="width:10px;height:10px;border-radius:3px;background:'+r.color+'"></span>'+
+    '<span style="flex:1;font-variant-numeric:tabular-nums">'+r.date+(i===0?' <span style="color:var(--accent);font-family:monospace;font-size:10px">PB</span>':'')+'</span>'+
+    '<span style="font-family:monospace;font-variant-numeric:tabular-nums">'+r.t_end.toFixed(2)+'s \u00b7 '+r.top_speed.toFixed(2)+' m/s'+(i>0?' <span style="color:var(--muted)">+'+(r.t_end-best.t_end).toFixed(2)+'</span>':'')+'</span></div>'; }).join('');
+}
+function raceFrame(ts){ if(!window._racePlaying) return; if(!window._raceLast) window._raceLast=ts;
+  window._raceT+=(ts-window._raceLast)/1000; window._raceLast=ts; const D=window._raceData;
+  if(D && window._raceT>=D.tmax){ window._raceT=D.tmax; racePause(); } drawRace();
+  if(window._racePlaying) requestAnimationFrame(raceFrame); }
+function racePlay(){ const D=window._raceData; if(!D) return; if(window._raceT>=D.tmax) window._raceT=0;
+  window._racePlaying=true; window._raceLast=0; const b=document.getElementById('race-play'); if(b) b.textContent='\u275a\u275a Pause'; requestAnimationFrame(raceFrame); }
+function racePause(){ window._racePlaying=false; const b=document.getElementById('race-play'); if(b) b.textContent='\u25b6 Play'; }
+(function(){
+  const rTab=document.querySelector('.an-tab[data-an="race"]'); if(rTab) rTab.addEventListener('click', renderGhostRace);
+  const pb=document.getElementById('race-play'); if(pb) pb.onclick=function(){ window._racePlaying?racePause():racePlay(); };
+  const rr=document.getElementById('race-reset'); if(rr) rr.onclick=function(){ window._raceT=0; racePause(); drawRace(); };
+  const sel=document.getElementById('athlete-select'); if(sel) sel.addEventListener('change',function(){ const p=document.querySelector('.an-panel[data-an="race"]'); if(p&&!p.hidden) renderGhostRace(); });
 })();
 document.getElementById('cmp-go').onclick=async()=>{
   const a=document.getElementById('cmp-a').value;
