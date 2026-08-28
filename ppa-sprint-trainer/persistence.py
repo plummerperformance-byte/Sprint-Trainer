@@ -1461,6 +1461,70 @@ def insert_samples(conn: sqlite3.Connection, rows: list[tuple]) -> None:
         )
 
 
+def athlete_ghost_runs(conn, athlete_id: int, n: int = 4, points: int = 60) -> list:
+    """Best valid run from each of the athlete's last n sessions, reconstructed
+    as a downsampled position-time trace for the ghost race. Oldest-first:
+    [{date, session_id, top_speed, dist_m, trace:[[t_s, pos_m], ...]}]."""
+    from analytics import counts_to_metres, rpm_to_mps
+    rows = conn.execute(
+        """SELECT r.id, r.session_id, DATE(s.started_at) AS date,
+                  r.started_t_offset_ms AS t0, r.ended_t_offset_ms AS t1,
+                  r.peak_speed_mps AS vmax
+           FROM reps r JOIN sessions s ON s.id = r.session_id
+           WHERE s.athlete_id = ? AND COALESCE(r.valid, 1) = 1
+                 AND r.peak_speed_mps IS NOT NULL
+                 AND r.ended_t_offset_ms IS NOT NULL
+           ORDER BY s.started_at""",
+        (athlete_id,),
+    ).fetchall()
+    best: dict = {}
+    order: list = []
+    for row in rows:
+        sid = row["session_id"]
+        if sid not in best:
+            best[sid] = row
+            order.append(sid)
+        elif (row["vmax"] or 0) > (best[sid]["vmax"] or 0):
+            best[sid] = row
+    out: list = []
+    for sid in order[-n:]:
+        row = best[sid]
+        samples = get_samples(conn, sid, row["t0"], row["t1"])
+        if len(samples) < 4:
+            continue
+        t0 = row["t0"]
+        c0 = samples[0]["position_counts"]
+        # Distance-vs-time. Prefer the encoder (position_counts); fall back to
+        # integrating the velocity channel when position is flat/absent (e.g.
+        # seeded traces) — either way it's the athlete's progress down the track.
+        use_pos = c0 is not None and any(
+            (smp["position_counts"] or 0) != c0 for smp in samples)
+        full = []
+        cum = 0.0
+        prev_t = t0
+        for smp in samples:
+            t_s = (smp["t_offset_ms"] - t0) / 1000.0
+            if use_pos:
+                d = abs(counts_to_metres((smp["position_counts"] or 0) - (c0 or 0)))
+            else:
+                dt = (smp["t_offset_ms"] - prev_t) / 1000.0
+                if dt > 0:
+                    cum += abs(rpm_to_mps(smp["speed_rpm"] or 0)) * dt
+                d = cum
+                prev_t = smp["t_offset_ms"]
+            full.append([round(t_s, 3), round(d, 2)])
+        step = max(1, len(full) // points)
+        trace = [full[i] for i in range(0, len(full), step)]
+        if trace and trace[-1] != full[-1]:
+            trace.append(full[-1])
+        if len(trace) < 2:
+            continue
+        out.append({"date": row["date"], "session_id": sid,
+                    "top_speed": round(row["vmax"], 2),
+                    "dist_m": trace[-1][1], "trace": trace})
+    return out
+
+
 def get_samples(
     conn: sqlite3.Connection,
     session_id: int,

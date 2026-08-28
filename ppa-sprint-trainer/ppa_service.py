@@ -7135,6 +7135,15 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         except ValueError as e:
             raise HTTPException(400, str(e))
 
+    @app.get("/api/athletes/{athlete_id}/ghost_runs")
+    async def athlete_ghost_runs(athlete_id: int, n: int = 4):
+        """Best run from each of the athlete's last n sessions, as position-time
+        traces — for the ghost race (race your past self). Oldest-first."""
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        runs = await state.db_call(persistence.athlete_ghost_runs, athlete_id, n)
+        return {"athlete_id": athlete_id, "runs": runs}
+
     @app.get("/api/athletes/{athlete_id}/trends")
     async def athlete_trends(athlete_id: int, metric: Optional[str] = None):
         """Longitudinal progress with MDC noise corridors (sprint_trends).
