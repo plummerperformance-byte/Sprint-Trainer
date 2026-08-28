@@ -1991,6 +1991,26 @@ PHASE_C_HTML = """<!doctype html>
 
   /* Recent reps list */
   .reps-list{display:flex;flex-direction:column;gap:6px}
+  /* rep-card rail: reps accumulate left-to-right as they're logged */
+  .rep-rail{display:flex;gap:9px;overflow-x:auto;padding:2px 0 9px;margin-bottom:2px}
+  .rep-rail::-webkit-scrollbar{height:0}
+  .rep-rail:empty{display:none}
+  .rr-card{flex:none;width:106px;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:9px 11px 24px;position:relative;overflow:hidden;cursor:pointer;transition:.18s}
+  .rr-card:hover{border-color:var(--line-strong)}
+  .rr-card.latest{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .rr-card.old{opacity:.62}
+  .rr-card.invalid{opacity:.4;border-style:dashed}
+  .rr-card .g{position:absolute;right:-3px;bottom:-12px;font-weight:800;font-size:50px;color:var(--fg);opacity:.05;line-height:1}
+  .rr-card .n{font-size:9px;color:var(--muted);letter-spacing:.06em;font-weight:600}
+  .rr-card .v{font-weight:800;font-size:20px;margin-top:3px;font-variant-numeric:tabular-nums}
+  .rr-card .v small{font-size:9px;color:var(--muted);font-weight:500}
+  .rr-card .lt{position:absolute;right:0;bottom:0;font-weight:800;font-size:11px;color:#08101f;
+    background:var(--accent);padding:3px 8px 3px 10px;border-top-left-radius:10px}
+  .rr-card .stbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent}
+  .rr-card.st-reached .stbar{background:var(--good)}
+  .rr-card.st-near .stbar{background:var(--warn)}
+  .rr-card.st-missed .stbar{background:var(--muted)}
   .rep-row{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;
            padding:10px 12px;background:var(--raised);border:1px solid var(--line);
            border-left:3px solid transparent;border-radius:8px;cursor:pointer;
@@ -2712,6 +2732,7 @@ PHASE_C_HTML = """<!doctype html>
     </div>
     <div class="target-summary" id="target-summary" hidden></div>
     <div class="preset-target" id="preset-target" hidden></div>
+    <div class="rep-rail" id="rep-rail"></div>
     <div class="reps-list" id="reps-list"></div>
     <div class="past-sessions" id="past-sessions" style="display:none"></div>
   </div>
@@ -4965,7 +4986,46 @@ document.getElementById('target-pill').onclick=async()=>{
   }catch(e){ alert('Network error'); }
 };
 
+async function activateRep(idx){
+  const lastArr=window._lastReps||[];
+  const latestIdx=lastArr.length?lastArr[lastArr.length-1].rep_idx:null;
+  window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
+  window._lastSamplesRepIdx=idx;
+  try{ const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
+    cachedSamples=sj.samples||[]; window._lastSamples=cachedSamples;
+    renderLiveChart(cachedSamples,{corridor_m:lastCorridor}); }catch(e){}
+  const repObj=(window._lastReps||[]).find(r=>r.rep_idx===idx);
+  if(repObj && typeof renderRunDetail==='function') renderRunDetail(repObj);
+  const rl=document.getElementById('reps-list');
+  if(rl){ rl.setAttribute('data-active-rep',idx);
+    rl.querySelectorAll('.rep-row').forEach(x=>x.classList.toggle('active',x.getAttribute('data-rep')===String(idx))); }
+}
+function renderRepRail(reps){
+  const rail=document.getElementById('rep-rail'); if(!rail) return;
+  if(!reps||!reps.length){ rail.innerHTML=''; return; }
+  const recent=reps.slice(-8);
+  const latestIdx=reps[reps.length-1].rep_idx;
+  const sc=window._targetScore;
+  rail.innerHTML=recent.map(function(r){
+    const isLatest=r.rep_idx===latestIdx, inv=r.valid===false;
+    const g=sc&&(sc.grades||[]).find(function(x){return x.rep_idx===r.rep_idx;});
+    const stc=(g&&g.status&&g.status!=='none')?(' st-'+g.status):'';
+    return '<div class="rr-card'+(isLatest?' latest':' old')+(inv?' invalid':'')+stc+'" role="button" tabindex="0" data-rep="'+r.rep_idx+'">'+
+      '<div class="g">'+r.rep_idx+'</div><div class="stbar"></div>'+
+      '<div class="n">REP '+r.rep_idx+'</div>'+
+      '<div class="v">'+(r.peak_speed_mps||0).toFixed(2)+'<small> m/s</small></div>'+
+      (r.load_kg!=null?'<div class="lt">'+r.load_kg+' kg</div>':'')+
+    '</div>';
+  }).join('');
+  rail.querySelectorAll('.rr-card').forEach(function(c){
+    const go=function(){ activateRep(parseInt(c.getAttribute('data-rep'),10)); };
+    c.addEventListener('click',go);
+    c.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+  });
+  const last=rail.querySelector('.rr-card.latest'); if(last) last.scrollIntoView({inline:'end',block:'nearest'});
+}
 function renderRepsList(reps){
+  renderRepRail(reps);
   if(!reps.length){
     repsList.innerHTML='<div class="reps-empty">No reps yet — start a drill to log reps here.</div>';
     if(typeof renderPresetTarget==='function') renderPresetTarget();
