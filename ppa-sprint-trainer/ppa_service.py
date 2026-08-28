@@ -1590,7 +1590,7 @@ PHASE_C_HTML = """<!doctype html>
   #ath-chip-name{font-size:13px;font-weight:600}
   #ath-chip-mass{font-size:10px;color:var(--muted)}
   .athlete-menu{position:absolute;top:46px;right:0;background:var(--card);border:1px solid var(--line);
-                border-radius:10px;padding:6px;min-width:210px;z-index:80;
+                border-radius:10px;padding:8px;min-width:264px;max-width:min(320px,88vw);z-index:80;
                 box-shadow:0 8px 24px rgba(0,0,0,0.5);max-height:340px;overflow-y:auto}
   .athlete-menu[hidden]{display:none}
   /* athlete avatar-grid switcher (upgrades the dropdown) */
@@ -3082,13 +3082,10 @@ function renderAthleteChip(){
 }
 document.getElementById('athlete-chip-btn').onclick=(e)=>{ e.stopPropagation(); openAthleteSheet(); };
 function openAthleteSheet(){
-  let scrim=document.getElementById('ath-scrim'), sheet=document.getElementById('ath-sheet');
-  if(!scrim){
-    scrim=document.createElement('div'); scrim.id='ath-scrim'; scrim.className='ath-scrim';
-    sheet=document.createElement('div'); sheet.id='ath-sheet'; sheet.className='ath-sheet';
-    document.body.appendChild(scrim); document.body.appendChild(sheet);
-    scrim.onclick=closeAthleteSheet;
-  }
+  // Anchored dropdown below the chip (not a bottom sheet) so tap + select stay
+  // together at the top of the screen.
+  const menu=document.getElementById('athlete-menu'); if(!menu) return;
+  if(!menu.hidden){ menu.hidden=true; return; }
   let cells='';
   for(const o of athleteSel.options){
     if(!o.value) continue;
@@ -3096,20 +3093,17 @@ function openAthleteSheet(){
     cells+='<button class="ath-cell'+(o.value===athleteSel.value?' sel':'')+'" data-aid="'+o.value+'">'+
       '<span class="av">'+init+'<span class="ck">✓</span></span><span class="nm">'+nm+'</span></button>';
   }
-  sheet.innerHTML='<div class="ath-grab"></div><h4>Assign athlete</h4><div class="ath-grid">'+cells+
+  menu.innerHTML='<div class="ath-grid">'+cells+
     '<a class="ath-cell" href="/setup"><span class="av" style="background:var(--raised);color:var(--muted)">+</span><span class="nm">Add</span></a></div>';
-  sheet.querySelectorAll('.ath-cell[data-aid]').forEach(b=>b.onclick=()=>{
+  menu.querySelectorAll('.ath-cell[data-aid]').forEach(b=>b.onclick=()=>{
     athleteSel.value=b.getAttribute('data-aid');
     renderAthleteChip();
     if(typeof loadAthleteProfile==='function') loadAthleteProfile(athleteSel.value);
-    closeAthleteSheet();
+    menu.hidden=true;
   });
-  requestAnimationFrame(()=>{ scrim.classList.add('on'); sheet.classList.add('on'); });
+  menu.hidden=false;
 }
-function closeAthleteSheet(){
-  const scrim=document.getElementById('ath-scrim'), sheet=document.getElementById('ath-sheet');
-  if(scrim) scrim.classList.remove('on'); if(sheet) sheet.classList.remove('on');
-}
+function closeAthleteSheet(){ const menu=document.getElementById('athlete-menu'); if(menu) menu.hidden=true; }
 document.addEventListener('click',(e)=>{
   const chip=document.getElementById('athlete-chip');
   if(chip&&!chip.contains(e.target)) document.getElementById('athlete-menu').hidden=true;
