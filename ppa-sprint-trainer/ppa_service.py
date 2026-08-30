@@ -5045,7 +5045,9 @@ function renderRepRail(reps){
     try{ const r=await fetch('/api/c/athletic/rep/'+idx+'/validity',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       if(r.ok){ if(cur) cur.valid=!isInvalid; renderRepsList(window._lastReps||[]); } }catch(err){}
   };});
-  const last=rail.querySelector('.rr-card.latest'); if(last) last.scrollIntoView({inline:'end',block:'nearest'});
+  // auto-scroll the rail to the newest card ONLY when a rep is added (never on
+  // a plain poll re-render), and horizontally only so the page never jumps.
+  if(window._railLastCount!==reps.length){ window._railLastCount=reps.length; rail.scrollLeft=rail.scrollWidth; }
 }
 function renderRepsList(reps){
   renderRepRail(reps);
