@@ -1995,14 +1995,23 @@ PHASE_C_HTML = """<!doctype html>
   .rep-rail{display:flex;gap:9px;overflow-x:auto;padding:2px 0 9px;margin-bottom:2px}
   .rep-rail::-webkit-scrollbar{height:0}
   .rep-rail:empty{display:none}
-  .rr-card{flex:none;width:106px;background:var(--card);border:1px solid var(--line);border-radius:12px;
-    padding:9px 11px 24px;position:relative;overflow:hidden;cursor:pointer;transition:.18s}
+  .rr-card{flex:none;width:176px;background:var(--card);border:1px solid var(--line);border-radius:13px;
+    padding:10px 12px 30px;position:relative;overflow:hidden;cursor:pointer;transition:.18s}
   .rr-card:hover{border-color:var(--line-strong)}
   .rr-card.latest{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
   .rr-card.old{opacity:.62}
   .rr-card.invalid{opacity:.4;border-style:dashed}
   .rr-card .g{position:absolute;right:-3px;bottom:-12px;font-weight:800;font-size:50px;color:var(--fg);opacity:.05;line-height:1}
   .rr-card .n{font-size:9px;color:var(--muted);letter-spacing:.06em;font-weight:600}
+  .rr-card .rr-top{display:flex;justify-content:space-between;align-items:center;gap:4px}
+  .rr-card .rr-acts{display:flex;gap:1px;flex:none}
+  .rr-card .rr-acts button{background:none;border:0;color:var(--ink-faint);cursor:pointer;font-size:12px;padding:2px 3px;line-height:1}
+  .rr-card .rr-acts button:hover{color:var(--fg)}
+  .rr-card .rr-acts .rr-inv:hover{color:var(--bad)}
+  .rr-card .rr-metrics{font-size:11px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+  .rr-card .rep-badges{margin-top:5px;gap:4px}
+  /* rows replaced by the expanded cards; keep the set summary head */
+  .reps-list .rep-row{display:none}
   .rr-card .v{font-weight:800;font-size:20px;margin-top:3px;font-variant-numeric:tabular-nums}
   .rr-card .v small{font-size:9px;color:var(--muted);font-weight:500}
   .rr-card .lt{position:absolute;right:0;bottom:0;font-weight:800;font-size:11px;color:#08101f;
@@ -5004,18 +5013,38 @@ function renderRepRail(reps){
     const isLatest=r.rep_idx===latestIdx, inv=r.valid===false;
     const g=sc&&(sc.grades||[]).find(function(x){return x.rep_idx===r.rep_idx;});
     const stc=(g&&g.status&&g.status!=='none')?(' st-'+g.status):'';
-    return '<div class="rr-card'+(isLatest?' latest':' old')+(inv?' invalid':'')+stc+'" role="button" tabindex="0" data-rep="'+r.rep_idx+'">'+
+    return '<div class="rr-card'+(isLatest?' latest':' old')+(inv?' invalid':'')+stc+'" role="button" tabindex="0" data-rep="'+r.rep_idx+'" aria-label="Rep '+r.rep_idx+'">'+
       '<div class="g">'+r.rep_idx+'</div><div class="stbar"></div>'+
-      '<div class="n">REP '+r.rep_idx+'</div>'+
+      '<div class="rr-top"><span class="n">REP '+r.rep_idx+'</span>'+
+        '<span class="rr-acts">'+
+          '<button class="rr-note" title="Comment" data-rep="'+r.rep_idx+'">\u270e</button>'+
+          '<button class="rr-inv" title="'+(inv?'Mark valid':'Mark invalid')+'" data-rep="'+r.rep_idx+'">'+(inv?'\u21ba':'\u2717')+'</button>'+
+        '</span></div>'+
       '<div class="v">'+(r.peak_speed_mps||0).toFixed(2)+'<small> m/s</small></div>'+
+      '<div class="rr-metrics">'+(r.peak_force_n||0).toFixed(0)+' N \u00b7 '+(r.peak_power_w||0).toFixed(0)+' W \u00b7 '+(r.duration_s||0).toFixed(2)+' s</div>'+
+      repBadgesHtml(r)+
       (r.load_kg!=null?'<div class="lt">'+r.load_kg+' kg</div>':'')+
     '</div>';
   }).join('');
   rail.querySelectorAll('.rr-card').forEach(function(c){
     const go=function(){ activateRep(parseInt(c.getAttribute('data-rep'),10)); };
-    c.addEventListener('click',go);
+    c.addEventListener('click',function(e){ if(e.target.closest('.rr-acts')) return; go(); });
     c.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
   });
+  rail.querySelectorAll('.rr-note').forEach(function(b){ b.onclick=async function(e){ e.stopPropagation();
+    const idx=parseInt(b.getAttribute('data-rep'),10);
+    const cur=(window._lastReps||[]).find(function(r){return r.rep_idx===idx;});
+    const note=prompt('Rep comment:', (cur&&cur.comment)||''); if(note===null) return;
+    if(await patchRepAnnotation(idx,{comment:note})){ if(cur) cur.comment=note||null; renderRepsList(window._lastReps||[]); }
+  };});
+  rail.querySelectorAll('.rr-inv').forEach(function(b){ b.onclick=async function(e){ e.stopPropagation();
+    const idx=parseInt(b.getAttribute('data-rep'),10);
+    const cur=(window._lastReps||[]).find(function(r){return r.rep_idx===idx;});
+    const isInvalid=cur&&cur.valid===false; const body={valid:isInvalid};
+    if(!isInvalid){ const reason=prompt('Mark invalid? Optional reason (false_start / slip / fall / equipment / other):','other'); if(reason===null) return; body.reason=reason||'other'; }
+    try{ const r=await fetch('/api/c/athletic/rep/'+idx+'/validity',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(r.ok){ if(cur) cur.valid=!isInvalid; renderRepsList(window._lastReps||[]); } }catch(err){}
+  };});
   const last=rail.querySelector('.rr-card.latest'); if(last) last.scrollIntoView({inline:'end',block:'nearest'});
 }
 function renderRepsList(reps){
