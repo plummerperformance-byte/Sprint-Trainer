@@ -5803,9 +5803,12 @@ async function refresh(){
     renderTargetPill();
   }
 
-  // Recent reps list + compare selects
-  renderRepsList(reps);
-  populateRepSelects(reps);
+  // Recent reps list + compare selects — only re-render when the data actually
+  // changed. A blind rebuild every 500ms was tearing down the DOM under the
+  // user's finger and fighting page scrolling / taps.
+  const _repsSig=reps.length+'|'+reps.map(function(r){return r.rep_idx+':'+(r.peak_speed_mps||0).toFixed(2)+':'+(r.valid===false?0:1)+':'+(r.comment||'');}).join(',');
+  const _repsChanged=(_repsSig!==window._repsSig); window._repsSig=_repsSig;
+  if(_repsChanged){ renderRepsList(reps); populateRepSelects(reps); }
 
   // Cache reps for click-to-render lookup. Run detail (profile / steps /
   // F-V / quadrants) FOLLOWS THE NEWEST REP unless the coach pinned one by
@@ -5819,10 +5822,13 @@ async function refresh(){
       const pin = reps.find(r=>r.rep_idx===window._selectedRepIdx);
       if(pin) shown = pin; else window._selectedRepIdx = null;
     }
-    repsList.setAttribute('data-active-rep', String(shown.rep_idx));
-    repsList.querySelectorAll('.rep-row').forEach(x=>
-      x.classList.toggle('active', x.getAttribute('data-rep')===String(shown.rep_idx)));
-    renderRunDetail(shown);
+    const _shownChanged=_repsChanged||(window._shownRepIdx!==shown.rep_idx); window._shownRepIdx=shown.rep_idx;
+    if(_shownChanged){
+      repsList.setAttribute('data-active-rep', String(shown.rep_idx));
+      repsList.querySelectorAll('.rep-row').forEach(x=>
+        x.classList.toggle('active', x.getAttribute('data-rep')===String(shown.rep_idx)));
+      renderRunDetail(shown);
+    }
     // Lazy-load samples for the shown rep so Steps/F-V/chart work without click
     if(!window._lastSamples || window._lastSamplesRepIdx !== shown.rep_idx){
       try{
@@ -5835,8 +5841,7 @@ async function refresh(){
       }catch(e){}
     }
   } else {
-    renderRunDetail(null);
-    window._lastSamples = [];
+    if(window._shownRepIdx!==null){ window._shownRepIdx=null; renderRunDetail(null); window._lastSamples = []; }
   }
 
   // §8 audio cues + §12 rest timer wired into phase transitions
