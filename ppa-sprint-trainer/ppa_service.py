@@ -2039,6 +2039,21 @@ PHASE_C_HTML = """<!doctype html>
   .reps-empty{color:var(--muted);text-align:center;padding:14px;font-size:14px}
   /* Per-rep badges: norm band + gated F-V validity */
   .rep-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;font-variant-numeric:normal}
+  /* F-V metric chips with tap-for-definition info cards */
+  .fv-metrics{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .fv-metric{display:flex;align-items:center;gap:8px;background:var(--raised);border:1px solid var(--line);border-radius:10px;padding:7px 10px}
+  .fv-metric .fvk{font-size:8.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+  .fv-metric .fvv{font-weight:800;font-size:15px;font-variant-numeric:tabular-nums}
+  .fvi{width:17px;height:17px;border-radius:50%;border:1px solid var(--line-strong);color:var(--muted);font-size:10px;font-style:italic;font-weight:700;display:inline-grid;place-items:center;cursor:pointer;background:none;flex:none}
+  .fvi:hover{color:var(--fg);border-color:var(--accent)}
+  .fv-conf{font-weight:600;color:var(--fg)}
+  .fv-info-pop{position:fixed;z-index:95;max-width:288px;background:var(--card);border:1px solid var(--line-strong);border-radius:12px;padding:13px 15px;box-shadow:0 14px 34px rgba(0,0,0,.55)}
+  .fv-info-pop[hidden]{display:none}
+  .fv-info-pop .fp-sub{font-size:9.5px;color:var(--accent);text-transform:uppercase;letter-spacing:.12em;font-weight:700}
+  .fv-info-pop h5{font-size:14px;margin:2px 0 0}
+  .fv-info-pop .fp-lbl{font-size:9.5px;color:var(--warn);font-weight:700;text-transform:uppercase;margin-top:10px;letter-spacing:.06em}
+  .fv-info-pop p{font-size:12.5px;color:var(--muted);line-height:1.45;margin:2px 0 0}
+  .fv-info-pop .fp-close{position:absolute;top:7px;right:10px;color:var(--muted);cursor:pointer;font-size:14px;background:none;border:0}
   .badge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:0.06em;
          text-transform:uppercase;padding:2px 7px;border-radius:99px;line-height:1.5;
          border:1px solid var(--line-strong);color:var(--muted)}
@@ -2707,6 +2722,8 @@ PHASE_C_HTML = """<!doctype html>
     <div class="rd-panel" data-tab="fv" style="display:none">
       <div class="meta">Sprint force–velocity profile · tether-model fit of this rep's trace, validity-gated</div>
       <div id="fv-rep-gate" class="meta" style="margin-top:8px"></div>
+      <div id="fv-rep-metrics" class="fv-metrics"></div>
+      <div id="fv-info-pop" class="fv-info-pop" hidden></div>
       <svg id="fv-rep-chart" viewBox="0 0 600 270"
            style="width:100%;height:auto;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:10px"></svg>
     </div>
@@ -4764,9 +4781,42 @@ function niceAxisMax(v){
   return e*10;
 }
 
+var FV_INFO={
+  f0:{name:'F0 \u2014 Theoretical Max Force',what:'The maximum horizontal force the athlete can produce from a standstill (zero velocity).',why:'The strength end of the force-velocity profile.'},
+  v0:{name:'V0 \u2014 Theoretical Max Velocity',what:'The athlete maximum velocity capacity, reached when force falls to zero.',why:'The speed end of the force-velocity profile.'},
+  pmax:{name:'Pmax \u2014 Theoretical Max Power',what:'The highest power (force times speed) the athlete can generate.',why:'An overall read on explosiveness and acceleration ability.'},
+  rfmax:{name:'RFmax \u2014 Max Ratio of Force',what:'How much of the athlete total force is directed horizontally at the start of a sprint.',why:'Reflects the direction and technique of force application.'},
+  conf:{name:'Confidence',what:'How well the tether model matched the rep velocity trace (the fit R-squared).',why:'Higher is more reliable. GOOD at 0.95 and up, FAIR 0.85 to 0.95, POOR below 0.85.'}
+};
+function confBand(r2){ if(r2==null) return ''; if(r2>=0.95) return 'GOOD'; if(r2>=0.85) return 'FAIR'; return 'POOR'; }
+function fvMetricChip(key,val,unit){
+  return '<div class="fv-metric"><div><div class="fvk">'+key.toUpperCase()+'</div>'+
+    '<div class="fvv">'+val+'<small style="font-size:9px;color:var(--muted);font-weight:500"> '+unit+'</small></div></div>'+
+    '<button class="fvi" data-fvinfo="'+key+'" title="What is this?">i</button></div>';
+}
+function showFvInfo(key,anchor){
+  var d=FV_INFO[key], pop=document.getElementById('fv-info-pop'); if(!d||!pop) return;
+  pop.innerHTML='<button class="fp-close" aria-label="Close">\u2715</button>'+
+    '<div class="fp-sub">Force-Velocity</div><h5>'+d.name+'</h5>'+
+    '<div class="fp-lbl">What it is</div><p>'+d.what+'</p>'+
+    '<div class="fp-lbl">Why it matters</div><p>'+d.why+'</p>';
+  pop.hidden=false;
+  var r=anchor.getBoundingClientRect();
+  var left=Math.max(8,Math.min(r.left, window.innerWidth-296));
+  var top=r.bottom+8; if(top+180>window.innerHeight) top=Math.max(8,r.top-190);
+  pop.style.left=left+'px'; pop.style.top=top+'px';
+  var c=pop.querySelector('.fp-close'); if(c) c.onclick=function(){ pop.hidden=true; };
+}
+document.addEventListener('click',function(e){
+  var b=e.target.closest('[data-fvinfo]');
+  if(b){ e.stopPropagation(); showFvInfo(b.getAttribute('data-fvinfo'), b); return; }
+  var pop=document.getElementById('fv-info-pop');
+  if(pop && !pop.hidden && !e.target.closest('#fv-info-pop')) pop.hidden=true;
+});
 function renderFVRepTab(rep){
   const svg=document.getElementById('fv-rep-chart');
   const gateEl=document.getElementById('fv-rep-gate');
+  const fvMrow=document.getElementById('fv-rep-metrics'); if(fvMrow) fvMrow.innerHTML='';
   // Preferred path: the server-side gated tether-model profile attached to the
   // rep by rep_analysis. Valid -> render it (with RFmax + validity chip);
   // rejected -> red flag with the failed checks, numbers withheld.
@@ -4782,10 +4832,17 @@ function renderFVRepTab(rep){
     }
     const g=rep.fv;
     const mass=rep._analysis_bodymass_kg||(rep._meta&&rep._meta.body_mass_kg)||(window._athleteProfile&&window._athleteProfile.athlete&&window._athleteProfile.athlete.body_mass_kg)||null;
-    if(gateEl) gateEl.innerHTML='<span class="badge fv-ok">validity gate passed</span> '+
-      'R² '+(g.r2!=null?g.r2.toFixed(3):'–')+
-      (g.rfmax_pct!=null?(' · RFmax '+g.rfmax_pct.toFixed(1)+'%'):'')+
-      (g.tau_s!=null?(' · τ '+g.tau_s.toFixed(2)+' s'):'');
+    const _cb=confBand(g.r2);
+    if(gateEl) gateEl.innerHTML='<span class="badge fv-ok">✓ validity gate passed</span> '+
+      '<span class="fv-conf">Confidence '+(g.r2!=null?g.r2.toFixed(2):'–')+(_cb?' ('+_cb+')':'')+'</span> '+
+      '<button class="fvi" data-fvinfo="conf" title="What is this?">i</button>';
+    if(fvMrow){
+      let _chips=fvMetricChip('f0',(g.f0_rel_nkg!=null?g.f0_rel_nkg.toFixed(1):'–'),'N/kg')+
+        fvMetricChip('v0',(g.v0_ms!=null?g.v0_ms.toFixed(1):'–'),'m/s')+
+        fvMetricChip('pmax',(g.pmax_rel_wkg!=null?g.pmax_rel_wkg.toFixed(1):'–'),'W/kg');
+      if(g.rfmax_pct!=null) _chips+=fvMetricChip('rfmax',g.rfmax_pct.toFixed(1),'%');
+      fvMrow.innerHTML=_chips;
+    }
     drawFVProfile(svg, {
       f0:(mass?g.f0_rel_nkg*mass:null), v0:g.v0_ms,
       pmax:(mass?g.pmax_rel_wkg*mass:null),
