@@ -148,7 +148,17 @@ def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
                                       f"needs >= {STEP_DETECT_MIN_HZ:.0f} Hz)")}
         else:
             try:
-                steps = detect_steps_speed_residual(t, vel, dist)
+                # 6 Hz Butterworth "step" curve (1080 step-mode). Foot contacts
+                # are snapped to its valleys so the markers land in the troughs
+                # of the curve the UI overlays. Detector falls back to the
+                # residual trough if this can't be computed.
+                v_step_ref = vel
+                if filt is not None:
+                    try:
+                        v_step_ref, _ = filt.butter_lowpass(vel, filt.STEP_HZ, fs)
+                    except Exception:
+                        v_step_ref = vel
+                steps = detect_steps_speed_residual(t, vel, dist, v_ref=v_step_ref)
                 if force is not None and len(force) == n:
                     steps = annotate_steps(steps, t, force)
                 steps = label_feet(steps, start_foot)
@@ -184,6 +194,13 @@ def analyse_rep(t, pos, vel, force=None, bodymass: float = 75.0,
             "drf_pct": round(fvp["DRF_pct"], 2) if fvp.get("DRF_pct") else None,
             "fv_slope": round(fvp["FV_slope"], 3) if fvp["FV_slope"] else None,
             "tau_s": round(m["TAU"], 3),
+            # Run-length quality (1080 F-V quality levels): the accel phase must
+            # capture enough of the velocity rise for V0 to be reliable. Measured
+            # as duration in multiples of the time constant τ (3.5τ ~ 97% of V0),
+            # with a 20 m absolute floor. GOOD >=3.5τ & >=20 m; unusable <2.5τ.
+            "dist_m": round(dist[vmax_i] - dist[0], 2),
+            "n_tau": (round((t[vmax_i] - t[0]) / m["TAU"], 2)
+                      if m.get("TAU") else None),
         }
     else:
         out["fv"] = {"valid": False, "rejected": ["fit_failed"], "reason": prof.get("reason")}

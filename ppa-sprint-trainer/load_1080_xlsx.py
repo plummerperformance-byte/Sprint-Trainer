@@ -228,7 +228,7 @@ def parse_xlsx(path: Path, start_foot: str = "left") -> dict:
     # steps at the right rhythm). The force detector was removed 2026-08-27 —
     # it had no callers; see git history if a heavy-resisted-specific detector
     # is ever revisited.
-    step_events = detect_steps_speed_residual(times_s, speeds_mps, pos_m)
+    step_events = detect_steps_speed_residual(times_s, speeds_mps, pos_m, v_ref=v_step)
     step_events = annotate_steps(step_events, times_s, forces_n)
     step_events = label_feet(step_events, start_foot)
     step_aggs = compute_step_aggregates(step_events)
@@ -457,7 +457,7 @@ def _recover_missed_strikes(accepted, t_s, sig, min_period_s, gap_split_ratio=1.
 # clean detections + 3 flagged gaps ≈ 26 true steps, matching the doc's 25-26 /
 # 4.39 Hz reference; the force detector found only 13 at 2.2 Hz). A long window
 # past ~300 ms starts spanning whole steps and cancels the step signal.
-def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
+def detect_steps_speed_residual(t_s, v_mps, pos_m, v_ref=None, short_ms=25, long_ms=200,
                                 min_period_s=0.11, min_step_len_m=STEP_MIN_LEN_M,
                                 adaptive_k=0.2, thr_win_ms=400, min_prominence_mps=None,
                                 gap_split_ratio=1.6):
@@ -517,6 +517,30 @@ def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
     else:
         recovered = set()
 
+    # Relocate each event (a speed-residual peak ~ toe-off) to the foot contact
+    # just before it. The 1080 step-analysis convention is: foot contact = a
+    # VALLEY of the 6 Hz step-filtered speed curve; step length = valley -> valley.
+    # We find the rhythm on the detrended residual (robust through the
+    # acceleration phase, where the raw speed rises monotonically and never dips)
+    # and then snap each strike to the nearest valley of `v_ref` (the 6 Hz curve
+    # the UI overlays), so the markers land in the troughs the coach is looking
+    # at. Without a valid v_ref we fall back to the residual trough.
+    recovered_flags = [idx in recovered for idx in accepted]
+    max_back = max(2, int(round(0.22 * fs_hz)))
+    trough_sig = v_ref if (v_ref is not None and len(v_ref) == n) else sig
+    peaks = list(accepted)
+    contacts = []
+    for i, idx in enumerate(peaks):
+        lo = peaks[i - 1] + 1 if i > 0 else max(0, idx - max_back)
+        j = lo
+        for k in range(lo, idx + 1):
+            if trough_sig[k] < trough_sig[j]:   # valley of the 6 Hz speed = foot contact
+                j = k
+        if contacts and j <= contacts[-1]:
+            j = idx                             # degenerate gap — keep the peak, don't collapse
+        contacts.append(j)
+    accepted = contacts
+
     steps = []
     for i, idx in enumerate(accepted):
         prev_idx = accepted[i - 1] if i > 0 else None
@@ -525,14 +549,17 @@ def detect_steps_speed_residual(t_s, v_mps, pos_m, short_ms=25, long_ms=200,
         inst_freq = round(1000 / period_ms, 2) if period_ms and period_ms > 0 else None
         step_speed = (round(length_m / (period_ms / 1000.0), 3)
                       if (length_m is not None and period_ms) else None)
+        # fastest speed reached WITHIN this step (contact -> contact), not the
+        # speed at the contact valley itself.
+        peak_speed = max(v_mps[prev_idx:idx + 1]) if prev_idx is not None else v_mps[idx]
         flags = _step_flags(period_ms, length_m)
-        if idx in recovered:
+        if recovered_flags[i]:
             flags.append("recovered")
         steps.append({
             "step_number": i + 1,
             "t_strike_s": round(t_s[idx], 4),
             "pos_m": round(pos_m[idx], 3),
-            "peak_speed_mps": round(v_mps[idx], 3),
+            "peak_speed_mps": round(peak_speed, 3),
             "step_period_ms": period_ms,
             "step_length_m": length_m,
             "step_frequency_hz": inst_freq,
