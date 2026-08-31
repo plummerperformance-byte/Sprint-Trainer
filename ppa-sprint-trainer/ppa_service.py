@@ -1389,7 +1389,7 @@ async def _athletic_loop(state: "ServiceState"):
                  state.athletic_loop_ticks, state.athletic_loop_exc_count)
 
 
-ATHLETE_HTML = """<!doctype html>
+ATHLETE_HTML = r"""<!doctype html>
 <html><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover">
@@ -1531,7 +1531,7 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.s
 """
 
 
-PHASE_C_HTML = """<!doctype html>
+PHASE_C_HTML = r"""<!doctype html>
 <html><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -3464,7 +3464,7 @@ function renderSquad(){
     const opts=Array.from(athleteSel.options).filter(o=>o.value&&inSq.indexOf(o.value)<0);
     menu.innerHTML=opts.length
       ?opts.map(o=>'<button type="button" class="sqm-item" data-aid="'+o.value+'">'+o.textContent+'</button>').join('')
-      :'<div class="sqm-none">Everyone\'s already in — add new athletes on the Setup page.</div>';
+      :'<div class="sqm-none">All athletes are already in — add new ones on the Setup page.</div>';
     menu.querySelectorAll('.sqm-item').forEach(m=>{
       m.onclick=function(){ addToSquad(m.getAttribute('data-aid')); menu.hidden=true; renderSquad(); };
     });
@@ -6109,7 +6109,7 @@ function confirmEccOverload(){
   if(eccKg/concKg>1.7){
     const pct=((eccKg-concKg)/concKg)*100;
     const ok=confirm('Eccentric is '+pct.toFixed(0)+'% above concentric. '+
-      'This is a very high overload.\\n\\nOK = keep the value · Cancel = reset to a safe 40% overload.');
+      'This is a very high overload.\n\nOK = keep the value · Cancel = reset to a safe 40% overload.');
     if(!ok){ eccEl.value=(concKg*1.4).toFixed(1); }
     updateEccNote();
   }
@@ -6684,7 +6684,7 @@ if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.s
 # manager, resistance-curve editor, session-default numbers, units, audio.
 # The live /coach screen stays slim and links here via its header cog.
 # ============================================================================
-SETUP_HTML = """<!doctype html>
+SETUP_HTML = r"""<!doctype html>
 <html><head>
 <meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
