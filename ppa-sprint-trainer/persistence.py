@@ -1056,6 +1056,59 @@ def athlete_profile(conn: sqlite3.Connection, athlete_id: int,
     recent_loads = {r["drill"]: r["load_kg"] for r in loads
                     if r["load_kg"] is not None}
 
+    # ---- Step mechanics vs load ------------------------------------------
+    # Step length (and frequency) SHRINK under cable load, so a single
+    # per-athlete "average step length" blended across a load sweep is
+    # meaningless — it just reflects how many heavy reps are in the pile.
+    # Return the raw (load, step) points plus a regression so the UI can plot
+    # the load-dependence and compare like-for-like at a given load.
+    step_rows = conn.execute(
+        """SELECT COALESCE(r.load_kg, s.hmi_load_kg) AS load_kg,
+                  r.avg_step_length_m AS step_len, r.step_freq_hz AS step_freq,
+                  r.peak_speed_mps AS peak_v, r.drill AS drill,
+                  s.started_at AS at
+           FROM reps r JOIN sessions s ON s.id = r.session_id
+           WHERE s.athlete_id = ? AND COALESCE(r.valid,1) = 1
+                 AND r.avg_step_length_m IS NOT NULL
+           ORDER BY s.started_at DESC, r.id DESC""",
+        (athlete_id,),
+    ).fetchall()
+
+    def _linreg(pts):
+        n = len(pts)
+        if n < 3 or len({round(p[0], 1) for p in pts}) < 2:
+            return None
+        mx = sum(p[0] for p in pts) / n
+        my = sum(p[1] for p in pts) / n
+        sxx = sum((p[0] - mx) ** 2 for p in pts)
+        if sxx <= 0:
+            return None
+        slope = sum((p[0] - mx) * (p[1] - my) for p in pts) / sxx
+        intercept = my - slope * mx
+        ss_tot = sum((p[1] - my) ** 2 for p in pts)
+        ss_res = sum((p[1] - (intercept + slope * p[0])) ** 2 for p in pts)
+        r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        return {"slope_per_kg": round(slope, 4), "intercept": round(intercept, 3),
+                "r2": round(r2, 3), "n": n}
+
+    step_points = [{
+        "load_kg": round(float(r["load_kg"]), 1) if r["load_kg"] is not None else None,
+        "step_length_m": round(float(r["step_len"]), 3),
+        "step_freq_hz": round(float(r["step_freq"]), 2) if r["step_freq"] is not None else None,
+        "peak_speed_mps": round(float(r["peak_v"]), 2) if r["peak_v"] is not None else None,
+        "drill": r["drill"], "at": r["at"],
+    } for r in step_rows]
+    _len_pts = [(p["load_kg"], p["step_length_m"]) for p in step_points if p["load_kg"] is not None]
+    _frq_pts = [(p["load_kg"], p["step_freq_hz"]) for p in step_points
+                if p["load_kg"] is not None and p["step_freq_hz"] is not None]
+    step_load_profile = {
+        "points": step_points,
+        "length_reg": _linreg(_len_pts),
+        "freq_reg": _linreg(_frq_pts),
+        "quality": ("ok" if len(_len_pts) >= 3
+                    and len({round(p[0], 1) for p in _len_pts}) >= 2 else "insufficient"),
+    }
+
     return {
         "athlete": athlete,
         "prs": prs,
@@ -1063,10 +1116,39 @@ def athlete_profile(conn: sqlite3.Connection, athlete_id: int,
         "lv_profile_quality": quality,
         "lv_regression": lv_reg,
         "lv_regression_quality": lv_reg_quality,
+        "step_load_profile": step_load_profile,
         "recent_loads": recent_loads,
         "session_count": sc["session_count"] if sc else 0,
         "last_session_at": sc["last_session_at"] if sc else None,
     }
+
+
+def export_reps(conn: sqlite3.Connection, athlete_id: int) -> list:
+    """Every rep for an athlete, joined with session + athlete context, oldest
+    session first — the source rows for CSV export / full data backup. JSON
+    blobs (samples/step-events) are deliberately excluded; splits come through
+    as splits_s_json for the caller to flatten."""
+    rows = conn.execute(
+        """SELECT a.name AS client, a.body_mass_kg AS client_weight_kg,
+                  a.position_group AS grp, a.sport AS sport,
+                  s.id AS session_id, s.started_at AS session_at,
+                  r.started_at AS rep_at, r.started_t_offset_ms AS t0_ms,
+                  r.ended_t_offset_ms AS t1_ms, r.set_idx, r.drill, r.load_kg,
+                  r.source, r.comment, r.max_extension_m,
+                  r.peak_speed_mps, r.avg_speed_mps, r.peak_force_n, r.avg_force_n,
+                  r.peak_power_w, r.avg_power_w, r.peak_acceleration_mps2,
+                  r.f0_rel_nkg, r.v0_mps, r.pmax_rel_wkg, r.fv_slope_per_kg, r.tau_s,
+                  r.time_to_max_v_s, r.dist_to_max_v_m, r.v_dropoff_pct, r.decel_time_s,
+                  r.total_steps, r.step_freq_hz, r.avg_step_length_m, r.step_length_std_m,
+                  r.flagged_steps, r.step_confidence,
+                  r.valid, r.invalid_reason, r.splits_s_json
+           FROM reps r JOIN sessions s ON s.id = r.session_id
+                       JOIN athletes a ON a.id = s.athlete_id
+           WHERE s.athlete_id = ?
+           ORDER BY s.started_at ASC, r.set_idx ASC, r.started_t_offset_ms ASC, r.id ASC""",
+        (athlete_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def load_session_reps(conn: sqlite3.Connection, session_id: int) -> dict:
