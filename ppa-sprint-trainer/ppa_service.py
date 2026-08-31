@@ -2384,20 +2384,28 @@ PHASE_C_HTML = r"""<!doctype html>
   #squad-add:hover{color:var(--fg);border-color:var(--accent)}
   .squad-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
   .squad-empty{font-size:11.5px;color:var(--muted)}
-  .sq-chip{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;
-    border-radius:999px;background:var(--raised);border:1px solid var(--line);
-    cursor:pointer;color:var(--fg)}
-  .sq-chip:hover{border-color:var(--accent)}
-  .sq-chip.active{border-color:var(--accent);background:var(--accent-soft)}
-  .sq-chip .av{width:26px;height:26px;border-radius:50%;flex:0 0 auto;
+  /* athlete tiles — same family as the rep-rail cards */
+  .sq-tile{flex:1 1 150px;max-width:200px;background:var(--raised);border:1px solid var(--line);
+    border-radius:13px;padding:9px 10px 10px;cursor:pointer;color:var(--fg);position:relative;
+    transition:border-color 120ms}
+  .sq-tile:hover{border-color:var(--accent)}
+  .sq-tile.active{border-color:var(--accent);background:var(--accent-soft);
+    box-shadow:0 0 0 1px var(--accent)}
+  .sq-tile .sq-top{display:flex;align-items:center;gap:7px}
+  .sq-tile .av{width:24px;height:24px;border-radius:50%;flex:0 0 auto;
     background:linear-gradient(150deg,#6f80b8,#8b93c9);color:#08101f;
-    font-weight:800;font-size:12px;display:grid;place-items:center}
-  .sq-chip.active .av{background:linear-gradient(150deg,var(--accent),#8b6bff)}
-  .sq-chip .nm{font-size:12px;font-weight:600;white-space:nowrap}
-  .sq-chip .ld{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .sq-chip .rm{background:none;border:0;color:var(--ink-faint);cursor:pointer;
-    font-size:12px;padding:0 2px;line-height:1}
-  .sq-chip .rm:hover{color:var(--bad)}
+    font-weight:800;font-size:11px;display:grid;place-items:center}
+  .sq-tile.active .av{background:linear-gradient(150deg,var(--accent),#8b6bff)}
+  .sq-tile .nm{font-size:11px;font-weight:700;letter-spacing:.03em;flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sq-tile .sq-acts{display:flex;gap:1px;flex:none}
+  .sq-tile .sq-acts button{background:none;border:0;color:var(--ink-faint);cursor:pointer;
+    font-size:12px;padding:2px 3px;line-height:1}
+  .sq-tile .sq-acts button:hover{color:var(--fg)}
+  .sq-tile .sq-acts .rm:hover{color:var(--bad)}
+  .sq-tile .v{font-weight:800;font-size:20px;margin-top:5px;font-variant-numeric:tabular-nums}
+  .sq-tile .v small{font-size:9px;color:var(--muted);font-weight:500}
+  .sq-tile .sq-proto{font-size:10.5px;color:var(--muted);margin-top:3px;line-height:1.45}
   .squad-menu{position:absolute;top:48px;right:14px;z-index:40;background:var(--card);
     border:1px solid var(--line-strong);border-radius:10px;padding:6px;min-width:200px;
     max-height:260px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
@@ -3421,6 +3429,13 @@ async function switchAthlete(aid){
   restoreAthCfg(aid);
   renderSquad();
 }
+// Edit an athlete's settings/protocol: make them active (restores their setup
+// into the Adjust inputs) and open the Adjust sheet — the inputs ARE their
+// protocol, snapshotted again when the squad switches away or on Arm.
+async function editAthleteProtocol(aid){
+  await switchAthlete(aid);
+  if(typeof openSheet==='function') openSheet();
+}
 function renderSquad(){
   const box=document.getElementById('squad-chips'); if(!box) return;
   const known={};
@@ -3432,24 +3447,40 @@ function renderSquad(){
     return;
   }
   const active=String(athleteSel.value);
+  const MODE_LABEL={resisted:'Resisted',assisted:'Assisted',cod:'C.O.D.',gym:'Gym',flywheel:'Flywheel'};
   box.innerHTML=sq.map(function(id){
     const name=known[id]||('#'+id);
-    let load='';
-    try{ const s=JSON.parse(localStorage.getItem('ppa.athcfg.'+id)||'null');
-      if(s&&s.cfg&&s.cfg.resist_kg!=null&&!isNaN(s.cfg.resist_kg)) load=s.cfg.resist_kg+' kg'; }catch(e){}
-    return '<div class="sq-chip'+(id===active?' active':'')+'" role="button" tabindex="0" data-aid="'+id+'" title="Switch to '+name+'">'+
-      '<span class="av">'+name.trim().charAt(0).toUpperCase()+'</span>'+
-      '<span class="nm">'+name+'</span>'+
-      (load?('<span class="ld">'+load+'</span>'):'')+
-      '<button class="rm" data-aid="'+id+'" title="Remove from session">✕</button>'+
+    let s=null; try{ s=JSON.parse(localStorage.getItem('ppa.athcfg.'+id)||'null'); }catch(e){}
+    const c=(s&&s.cfg)||{};
+    const load=(c.resist_kg!=null&&!isNaN(c.resist_kg))?c.resist_kg:null;
+    const proto=[];
+    if(s&&s.mode) proto.push(MODE_LABEL[s.mode]||s.mode);
+    if(c.drill) proto.push(c.drill);
+    if(c.resist_distance_m!=null&&!isNaN(c.resist_distance_m)) proto.push(c.resist_distance_m+' m');
+    if(c.velocity_cap_mps>0) proto.push('cap '+c.velocity_cap_mps+' m/s');
+    return '<div class="sq-tile'+(id===active?' active':'')+'" role="button" tabindex="0" data-aid="'+id+'" title="Switch to '+name+'">'+
+      '<div class="sq-top">'+
+        '<span class="av">'+name.trim().charAt(0).toUpperCase()+'</span>'+
+        '<span class="nm">'+name+'</span>'+
+        '<span class="sq-acts">'+
+          '<button class="ed" data-aid="'+id+'" title="Edit settings / protocol">✎</button>'+
+          '<button class="rm" data-aid="'+id+'" title="Remove from session">✕</button>'+
+        '</span>'+
+      '</div>'+
+      '<div class="v">'+(load!=null?load:'–')+'<small> kg</small></div>'+
+      '<div class="sq-proto">'+(proto.length?proto.join(' · ')
+        :'No setup yet — ✎ sets their protocol')+'</div>'+
     '</div>';
   }).join('');
-  box.querySelectorAll('.sq-chip').forEach(ch=>{
-    const go=()=>switchAthlete(ch.getAttribute('data-aid'));
-    ch.addEventListener('click',e=>{ if(e.target.closest('.rm')) return; go(); });
-    ch.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+  box.querySelectorAll('.sq-tile').forEach(t=>{
+    const go=()=>switchAthlete(t.getAttribute('data-aid'));
+    t.addEventListener('click',e=>{ if(e.target.closest('.sq-acts')) return; go(); });
+    t.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
   });
-  box.querySelectorAll('.rm').forEach(b=>{
+  box.querySelectorAll('.sq-acts .ed').forEach(b=>{
+    b.onclick=e=>{ e.stopPropagation(); editAthleteProtocol(b.getAttribute('data-aid')); };
+  });
+  box.querySelectorAll('.sq-acts .rm').forEach(b=>{
     b.onclick=e=>{ e.stopPropagation(); removeFromSquad(b.getAttribute('data-aid')); };
   });
 }
@@ -3473,6 +3504,23 @@ function renderSquad(){
   document.addEventListener('click',function(e){
     if(!menu.hidden&&!menu.contains(e.target)&&e.target!==btn) menu.hidden=true;
   });
+})();
+// Keep the active athlete's tile live while their settings are edited in the
+// Adjust sheet (debounced; the switch/arm snapshots stay authoritative).
+(function(){
+  let t=null;
+  const kick=function(){
+    if(!athleteSel.value) return;
+    clearTimeout(t);
+    t=setTimeout(function(){ saveAthCfg(athleteSel.value); renderSquad(); },400);
+  };
+  ['cfg-resist','cfg-resist-dist','cfg-vcap','cfg-vcap-toggle','cfg-drill-sel',
+   'cfg-ecc-kg','cfg-chain','cfg-fw-mass','cfg-fw-visc'].forEach(function(id){
+    const el=document.getElementById(id); if(!el) return;
+    el.addEventListener('change',kick);
+    el.addEventListener('input',kick);
+  });
+  document.querySelectorAll('.mode-pill').forEach(function(p){ p.addEventListener('click',kick); });
 })();
 
 // ---- Athlete profile card + auto-load advisor ----
