@@ -1654,6 +1654,17 @@ PHASE_C_HTML = """<!doctype html>
   .pc-stat .pc-v{font-size:15px;font-weight:700;color:var(--fg)}
   .pc-meta{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
   .pc-orient{color:var(--accent);font-weight:600}
+  /* Step length vs load — the load-dependence coaches must read instead of a
+     blended per-athlete average (step length shrinks under cable load). */
+  .pc-steploads{flex:1 1 100%;margin-top:8px;border-top:1px solid var(--line);padding-top:10px}
+  .pc-slh{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;
+          letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .pc-slnote{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.45}
+  .pc-slnote b{color:var(--fg);font-weight:700}
+  .pc-sldot{fill:var(--accent)}
+  .pc-export{font-size:11px;font-weight:700;color:var(--muted);text-decoration:none;
+             border:1px solid var(--line);border-radius:8px;padding:5px 9px;white-space:nowrap}
+  .pc-export:hover{color:var(--fg);border-color:var(--accent)}
   /* Auto-apply load advisor */
   .autoload{margin-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
   .autoload select,.autoload input{min-height:40px}
@@ -1926,6 +1937,8 @@ PHASE_C_HTML = """<!doctype html>
   .ath-rx-day{font-size:11px;color:var(--accent);font-weight:600}
   .ath-rx-label{font-size:15px;font-weight:600;color:var(--fg);margin-bottom:4px}
   .ath-rx-text{font-size:13px;color:var(--muted);line-height:1.5}
+  .ath-rx-list{margin:8px 0 0;padding-left:18px}
+  .ath-rx-list li{margin:3px 0;font-size:12.5px;color:var(--muted);line-height:1.45}
   .ath-avoid-list{display:flex;flex-direction:column;gap:8px}
   .ath-avoid{background:rgba(232,90,90,0.06);border:1px solid rgba(232,90,90,0.25);border-radius:8px;padding:12px;font-size:13px;color:var(--fg);line-height:1.5}
   .ath-avoid::before{content:"✗  ";color:var(--bad);font-weight:700}
@@ -2021,7 +2034,7 @@ PHASE_C_HTML = """<!doctype html>
   .rr-card .stbar{position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent}
   .rr-card.st-reached .stbar{background:var(--good)}
   .rr-card.st-near .stbar{background:var(--warn)}
-  .rr-card.st-missed .stbar{background:var(--muted)}
+  .rr-card.st-missed .stbar{background:var(--bad)}
   .rep-row{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;
            padding:10px 12px;background:var(--raised);border:1px solid var(--line);
            border-left:3px solid transparent;border-radius:8px;cursor:pointer;
@@ -2504,6 +2517,8 @@ PHASE_C_HTML = """<!doctype html>
   <div class="profile-card" id="athlete-profile-card" hidden>
     <div class="pc-stats" id="pc-stats"></div>
     <div class="pc-meta" id="pc-meta"></div>
+    <a class="pc-export" id="pc-export" href="#" title="Download every rep as CSV — 1080-compatible columns + all PPA metrics. Off-machine backup.">⭳ CSV</a>
+    <div class="pc-steploads" id="pc-steploads" style="display:none"></div>
   </div>
 
   <!-- session presets relocated into the Adjust sheet ("Quick start") to keep the
@@ -2638,8 +2653,8 @@ PHASE_C_HTML = """<!doctype html>
     <div class="rd-panel" data-tab="insights" style="display:none">
       <div class="ins-toolbar">
         <div class="ins-view-toggle" role="tablist">
-          <button class="ins-view-btn active" data-view="athlete">Athlete</button>
-          <button class="ins-view-btn" data-view="coach">Coach</button>
+          <button class="ins-view-btn active" data-view="athlete">Profile verdict</button>
+          <button class="ins-view-btn" data-view="coach">This rep (detail)</button>
         </div>
         <div class="ins-controls">
           <label>Position
@@ -3140,6 +3155,45 @@ document.addEventListener('click',(e)=>{
 // ---- Athlete profile card + auto-load advisor ----
 window._athleteProfile=null;
 function _pfNum(v,d){ return (v==null)?'–':Number(v).toFixed(d==null?1:d); }
+// Step-length-vs-load scatter. Step length shrinks under cable load, so a
+// single blended average is meaningless — plot each rep against its load and
+// draw the trend, so the coach reads the load-dependence directly.
+function renderStepLoadChart(sp){
+  const box=document.getElementById('pc-steploads'); if(!box) return;
+  const pts=((sp&&sp.points)||[]).filter(function(p){return p.load_kg!=null && p.step_length_m!=null;});
+  if(pts.length<3){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='block';
+  const W=320,H=150,padL=34,padR=10,padT=10,padB=28;
+  const xs=pts.map(function(p){return p.load_kg;}), ys=pts.map(function(p){return p.step_length_m;});
+  let x0=Math.min.apply(null,xs), x1=Math.max.apply(null,xs);
+  let y0=Math.min.apply(null,ys), y1=Math.max.apply(null,ys);
+  if(x1-x0<1) x1=x0+1;
+  const yPad=((y1-y0)*0.15)||0.1; y0-=yPad; y1+=yPad;
+  const sx=function(x){return padL+(x-x0)/(x1-x0)*(W-padL-padR);};
+  const sy=function(y){return H-padB-(y-y0)/(y1-y0)*(H-padT-padB);};
+  let svg='<svg viewBox="0 0 '+W+' '+H+'" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Step length versus cable load">';
+  svg+='<line x1="'+padL+'" y1="'+(H-padB)+'" x2="'+(W-padR)+'" y2="'+(H-padB)+'" stroke="var(--line)"/>';
+  svg+='<line x1="'+padL+'" y1="'+padT+'" x2="'+padL+'" y2="'+(H-padB)+'" stroke="var(--line)"/>';
+  const reg=sp.length_reg;
+  if(reg){ const ya=reg.intercept+reg.slope_per_kg*x0, yb=reg.intercept+reg.slope_per_kg*x1;
+    svg+='<line x1="'+sx(x0).toFixed(1)+'" y1="'+sy(ya).toFixed(1)+'" x2="'+sx(x1).toFixed(1)+'" y2="'+sy(yb).toFixed(1)+'" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 3" opacity="0.8"/>'; }
+  pts.forEach(function(p){ svg+='<circle cx="'+sx(p.load_kg).toFixed(1)+'" cy="'+sy(p.step_length_m).toFixed(1)+'" r="3.4" class="pc-sldot" opacity="0.85"><title>'+p.step_length_m.toFixed(2)+' m @ '+p.load_kg+' kg</title></circle>'; });
+  svg+='<text x="'+(padL-4)+'" y="'+(sy(y1)+3).toFixed(1)+'" text-anchor="end" font-size="8" fill="var(--muted)">'+y1.toFixed(2)+'</text>';
+  svg+='<text x="'+(padL-4)+'" y="'+(sy(y0)+3).toFixed(1)+'" text-anchor="end" font-size="8" fill="var(--muted)">'+y0.toFixed(2)+' m</text>';
+  svg+='<text x="'+sx(x0).toFixed(1)+'" y="'+(H-padB+12)+'" text-anchor="middle" font-size="8" fill="var(--muted)">'+x0.toFixed(0)+'</text>';
+  svg+='<text x="'+sx(x1).toFixed(1)+'" y="'+(H-padB+12)+'" text-anchor="middle" font-size="8" fill="var(--muted)">'+x1.toFixed(0)+' kg</text>';
+  svg+='</svg>';
+  let note;
+  if(reg){ const cmPerKg=Math.abs(reg.slope_per_kg*100).toFixed(1);
+    const dir=reg.slope_per_kg<0?'shorter':'longer';
+    note='Step length gets <b>'+cmPerKg+' cm '+dir+' per kg</b> of load (r²='+reg.r2.toFixed(2)+', n='+reg.n+'). '+
+         'Compare reps at the same load — a blended average just mixes these.';
+    if(sp.freq_reg){ const s=sp.freq_reg.slope_per_kg;
+      note+=' Step frequency: '+(s<0?'−':'+')+Math.abs(s).toFixed(3)+' Hz/kg.'; }
+  } else { note='Not enough load spread yet to model step length vs load — need ≥3 reps across ≥2 loads.'; }
+  box.innerHTML='<div class="pc-slh"><span>Step length vs load</span><span></span></div>'+svg+
+    '<div class="pc-slnote">'+note+'</div>';
+}
 async function loadAthleteProfile(aid){
   const card=document.getElementById('athlete-profile-card');
   if(!card) return;
@@ -3164,6 +3218,8 @@ async function loadAthleteProfile(aid){
     if(p.last_session_at) meta.push('Last '+String(p.last_session_at).split('T')[0]);
     meta.push((p.session_count||0)+' sessions');
     document.getElementById('pc-meta').innerHTML=meta.join(' · ');
+    if(typeof renderStepLoadChart==='function') renderStepLoadChart(p.step_load_profile);
+    const _ex=document.getElementById('pc-export'); if(_ex) _ex.href='/api/athletes/'+encodeURIComponent(aid)+'/export.csv';
     card.hidden=false;
     if(typeof showPastSessions==='function') showPastSessions(aid);
     // Velocity-decrement auto-loading needs a sufficient L-V profile.
@@ -4346,59 +4402,46 @@ async function renderInsightsTab(rep){
 }
 
 async function renderAthleteInsights(rep, pos, mod){
-  const url = '/api/c/athletic/rep/'+rep.rep_idx+'/athlete_report?position='+pos+(mod?('&planned_modality='+mod):'');
+  // STABLE athlete-level verdict — computed from the aggregate profile, so it
+  // is the SAME regardless of which rep is open (fixes rep-to-rep flicker).
+  const aid = (window._athleteProfile&&window._athleteProfile.athlete&&window._athleteProfile.athlete.id)
+              || (rep&&rep._meta&&rep._meta.athlete_id)
+              || (typeof athleteSel!=='undefined'&&athleteSel&&athleteSel.value) || '';
+  const url = '/api/athletes/'+encodeURIComponent(aid)+'/verdict?position='+pos+(mod?('&planned_modality='+mod):'');
   let r;
   try{ r = await(await fetch(url)).json(); }
   catch(e){ document.getElementById('ath-headline').textContent='Connection lost'; return; }
   document.getElementById('ath-headline').textContent = r.headline || '–';
-  document.getElementById('ath-verdict').textContent  = r.verdict_paragraph || '';
-  // Prescriptions
+  document.getElementById('ath-verdict').textContent =
+    (r.confidence_note?r.confidence_note+' ':'')+(r.framing_caveat||'');
+  const allIns = (r.primary_insights||[]).concat(r.context_insights||[]);
+  // Prescriptions = the prescribe[] lines across primary + context insights.
   const rxList = document.getElementById('ath-prescriptions');
-  rxList.innerHTML = (r.prescriptions || []).map((rx,i)=>(
-    '<div class="ath-rx">'+
-      '<div class="ath-rx-head">'+
-        '<span class="ath-rx-num">'+(i+1)+'.  '+(rx.label||'').toUpperCase()+'</span>'+
-        (rx.day_hint?'<span class="ath-rx-day">'+rx.day_hint.toUpperCase()+'</span>':'')+
-      '</div>'+
-      '<div class="ath-rx-text">'+(rx.athlete_text||'')+'</div>'+
-    '</div>'
-  )).join('') || '<div class="meta">No specific prescriptions for this profile</div>';
-  // Avoids
+  rxList.innerHTML = (r.status==='building')
+    ? '<div class="meta">'+(r.confidence_note||'Building profile — keep logging reps.')+'</div>'
+    : (allIns.map(function(ins){
+        const lines=(ins.prescribe&&ins.prescribe.length)
+          ? '<ul class="ath-rx-list">'+ins.prescribe.map(function(p){return '<li>'+p+'</li>';}).join('')+'</ul>' : '';
+        return '<div class="ath-rx"><div class="ath-rx-head">'+
+          '<span class="ath-rx-num">'+((ins.tag||'').toUpperCase())+'</span></div>'+
+          '<div class="ath-rx-text">'+(ins.detail||'')+lines+'</div></div>';
+      }).join('') || '<div class="meta">No specific prescriptions for this profile</div>');
+  // Avoids = do_not[] across insights.
+  const avoids = allIns.reduce(function(a,ins){ return a.concat(ins.do_not||[]); },[]);
   const avSection = document.getElementById('ath-avoid-section');
   const avList = document.getElementById('ath-avoids');
-  if(r.avoids && r.avoids.length){
-    avSection.style.display='block';
-    avList.innerHTML = r.avoids.map(a=>'<div class="ath-avoid">'+(a.athlete_text||'')+'</div>').join('');
-  } else {
-    avSection.style.display='none';
+  if(avoids.length){ avSection.style.display='block';
+    avList.innerHTML = avoids.map(function(a){return '<div class="ath-avoid">'+a+'</div>';}).join(''); }
+  else { avSection.style.display='none'; }
+  // The ONLY rep-specific line (allowed to vary): this rep vs the steady profile.
+  const ch=document.getElementById('ath-chase');
+  if(ch){
+    const v=(rep&&rep.peak_speed_mps!=null)?rep.peak_speed_mps.toFixed(2)+' m/s':'–';
+    const ld=(rep&&rep.load_kg!=null)?(' @ '+rep.load_kg+' kg'):'';
+    const sl=(rep&&rep.avg_step_length_m!=null)?(' · step '+rep.avg_step_length_m.toFixed(2)+' m'):'';
+    ch.innerHTML='<span class="name">This rep</span><span class="current">'+v+ld+sl+'</span>'+
+      '<div class="ath-chase-delta muted">The verdict above is your steady profile — it doesn’t change rep to rep. This line is just the open rep.</div>';
   }
-  // Chase metric (with vs-previous-session delta + MDC flag)
-  const c = r.chase_metric || {};
-  const cur = c.current!=null ? c.current : '–';
-  const tgt = c.target!=null  ? c.target  : '–';
-  const u   = c.units || '';
-  let chaseHtml =
-    '<span class="name">'+(c.name||'Target')+'</span>'+
-    '<span class="current">'+cur+(u?' '+u:'')+'</span>'+
-    '<span class="arrow">→</span>'+
-    '<span class="target">'+tgt+(u?' '+u:'')+'</span>';
-  if(c.previous!=null){
-    // For split-time-style metrics, lower is better. Decide direction colour
-    // by whether the delta moved AWAY from the target.
-    const movedTowardTarget = c.target!=null
-      ? (Math.abs(c.target - c.current) < Math.abs(c.target - c.previous))
-      : (c.delta_pct > 0);
-    const arrow = c.delta_pct > 0 ? '↑' : (c.delta_pct < 0 ? '↓' : '→');
-    const cls   = movedTowardTarget ? 'good' : 'bad';
-    const sign  = c.delta_pct > 0 ? '+' : '';
-    let mdcLabel = '';
-    if(c.exceeds_mdc === true)  mdcLabel = ' · <span class="good">beats MDC ✓</span>';
-    if(c.exceeds_mdc === false) mdcLabel = ' · <span class="muted">within noise</span>';
-    chaseHtml += '<div class="ath-chase-delta">vs last: <b>'+c.previous+(u?' '+u:'')+
-                 '</b> <span class="'+cls+'">'+arrow+' '+sign+c.delta_pct.toFixed(1)+'%</span>'+
-                 mdcLabel+'</div>';
-  }
-  document.getElementById('ath-chase').innerHTML = chaseHtml;
 }
 
 async function renderCoachInsights(rep, pos, mod){
@@ -4788,9 +4831,11 @@ var FV_INFO={
   v0:{name:'V0 \u2014 Theoretical Max Velocity',what:'The athlete maximum velocity capacity, reached when force falls to zero.',why:'The speed end of the force-velocity profile.'},
   pmax:{name:'Pmax \u2014 Theoretical Max Power',what:'The highest power (force times speed) the athlete can generate.',why:'An overall read on explosiveness and acceleration ability.'},
   rfmax:{name:'RFmax \u2014 Max Ratio of Force',what:'How much of the athlete total force is directed horizontally at the start of a sprint.',why:'Reflects the direction and technique of force application.'},
-  conf:{name:'Confidence',what:'How well the tether model matched the rep velocity trace (the fit R-squared).',why:'Higher is more reliable. GOOD at 0.95 and up, FAIR 0.85 to 0.95, POOR below 0.85.'}
+  conf:{name:'Confidence',what:'How well the tether model matched the rep velocity trace (fit vs measured, 0–1).',why:'1080’s own bands: GOOD 0.985+, POOR 0.965–0.985, VERY POOR 0.95–0.965, and below 0.95 the fit is unusable.'},
+  dist:{name:'Run length (×τ)',what:'How much of the velocity rise the run captured, in multiples of the time constant τ — a run lasting 3.5τ reaches ~97% of top speed.',why:'V0 is only pinned down if the run is long enough. 1080 rate GOOD at 3.5τ+ and 20 m+, and unusable below 2.5τ.'}
 };
-function confBand(r2){ if(r2==null) return ''; if(r2>=0.95) return 'GOOD'; if(r2>=0.85) return 'FAIR'; return 'POOR'; }
+function confBand(r2){ if(r2==null) return ''; if(r2>=0.985) return 'GOOD'; if(r2>=0.965) return 'POOR'; if(r2>=0.95) return 'VERY POOR'; return 'UNUSABLE'; }
+function distBand(nTau,dist_m){ if(nTau==null) return ''; if(nTau>=3.5 && (dist_m==null||dist_m>=20)) return 'GOOD'; if(nTau>=3.0) return 'POOR'; if(nTau>=2.5) return 'VERY POOR'; return 'UNSUITABLE'; }
 function fvMetricChip(key,val,unit){
   return '<div class="fv-metric"><div><div class="fvk">'+key.toUpperCase()+'</div>'+
     '<div class="fvv">'+val+'<small style="font-size:9px;color:var(--muted);font-weight:500"> '+unit+'</small></div></div>'+
@@ -4835,9 +4880,12 @@ function renderFVRepTab(rep){
     const g=rep.fv;
     const mass=rep._analysis_bodymass_kg||(rep._meta&&rep._meta.body_mass_kg)||(window._athleteProfile&&window._athleteProfile.athlete&&window._athleteProfile.athlete.body_mass_kg)||null;
     const _cb=confBand(g.r2);
+    const _db=(g.n_tau!=null)?distBand(g.n_tau,g.dist_m):'';
     if(gateEl) gateEl.innerHTML='<span class="badge fv-ok">✓ validity gate passed</span> '+
       '<span class="fv-conf">Confidence '+(g.r2!=null?g.r2.toFixed(2):'–')+(_cb?' ('+_cb+')':'')+'</span> '+
-      '<button class="fvi" data-fvinfo="conf" title="What is this?">i</button>';
+      '<button class="fvi" data-fvinfo="conf" title="What is this?">i</button>'+
+      (g.n_tau!=null?(' &nbsp; <span class="fv-conf">Run '+g.n_tau.toFixed(1)+'τ'+(_db?' ('+_db+')':'')+'</span> '+
+        '<button class="fvi" data-fvinfo="dist" title="What is this?">i</button>'):'');
     if(fvMrow){
       let _chips=fvMetricChip('f0',(g.f0_rel_nkg!=null?g.f0_rel_nkg.toFixed(1):'–'),'N/kg')+
         fvMetricChip('v0',(g.v0_ms!=null?g.v0_ms.toFixed(1):'–'),'m/s')+
@@ -7410,6 +7458,93 @@ def make_app(port: str = "auto", db_path: str = persistence.DB_PATH) -> FastAPI:
         if result["athlete"] is None:
             raise HTTPException(404, f"athlete {athlete_id} not found")
         return result
+
+    @app.get("/api/athletes/{athlete_id}/verdict")
+    async def athlete_verdict(athlete_id: int, position: Optional[str] = None,
+                              planned_modality: Optional[str] = None):
+        """STABLE athlete-level insight verdict from the aggregate profile —
+        the same regardless of which rep is open (fixes rep-to-rep flicker)."""
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        profile = await state.db_call(persistence.athlete_profile, athlete_id)
+        if profile["athlete"] is None:
+            raise HTTPException(404, f"athlete {athlete_id} not found")
+        import insights as _insights
+        pos = position or (dict(profile["athlete"]).get("position_group") or "back")
+        return _insights.build_athlete_verdict(
+            profile, position_group=pos, planned_modality=planned_modality)
+
+    @app.get("/api/athletes/{athlete_id}/export.csv")
+    async def athlete_export_csv(athlete_id: int):
+        if state.db is None:
+            raise HTTPException(503, "database not available")
+        ath = await state.db_call(persistence.get_athlete, athlete_id)
+        if ath is None:
+            raise HTTPException(404, f"athlete {athlete_id} not found")
+        rows = await state.db_call(persistence.export_reps, athlete_id)
+        import csv, io, json as _json
+        from fastapi.responses import PlainTextResponse
+        # 1080 common/repetition export columns first (drop-in compatible), then
+        # a PPA extension block carrying the metrics 1080 doesn't produce. Doubles
+        # as the off-machine data backup (training data is otherwise local-only).
+        cols = ["Client", "ClientWeight", "Group", "Sport", "SessionTime", "RepTime",
+                "Exercise", "ExerciseType", "MachineIndex", "SetNumber", "RepNumber",
+                "Concentric Load", "Eccentric Load", "Concentric Speed Limit",
+                "Eccentric Speed Limit", "Mode", "Gear", "Comment", "Distance", "Time",
+                "PeakSpeed_mps", "AvgSpeed_mps", "PeakForce_N", "AvgForce_N",
+                "PeakPower_W", "AvgPower_W", "PeakAccel_mps2",
+                "F0_Nkg", "V0_mps", "Pmax_Wkg", "FVslope", "Tau_s",
+                "TimeToMaxV_s", "DistToMaxV_m", "VDropoff_pct", "DecelTime_s",
+                "Split5_s", "Split10_s", "Split20_s", "Split30_s", "Split40_s",
+                "TotalSteps", "StepFreq_Hz", "AvgStepLength_m", "StepLengthSD_m",
+                "FlaggedSteps", "StepConfidence", "Valid", "InvalidReason", "Source"]
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(cols)
+        rep_no = {}
+
+        def g(v):
+            return "" if v is None else v
+
+        for r in rows:
+            key = (r["session_id"], r["set_idx"])
+            rep_no[key] = rep_no.get(key, 0) + 1
+            dur = ""
+            if r["t0_ms"] is not None and r["t1_ms"] is not None:
+                dur = round((r["t1_ms"] - r["t0_ms"]) / 1000.0, 3)
+            sp = {}
+            if r.get("splits_s_json"):
+                try:
+                    sp = _json.loads(r["splits_s_json"]) or {}
+                except Exception:
+                    sp = {}
+
+            def split(k):
+                v = sp.get(k, sp.get(str(k)))
+                return "" if v is None else round(float(v), 3)
+
+            et = ("Change of direction"
+                  if (r["drill"] and "cod" in str(r["drill"]).lower()) else "Linear")
+            w.writerow([
+                g(r["client"]), g(r["client_weight_kg"]), g(r["grp"]), g(r["sport"]),
+                g(r["session_at"]), g(r["rep_at"] or r["session_at"]),
+                g(r["drill"]), et, 1, g(r["set_idx"]), rep_no[key],
+                g(r["load_kg"]), g(r["load_kg"]), "", "", "", "",
+                g(r["comment"]), g(r["max_extension_m"]), dur,
+                g(r["peak_speed_mps"]), g(r["avg_speed_mps"]), g(r["peak_force_n"]), g(r["avg_force_n"]),
+                g(r["peak_power_w"]), g(r["avg_power_w"]), g(r["peak_acceleration_mps2"]),
+                g(r["f0_rel_nkg"]), g(r["v0_mps"]), g(r["pmax_rel_wkg"]), g(r["fv_slope_per_kg"]), g(r["tau_s"]),
+                g(r["time_to_max_v_s"]), g(r["dist_to_max_v_m"]), g(r["v_dropoff_pct"]), g(r["decel_time_s"]),
+                split(5), split(10), split(20), split(30), split(40),
+                g(r["total_steps"]), g(r["step_freq_hz"]), g(r["avg_step_length_m"]), g(r["step_length_std_m"]),
+                g(r["flagged_steps"]), g(r["step_confidence"]),
+                (0 if r["valid"] == 0 else 1), g(r["invalid_reason"]), g(r["source"]),
+            ])
+        aname = (dict(ath).get("name") or "athlete").replace(" ", "_")
+        fname = f"ppa_export_{aname}_athlete{athlete_id}.csv"
+        return PlainTextResponse(
+            buf.getvalue(), media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'})
 
     @app.get("/api/athletes/{athlete_id}/load_suggestion")
     async def athlete_load_suggestion(athlete_id: int, target: str = "off",
