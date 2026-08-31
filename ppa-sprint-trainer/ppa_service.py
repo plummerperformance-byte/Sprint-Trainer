@@ -2318,6 +2318,27 @@ PHASE_C_HTML = """<!doctype html>
           border-radius:99px;cursor:pointer;min-height:28px}
   .tr-tab.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
   .an-panel[hidden]{display:none}
+  /* ===== Live | Review split (1080-style: train vs analyze) =====
+     Every card belongs to exactly one view; body[data-view] gates them. */
+  .view-bar{display:flex;gap:4px;margin-bottom:14px;background:var(--card);border:1px solid var(--line);
+            border-radius:12px;padding:4px;align-self:flex-start}
+  .view-tab{flex:0 0 auto;min-width:118px;min-height:40px;padding:8px 24px;border-radius:9px;
+            background:transparent;color:var(--muted);border:0;font-size:13px;font-weight:700;
+            letter-spacing:0.04em;cursor:pointer;transition:background 120ms,color 120ms}
+  .view-tab:hover{color:var(--fg)}
+  .view-tab.active{background:var(--accent);color:#0a0a0c}
+  @media (max-width:767px){ .view-bar{align-self:stretch} .view-tab{flex:1;min-width:0} }
+  body[data-view="live"] .review-only{display:none !important}
+  body[data-view="review"] .live-only{display:none !important}
+  /* Debrief → jump into the Review view */
+  #sd-review-btn{background:var(--accent-soft);border:1px solid var(--accent);color:var(--accent);
+    font-size:12px;font-weight:700;border-radius:8px;padding:6px 12px;cursor:pointer;min-height:32px}
+  #sd-review-btn:hover{background:var(--accent);color:#0a0a0c}
+  /* Athlete profile now heads the analysis card — flatten its card chrome */
+  .analysis-card .profile-card{background:transparent;border:0;border-radius:0;box-shadow:none;
+    padding:0 0 14px;margin:0 0 14px;border-bottom:1px solid var(--line)}
+  /* Step-load chart as an analysis tab — drop its old in-card divider, cap width */
+  .an-panel .pc-steploads{border-top:0;padding-top:0;margin-top:8px;max-width:480px}
   /* Adjust panel: each control section wrapped in its own subtle card (mockup rail) */
   .sheet .field{background:var(--raised);border:1px solid var(--line);border-radius:14px;
     padding:13px 14px;gap:8px}
@@ -2483,7 +2504,7 @@ PHASE_C_HTML = """<!doctype html>
       width:42px;height:4px;border-radius:2px;background:var(--line-strong)}
   }
 </style>
-</head><body>
+</head><body data-view="live">
 
 <!-- e-stop relocated into the floating control pill (with Adjust + Arm rig) -->
 
@@ -2514,17 +2535,20 @@ PHASE_C_HTML = """<!doctype html>
 
   <!-- mode selector relocated into the Adjust panel (per mockup) -->
 
-  <div class="profile-card" id="athlete-profile-card" hidden>
-    <div class="pc-stats" id="pc-stats"></div>
-    <div class="pc-meta" id="pc-meta"></div>
-    <a class="pc-export" id="pc-export" href="#" title="Download every rep as CSV — 1080-compatible columns + all PPA metrics. Off-machine backup.">⭳ CSV</a>
-    <div class="pc-steploads" id="pc-steploads" style="display:none"></div>
+  <!-- Live | Review — the page's two jobs, one view each (1080: train vs analyze).
+       Arming a drill snaps to Live; tapping a finished rep snaps to Review. -->
+  <div class="view-bar" role="tablist" aria-label="View">
+    <button type="button" class="view-tab active" data-view="live" role="tab" aria-selected="true">Live</button>
+    <button type="button" class="view-tab" data-view="review" role="tab" aria-selected="false">Review</button>
   </div>
+
+  <!-- athlete profile card relocated into the Review view's analysis card —
+       long-term reference data no longer sits above the live hero -->
 
   <!-- session presets relocated into the Adjust sheet ("Quick start") to keep the
        live screen to one hero + minimal chrome (Few #11; HIG progressive disclosure) -->
 
-  <div class="top-grid">
+  <div class="top-grid live-only">
     <div class="stats-card hero-card">
       <div class="hero-head">
         <span class="phase-badge" id="phase-badge">Resist</span>
@@ -2580,10 +2604,13 @@ PHASE_C_HTML = """<!doctype html>
   </div>
 
   <!-- End-of-session debrief (renders when the drill stops with reps logged) -->
-  <div class="card" id="session-debrief" style="display:none">
+  <div class="card live-only" id="session-debrief" style="display:none">
     <div class="reps-head">
       <span class="meta">Session results</span>
-      <button type="button" id="sd-close" title="Dismiss">✕</button>
+      <span style="display:flex;gap:8px;align-items:center">
+        <button type="button" id="sd-review-btn">Review session →</button>
+        <button type="button" id="sd-close" title="Dismiss">✕</button>
+      </span>
     </div>
     <div class="sd-tiles" id="sd-tiles"></div>
     <div class="sd-best" id="sd-best"></div>
@@ -2592,7 +2619,30 @@ PHASE_C_HTML = """<!doctype html>
     </div>
   </div>
 
-  <div class="card" id="run-detail" style="display:none">
+  <!-- Live: target + rep rail (tap a rep chip to open it in Review) -->
+  <div class="card live-only">
+    <div class="reps-head">
+      <span class="meta">This session</span>
+      <div class="reps-head-actions">
+        <button type="button" id="target-pill" title="Session target — tap to set, blank for auto (best + MDC)">Target —</button>
+        <button type="button" id="new-set-btn" title="Group following reps into a new set">+ New set</button>
+      </div>
+    </div>
+    <div class="target-summary" id="target-summary" hidden></div>
+    <div class="preset-target" id="preset-target" hidden></div>
+    <div class="rep-rail" id="rep-rail"></div>
+  </div>
+
+  <!-- Review: rep picker — full rep list + stored/imported sessions -->
+  <div class="card review-only">
+    <div class="reps-head">
+      <span class="meta">Reps</span>
+    </div>
+    <div class="reps-list" id="reps-list"></div>
+    <div class="past-sessions" id="past-sessions" style="display:none"></div>
+  </div>
+
+  <div class="card review-only" id="run-detail" style="display:none">
     <div class="rd-head">
       <div class="meta">Run detail · <span id="rd-rep-label">–</span></div>
       <div class="rd-tabs" role="tablist">
@@ -2765,26 +2815,20 @@ PHASE_C_HTML = """<!doctype html>
     <div class="meta" id="rd-note" style="margin-top:10px;font-size:10px"></div>
   </div>
 
-  <div class="card">
-    <div class="reps-head">
-      <span class="meta">Recent reps</span>
-      <div class="reps-head-actions">
-        <button type="button" id="target-pill" title="Session target — tap to set, blank for auto (best + MDC)">Target —</button>
-        <button type="button" id="new-set-btn" title="Group following reps into a new set">+ New set</button>
-      </div>
-    </div>
-    <div class="target-summary" id="target-summary" hidden></div>
-    <div class="preset-target" id="preset-target" hidden></div>
-    <div class="rep-rail" id="rep-rail"></div>
-    <div class="reps-list" id="reps-list"></div>
-    <div class="past-sessions" id="past-sessions" style="display:none"></div>
-  </div>
+  <!-- (reps card split above: target + rail → Live, rep list + past sessions → Review) -->
 
-  <div class="card analysis-card" id="analysis-card">
+  <div class="card analysis-card review-only" id="analysis-card">
+    <!-- Athlete header — PRs, meta, CSV export (formerly the top-of-page profile card) -->
+    <div class="profile-card" id="athlete-profile-card" hidden>
+      <div class="pc-stats" id="pc-stats"></div>
+      <div class="pc-meta" id="pc-meta"></div>
+      <a class="pc-export" id="pc-export" href="#" title="Download every rep as CSV — 1080-compatible columns + all PPA metrics. Off-machine backup.">⭳ CSV</a>
+    </div>
     <div class="an-tabs" role="tablist" aria-label="Rep analysis">
       <button type="button" class="an-tab active" data-an="compare" role="tab">Compare reps</button>
       <button type="button" class="an-tab" data-an="fv" role="tab">Force–Velocity</button>
       <button type="button" class="an-tab" data-an="trends" role="tab">Trends</button>
+      <button type="button" class="an-tab" data-an="steploads" role="tab">Step-load</button>
       <button type="button" class="an-tab" data-an="race" role="tab">Race</button>
     </div>
     <div class="an-panel" data-an="compare">
@@ -2832,6 +2876,10 @@ PHASE_C_HTML = """<!doctype html>
         <button id="race-reset" class="secondary">↺</button>
       </div>
       <div id="race-board" style="margin-top:8px;font-size:12px"></div>
+    </div>
+    <div class="an-panel" data-an="steploads" hidden>
+      <div class="meta">Step length vs cable load — read the load-dependence directly instead of a blended per-athlete average.</div>
+      <div class="pc-steploads" id="pc-steploads" style="display:none"></div>
     </div>
   </div>
 
@@ -3161,7 +3209,12 @@ function _pfNum(v,d){ return (v==null)?'–':Number(v).toFixed(d==null?1:d); }
 function renderStepLoadChart(sp){
   const box=document.getElementById('pc-steploads'); if(!box) return;
   const pts=((sp&&sp.points)||[]).filter(function(p){return p.load_kg!=null && p.step_length_m!=null;});
-  if(pts.length<3){ box.style.display='none'; box.innerHTML=''; return; }
+  if(pts.length<3){
+    // Lives in an analysis tab now — show why it's empty instead of vanishing.
+    box.style.display='block';
+    box.innerHTML='<div class="pc-slnote">Not enough data yet — needs ≥3 reps with step data across ≥2 loads.</div>';
+    return;
+  }
   box.style.display='block';
   const W=320,H=150,padL=34,padR=10,padT=10,padB=28;
   const xs=pts.map(function(p){return p.load_kg;}), ys=pts.map(function(p){return p.step_length_m;});
@@ -3873,6 +3926,30 @@ function populateRepSelects(reps){
     });
   });
 })();
+
+// ---- Live | Review view switch (1080-style: train vs analyze) ----
+function setView(v){
+  if(document.body.getAttribute('data-view')===v) return;
+  document.body.setAttribute('data-view',v);
+  document.querySelectorAll('.view-tab').forEach(function(b){
+    var on=b.getAttribute('data-view')===v;
+    b.classList.toggle('active',on); b.setAttribute('aria-selected',on?'true':'false');
+  });
+  // uPlot charts rendered while their view was hidden fell back to a default
+  // width — resize them against the now-visible container.
+  requestAnimationFrame(function(){
+    if(v==='live'&&window._liveU&&liveChart.clientWidth)
+      window._liveU.setSize({width:liveChart.clientWidth,height:Math.max(liveChart.clientHeight||240,180)-30});
+    if(v==='review'&&window._stepsU){
+      var el=document.getElementById('steps-chart');
+      if(el&&el.clientWidth) window._stepsU.setSize({width:el.clientWidth,height:300});
+    }
+  });
+}
+document.querySelectorAll('.view-tab').forEach(function(b){
+  b.addEventListener('click',function(){ setView(b.getAttribute('data-view')); });
+});
+(function(){ var b=document.getElementById('sd-review-btn'); if(b) b.onclick=function(){ setView('review'); }; })();
 // ---- End-of-session debrief (session results card) ----
 window._sdSort={key:'rep_idx',dir:1};
 function renderSessionDebrief(reps,score){
@@ -5102,9 +5179,11 @@ async function activateRep(idx){
   window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
   window._lastSamplesRepIdx=idx;
   updateRailSelection();
+  // Tapping a rep = reviewing it: fetch its trace for the Review view only.
+  // The Live hero keeps showing the live / most-recent run (no double render).
   try{ const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
-    cachedSamples=sj.samples||[]; window._lastSamples=cachedSamples;
-    renderLiveChart(cachedSamples,{corridor_m:lastCorridor}); }catch(e){}
+    window._lastSamples=sj.samples||[]; }catch(e){}
+  setView('review');
   const repObj=(window._lastReps||[]).find(r=>r.rep_idx===idx);
   if(repObj && typeof renderRunDetail==='function') renderRunDetail(repObj);
   const rl=document.getElementById('reps-list');
@@ -5283,10 +5362,9 @@ function renderRepsList(reps){
       window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
       window._lastSamplesRepIdx=idx;
       const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
-      cachedSamples=sj.samples||[];
-      window._lastSamples = cachedSamples;
-      renderLiveChart(cachedSamples, {corridor_m: lastCorridor});
-      // Surface the rep's full metric panel on click
+      window._lastSamples = sj.samples||[];
+      // Surface the rep's full metric panel on click (the list lives in Review;
+      // the Live hero no longer re-renders a reviewed rep)
       const repObj = (window._lastReps||[]).find(r=>r.rep_idx===idx);
       if(repObj) renderRunDetail(repObj);
       // Persist which rep is expanded so its left-border accent survives re-render
@@ -5770,6 +5848,7 @@ async function refresh(){
   if(c.athletic_mode && !window._prevAthleticMode){
     const sd=document.getElementById('session-debrief');
     if(sd) sd.style.display='none';   // new drill starting — clear the debrief
+    setView('live');                  // a starting drill always brings up Live
   }
   window._prevAthleticMode=c.athletic_mode;
 
@@ -5953,8 +6032,12 @@ async function refresh(){
         const sj = await(await fetch('/api/c/athletic/rep/'+shown.rep_idx+'/samples')).json();
         window._lastSamples = sj.samples||[];
         window._lastSamplesRepIdx = shown.rep_idx;
-        cachedSamples = window._lastSamples;
-        renderLiveChart(cachedSamples, {corridor_m: lastCorridor});
+        if(shown===latest){
+          // The Live hero follows only the newest run — a pinned older rep
+          // renders in the Review trace instead.
+          cachedSamples = window._lastSamples;
+          renderLiveChart(cachedSamples, {corridor_m: lastCorridor});
+        }
         renderTab(activeTab);  // re-render in case Steps/F-V is open
       }catch(e){}
     }
