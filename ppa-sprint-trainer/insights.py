@@ -523,6 +523,141 @@ def _priority(insight: dict) -> tuple:
             CATEGORY_PRIORITY.get(insight["id"], 99))
 
 
+def load_velocity_insight(lv_reg: Optional[dict]) -> Optional[dict]:
+    """Stable load-velocity read from the multi-rep regression: how top speed
+    falls with load, the estimated unloaded top speed, and the loads that hit
+    common velocity-decrement training zones. Regressed over many reps, so it
+    doesn't move rep-to-rep."""
+    if not lv_reg or lv_reg.get("slope_mps_per_kg") is None:
+        return None
+    slope = lv_reg["slope_mps_per_kg"]          # m/s per kg (expect negative)
+    v0 = lv_reg.get("v0_mps")
+    if slope >= 0 or not v0:
+        return None
+
+    def load_for_dec(dec):                       # v_target=(1-dec)·v0 -> load
+        return max(0.0, round(-dec * v0 / slope, 1))
+
+    detail = (f"Top speed falls {abs(slope):.3f} m/s per kg of cable load "
+              f"(r²={lv_reg.get('r2')}, {lv_reg.get('n')} reps). Estimated "
+              f"unloaded top speed ≈ {v0:.2f} m/s.")
+    prescribe = [
+        f"Speed / low-load (~10% velocity loss): ≈ {load_for_dec(0.10)} kg",
+        f"Power / near-optimal (~25% loss, Lopt zone): ≈ {load_for_dec(0.25)} kg",
+        f"Strength-speed / heavy (~50% loss): ≈ {load_for_dec(0.50)} kg",
+    ]
+    return {
+        "id": "load_velocity_profile", "tag": "Load–Velocity profile",
+        "severity": "info",
+        "headline": f"Load–Velocity: −{abs(slope):.3f} m/s per kg",
+        "detail": detail, "prescribe": prescribe, "do_not": [],
+        "evidence": _evidence("empirical L-V regression (this athlete, measured)", "high (measured)"),
+    }
+
+
+def step_load_insight(step_lp: Optional[dict]) -> Optional[dict]:
+    """Stable step-length-vs-load read from the multi-rep regression."""
+    if not step_lp:
+        return None
+    reg = step_lp.get("length_reg")
+    if not reg or reg.get("slope_per_kg") is None:
+        return None
+    cm = abs(reg["slope_per_kg"] * 100.0)
+    direction = "shortens" if reg["slope_per_kg"] < 0 else "lengthens"
+    detail = (f"Step length {direction} {cm:.1f} cm per kg of load "
+              f"(r²={reg.get('r2')}, {reg.get('n')} reps).")
+    freg = step_lp.get("freq_reg")
+    if freg and freg.get("slope_per_kg") is not None:
+        s = freg["slope_per_kg"]
+        detail += (f" Step frequency barely moves ({s:+.3f} Hz/kg) — length, "
+                   f"not cadence, carries the load response."
+                   if abs(s) < 0.02 else
+                   f" Step frequency {'rises' if s > 0 else 'falls'} {abs(s):.3f} Hz/kg.")
+    return {
+        "id": "step_load", "tag": "Step mechanics vs load", "severity": "info",
+        "headline": f"Step length: −{cm:.1f} cm/kg",
+        "detail": detail,
+        "prescribe": ["Compare step length only at matched load",
+                      "Track unloaded step length for genuine change"],
+        "do_not": ["Don't compare step length across different loads"],
+        "evidence": _evidence("step-length-vs-load regression (this athlete, measured)", "high (measured)"),
+    }
+
+
+def build_athlete_verdict(profile: dict, position_group: str = "back",
+                          planned_modality: Optional[str] = None) -> dict:
+    """STABLE, athlete-level diagnosis from the aggregate profile — the fix for
+    rep-to-rep insight flicker. Uses the median F-V over recent valid reps plus
+    the measured load-velocity / step-load regressions, never a single rep, so
+    it doesn't change when the coach clicks between reps. Gated on data
+    sufficiency; softens the (very tightly-spaced) orientation verdict when the
+    profile is still forming, so noisy aggregate slope can't flip a strong
+    prescription."""
+    prof = profile or {}
+    ath = dict(prof.get("athlete") or {})
+    lv = prof.get("lv_profile") or {}
+    lv_reg = prof.get("lv_regression")
+    lv_quality = prof.get("lv_profile_quality")
+    step_lp = prof.get("step_load_profile") or {}
+    prs = prof.get("prs") or {}
+    n_valid = prs.get("valid_rep_count") or 0
+
+    if n_valid < 3 or (lv.get("pmax_rel_wkg") is None and lv.get("fv_slope_per_kg") is None):
+        need = max(0, 3 - n_valid)
+        return {
+            "athlete": ath.get("name"), "position_group": position_group,
+            "status": "building", "headline": "Building profile",
+            "primary_limiter": None, "primary_insights": [], "context_insights": [],
+            "confidence_note": ((f"Need {need} more valid rep(s)" if need
+                                 else "Need reps across ≥2 loads")
+                                + " before a stable verdict."),
+        }
+
+    thin = (lv_quality != "ok")
+    power = power_classification(lv.get("pmax_rel_wkg"))
+    orient = fv_orientation(lv.get("fv_slope_per_kg"))
+    if orient and thin and orient["tag"] in ("Force-saturated", "Velocity-saturated"):
+        lean = "force" if lv["fv_slope_per_kg"] <= RUGBY_SLOPE_FORCE_LEANING else "velocity"
+        orient["tag"] = "Balanced (forming)"
+        orient["detail"] = (
+            f"Aggregate slope leans {lean}-ward, but the profile is still forming "
+            f"(needs more reps across ≥2 loads) — treated as balanced until confirmed.")
+        orient["do_not"] = []
+        orient["severity"] = "info"
+
+    lvp = load_velocity_insight(lv_reg)
+    stp = step_load_insight(step_lp)
+    resp = responsiveness_predictor(lv.get("fv_slope_per_kg"), planned_modality)
+
+    primary = [i for i in (power, orient) if i]
+    context = [i for i in (lvp, stp, resp) if i]
+
+    pmax = lv.get("pmax_rel_wkg")
+    slope = lv.get("fv_slope_per_kg")
+    if pmax is not None and pmax < PMAX_DEFICIENT_MAX:
+        limiter = "pmax"
+    elif slope is not None and slope <= RUGBY_SLOPE_FORCE_SATURATED and not thin:
+        limiter = "v0"
+    elif slope is not None and slope >= RUGBY_SLOPE_VELOCITY_SAT and not thin:
+        limiter = "f0"
+    else:
+        limiter = "balanced"
+
+    distinct_loads = len({p["load_kg"] for p in (step_lp.get("points") or [])
+                          if p.get("load_kg") is not None})
+    headline = " · ".join(i["tag"] for i in primary) or "Profile forming"
+    return {
+        "athlete": ath.get("name"), "position_group": position_group,
+        "status": "ok", "headline": headline, "primary_limiter": limiter,
+        "primary_insights": primary, "context_insights": context,
+        "confidence_note": (f"Stable verdict from {n_valid} valid reps"
+                            + (f" across {distinct_loads} loads" if distinct_loads >= 2 else "")
+                            + (" · profile still forming" if thin else "") + "."),
+        "framing_caveat": ("Athlete-level signature from your aggregate profile — "
+                           "steady across reps. Diagnostic, not deterministic."),
+    }
+
+
 def build_report(rep: dict, position_group: str = "back",
                  planned_modality: Optional[str] = None) -> dict:
     """Run every applicable Tier-1 module against a rep dict; return a
