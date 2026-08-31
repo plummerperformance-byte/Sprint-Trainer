@@ -1999,6 +1999,8 @@ PHASE_C_HTML = """<!doctype html>
     padding:10px 12px 30px;position:relative;overflow:hidden;cursor:pointer;transition:.18s}
   .rr-card:hover{border-color:var(--line-strong)}
   .rr-card.latest{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .rr-card.rr-sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);background:rgba(91,139,255,0.07)}
+  .rr-card.rr-sel.old{opacity:1}
   .rr-card.old{opacity:.62}
   .rr-card.invalid{opacity:.4;border-style:dashed}
   .rr-card .g{position:absolute;right:-3px;bottom:-12px;font-weight:800;font-size:50px;color:var(--fg);opacity:.05;line-height:1}
@@ -5051,6 +5053,7 @@ async function activateRep(idx){
   const latestIdx=lastArr.length?lastArr[lastArr.length-1].rep_idx:null;
   window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
   window._lastSamplesRepIdx=idx;
+  updateRailSelection();
   try{ const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
     cachedSamples=sj.samples||[]; window._lastSamples=cachedSamples;
     renderLiveChart(cachedSamples,{corridor_m:lastCorridor}); }catch(e){}
@@ -5059,6 +5062,15 @@ async function activateRep(idx){
   const rl=document.getElementById('reps-list');
   if(rl){ rl.setAttribute('data-active-rep',idx);
     rl.querySelectorAll('.rep-row').forEach(x=>x.classList.toggle('active',x.getAttribute('data-rep')===String(idx))); }
+}
+function updateRailSelection(){
+  const rail=document.getElementById('rep-rail'); if(!rail) return;
+  const reps=window._lastReps||[];
+  const latest=reps.length?reps[reps.length-1].rep_idx:null;
+  const sel=(window._selectedRepIdx!=null)?window._selectedRepIdx:latest;
+  rail.querySelectorAll('.rr-card').forEach(function(c){
+    c.classList.toggle('rr-sel', parseInt(c.getAttribute('data-rep'),10)===sel);
+  });
 }
 function renderRepRail(reps){
   const rail=document.getElementById('rep-rail'); if(!rail) return;
@@ -5104,6 +5116,7 @@ function renderRepRail(reps){
   };});
   // auto-scroll the rail to the newest card ONLY when a rep is added (never on
   // a plain poll re-render), and horizontally only so the page never jumps.
+  updateRailSelection();
   if(window._railLastCount!==reps.length){ window._railLastCount=reps.length; rail.scrollLeft=rail.scrollWidth; }
 }
 function renderRepsList(reps){
