@@ -28,8 +28,10 @@ except Exception:
 _HIB = {m: v[2] for m, v in _TREND_METRICS.items()}
 _MDC = {m: v[1] for m, v in _TREND_METRICS.items()}
 
-# a rep within this fraction of the target (below, for higher-is-better) is "near"
-NEAR_BAND_PCT = 3.0
+# a rep within this fraction of the target (below, for higher-is-better) is "near".
+# 5% matches the 1080 Control-App target grading: green = beat, yellow = within
+# 5% below, red = more than 5% below.
+NEAR_BAND_PCT = 5.0
 
 
 def _hib(metric: str) -> bool:
