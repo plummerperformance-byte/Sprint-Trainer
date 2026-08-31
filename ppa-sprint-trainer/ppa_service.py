@@ -2327,7 +2327,12 @@ PHASE_C_HTML = """<!doctype html>
             letter-spacing:0.04em;cursor:pointer;transition:background 120ms,color 120ms}
   .view-tab:hover{color:var(--fg)}
   .view-tab.active{background:var(--accent);color:#0a0a0c}
-  @media (max-width:767px){ .view-bar{align-self:stretch} .view-tab{flex:1;min-width:0} }
+  /* toggle sits inside the topbar row — no margin, no dedicated row */
+  .topbar .view-bar{margin:0;align-self:center}
+  @media (max-width:767px){
+    .topbar .view-bar{flex:1 1 100%;order:5;align-self:stretch;display:flex}
+    .view-tab{flex:1;min-width:0}
+  }
   body[data-view="live"] .review-only{display:none !important}
   body[data-view="review"] .live-only{display:none !important}
   /* Debrief → jump into the Review view */
@@ -2339,6 +2344,76 @@ PHASE_C_HTML = """<!doctype html>
     padding:0 0 14px;margin:0 0 14px;border-bottom:1px solid var(--line)}
   /* Step-load chart as an analysis tab — drop its old in-card divider, cap width */
   .an-panel .pc-steploads{border-top:0;padding-top:0;margin-top:8px;max-width:480px}
+  /* Review rep rail + Compare toggle (rep selection lives in Review, by the trace) */
+  .review-rail{display:flex;align-items:center;gap:10px;margin:4px 0 2px}
+  .review-rail .rep-rail{flex:1 1 auto;min-width:0}
+  #compare-toggle{flex:0 0 auto;min-height:30px;padding:6px 14px;border-radius:10px;
+    background:transparent;color:var(--muted);border:1px solid var(--line);
+    font-size:12px;font-weight:600;letter-spacing:.05em;cursor:pointer}
+  #compare-toggle:hover{color:var(--fg);border-color:var(--accent)}
+  #compare-toggle.on{background:var(--accent);color:#0a0a0c;border-color:var(--accent)}
+  /* extra reps in the compare set get an accent ring; the primary keeps rr-sel */
+  .rr-card.rr-cmp{box-shadow:inset 0 0 0 2px var(--accent)}
+  .overlay-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 2px 2px}
+  .overlay-legend[hidden]{display:none}
+  .ol-item{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--fg);
+    font-variant-numeric:tabular-nums}
+  .ol-dot{width:10px;height:10px;border-radius:2px;display:inline-block;flex:0 0 auto}
+  /* Review desktop layout: main column (reps + run detail) beside a sticky
+     athlete-analysis sidebar — the F-V/Trends charts use the width next to the
+     top graph instead of sitting below a scroll. */
+  @media (min-width:1200px){
+    .review-grid{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(0,1fr);
+      gap:0 18px;align-items:start}
+    .rg-side{position:sticky;top:14px;max-height:calc(100vh - 160px);
+      overflow-y:auto;overscroll-behavior:contain}
+    .rg-side .an-tabs{flex-wrap:wrap}
+    /* Both views use the whole window width — margins are wasted space */
+    body[data-view="review"] .wrap,
+    body[data-view="live"] .wrap{max-width:none}
+    /* Live desktop layout mirrors Review: hero left, session panel right */
+    .live-grid{display:grid;grid-template-columns:minmax(0,2.1fr) minmax(0,1fr);
+      gap:0 18px;align-items:start}
+    .lg-side{position:sticky;top:14px;max-height:calc(100vh - 160px);
+      overflow-y:auto;overscroll-behavior:contain}
+  }
+  /* Within-session rep bars (Live panel) */
+  .rb-title{font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--muted);margin:12px 0 6px}
+  .rb-bars{display:flex;align-items:flex-end;gap:5px;height:110px;
+    overflow-x:auto;padding-bottom:2px}
+  .rb-col{flex:1 0 26px;max-width:52px;display:flex;flex-direction:column;
+    align-items:center;justify-content:flex-end;height:100%;gap:3px}
+  .rb-v{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .rb-bar{width:100%;border-radius:4px 4px 0 0;background:var(--raised);
+    border:1px solid var(--line);min-height:5px}
+  .rb-bar.rb-hit{background:rgba(51,209,122,.32);border-color:var(--good)}
+  .rb-bar.rb-near{background:rgba(255,148,64,.28);border-color:var(--warn)}
+  .rb-bar.rb-inv{opacity:.35;border-style:dashed}
+  .rb-bar.rb-latest{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+  .rb-n{font-size:9px;color:var(--ink-faint);font-variant-numeric:tabular-nums}
+  /* single run-detail header row: label + set summary left, tabs + Compare right */
+  .rd-head{justify-content:flex-start;gap:8px 10px}
+  .rd-head .rd-tabs{margin-left:auto}
+  /* Review trace toggles (metric + x-axis), sharing a bar with the step legend */
+  .trace-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;
+    flex-wrap:wrap;margin-top:6px;min-height:30px}
+  .rv-toggles{display:flex;gap:6px;margin-left:auto}
+  .rv-tg{display:inline-flex;gap:2px;padding:3px;background:#0e1626;
+    border:1px solid var(--line);border-radius:8px}
+  .rv-tg button{padding:3px 10px;font-size:10.5px;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;background:transparent;color:var(--muted);border:0;
+    border-radius:6px;cursor:pointer;min-height:24px}
+  .rv-tg button:hover{color:var(--fg)}
+  .rv-tg button.active{background:var(--accent);color:#0a0a0c}
+  .rd-set-sum{font-variant-numeric:tabular-nums}
+  .rd-set-sum:not(:empty)::before{content:"·";margin:0 7px;color:var(--ink-faint)}
+  /* past-sessions restyled as a sidebar card (was a tail of the old Reps card) */
+  .rg-side .past-sessions{background:var(--card);border:1px solid var(--line);
+    border-radius:18px;padding:14px;margin:0 0 14px;border-top:1px solid var(--line);
+    box-shadow:0 1px 2px rgba(3,7,18,.4), 0 20px 46px -28px rgba(3,7,18,.75)}
+  /* the session F-V chart box only appears once a fit exists (no giant empty well) */
+  #fv-chart:empty{display:none}
   /* Adjust panel: each control section wrapped in its own subtle card (mockup rail) */
   .sheet .field{background:var(--raised);border:1px solid var(--line);border-radius:14px;
     padding:13px 14px;gap:8px}
@@ -2512,6 +2587,11 @@ PHASE_C_HTML = """<!doctype html>
 
   <div class="topbar">
     <h1><img class="brand-logo" src="/static/ppa-logo.png" alt="Plummer Performance Academy"><span class="accent">·</span> Sprint Trainer</h1>
+    <!-- Live | Review lives in the header row — no dedicated row of chrome -->
+    <div class="view-bar" role="tablist" aria-label="View">
+      <button type="button" class="view-tab active" data-view="live" role="tab" aria-selected="true">Live</button>
+      <button type="button" class="view-tab" data-view="review" role="tab" aria-selected="false">Review</button>
+    </div>
     <div class="topbar-right">
       <select id="rig-select" title="Active rig" style="padding:6px 10px;font-size:12px"></select>
       <button type="button" id="gear-toggle" class="gear-toggle">Gear 1</button>
@@ -2535,12 +2615,7 @@ PHASE_C_HTML = """<!doctype html>
 
   <!-- mode selector relocated into the Adjust panel (per mockup) -->
 
-  <!-- Live | Review — the page's two jobs, one view each (1080: train vs analyze).
-       Arming a drill snaps to Live; tapping a finished rep snaps to Review. -->
-  <div class="view-bar" role="tablist" aria-label="View">
-    <button type="button" class="view-tab active" data-view="live" role="tab" aria-selected="true">Live</button>
-    <button type="button" class="view-tab" data-view="review" role="tab" aria-selected="false">Review</button>
-  </div>
+  <!-- Live | Review toggle relocated into the topbar (vertical space) -->
 
   <!-- athlete profile card relocated into the Review view's analysis card —
        long-term reference data no longer sits above the live hero -->
@@ -2548,7 +2623,12 @@ PHASE_C_HTML = """<!doctype html>
   <!-- session presets relocated into the Adjust sheet ("Quick start") to keep the
        live screen to one hero + minimal chrome (Few #11; HIG progressive disclosure) -->
 
-  <div class="top-grid live-only">
+  <!-- Live: two-column on desktop — hero left, session panel (debrief, target,
+       rep bars) right. Everything in-session visible without scrolling. -->
+  <div class="live-grid live-only">
+  <div class="lg-main">
+
+  <div class="top-grid">
     <div class="stats-card hero-card">
       <div class="hero-head">
         <span class="phase-badge" id="phase-badge">Resist</span>
@@ -2603,8 +2683,11 @@ PHASE_C_HTML = """<!doctype html>
     </div>
   </div>
 
+  </div><!-- /lg-main -->
+  <aside class="lg-side">
+
   <!-- End-of-session debrief (renders when the drill stops with reps logged) -->
-  <div class="card live-only" id="session-debrief" style="display:none">
+  <div class="card" id="session-debrief" style="display:none">
     <div class="reps-head">
       <span class="meta">Session results</span>
       <span style="display:flex;gap:8px;align-items:center">
@@ -2614,13 +2697,12 @@ PHASE_C_HTML = """<!doctype html>
     </div>
     <div class="sd-tiles" id="sd-tiles"></div>
     <div class="sd-best" id="sd-best"></div>
-    <div style="overflow-x:auto">
-      <table class="rd-splits-table" id="sd-table"></table>
-    </div>
+    <!-- per-rep table retired from Live — that depth lives in Review -->
   </div>
 
-  <!-- Live: target + rep rail (tap a rep chip to open it in Review) -->
-  <div class="card live-only">
+  <!-- Live session panel: target controls + within-session rep comparison.
+       The interactive rep rail lives in Review; these bars are glanceable. -->
+  <div class="card">
     <div class="reps-head">
       <span class="meta">This session</span>
       <div class="reps-head-actions">
@@ -2630,21 +2712,26 @@ PHASE_C_HTML = """<!doctype html>
     </div>
     <div class="target-summary" id="target-summary" hidden></div>
     <div class="preset-target" id="preset-target" hidden></div>
-    <div class="rep-rail" id="rep-rail"></div>
+    <div id="rep-bars"></div>
   </div>
 
-  <!-- Review: rep picker — full rep list + stored/imported sessions -->
-  <div class="card review-only">
-    <div class="reps-head">
-      <span class="meta">Reps</span>
-    </div>
-    <div class="reps-list" id="reps-list"></div>
-    <div class="past-sessions" id="past-sessions" style="display:none"></div>
-  </div>
+  </aside><!-- /lg-side -->
+  </div><!-- /live-grid -->
 
-  <div class="card review-only" id="run-detail" style="display:none">
+  <!-- Review: two-column on desktop — main (reps + run detail) beside a sticky
+       athlete-analysis sidebar, so F-V/Trends sit next to the top graph instead
+       of below a scroll. Stacks to one column on narrow screens. -->
+  <div class="review-grid review-only">
+  <div class="rg-main">
+
+  <!-- reps-list is a hidden data anchor: rep rows were already replaced by the
+       rail cards; its set summary now renders into #rd-set-sum in run-detail -->
+  <div class="reps-list" id="reps-list" style="display:none"></div>
+
+  <div class="card" id="run-detail" style="display:none">
+    <!-- One header row: rep label + set summary left, tabs + Compare right -->
     <div class="rd-head">
-      <div class="meta">Run detail · <span id="rd-rep-label">–</span></div>
+      <div class="meta">Run detail · <span id="rd-rep-label">–</span><span class="rd-set-sum" id="rd-set-sum"></span></div>
       <div class="rd-tabs" role="tablist">
         <button class="rd-tab active" data-tab="profile">Profile</button>
         <button class="rd-tab" data-tab="insights">Insights</button>
@@ -2653,15 +2740,36 @@ PHASE_C_HTML = """<!doctype html>
         <button class="rd-tab" data-tab="fv">F · V</button>
         <button class="rd-tab" data-tab="quadrants">Quadrants</button>
       </div>
+      <button type="button" id="compare-toggle" aria-pressed="false" title="Overlay multiple reps on the trace">Compare</button>
     </div>
 
-    <!-- Persistent velocity trace for the selected rep — visible on every tab -->
+    <div class="review-rail">
+      <div class="rep-rail" id="rep-rail-review"></div>
+    </div>
+    <div id="overlay-legend" class="overlay-legend" hidden></div>
+
+    <!-- Persistent trace for the selected rep — visible on every tab, with the
+         same metric/x-axis toggles as the Live hero chart -->
     <div class="rd-trace">
-      <div id="steps-legend" class="steps-legend" style="display:none">
-        <span class="sl-item"><i class="sl-dot" style="background:var(--warm)"></i>Left</span>
-        <span class="sl-item"><i class="sl-dot" style="background:var(--cool)"></i>Right</span>
-        <span class="sl-item"><i class="sl-dot sl-flag"></i>Flagged</span>
-        <span id="st-conf" class="sl-conf"></span>
+      <div class="trace-bar">
+        <div id="steps-legend" class="steps-legend" style="display:none">
+          <span class="sl-item"><i class="sl-dot" style="background:var(--warm)"></i>Left</span>
+          <span class="sl-item"><i class="sl-dot" style="background:var(--cool)"></i>Right</span>
+          <span class="sl-item"><i class="sl-dot sl-flag"></i>Flagged</span>
+          <span id="st-conf" class="sl-conf"></span>
+        </div>
+        <div class="rv-toggles">
+          <div class="rv-tg" id="rv-x-toggle" role="group" aria-label="Trace x-axis">
+            <button type="button" data-x="dist" class="active">Dist</button>
+            <button type="button" data-x="time">Time</button>
+          </div>
+          <div class="rv-tg" id="rv-metric-toggle" role="group" aria-label="Trace metric">
+            <button type="button" data-m="speed" class="active">Speed</button>
+            <button type="button" data-m="power">Power</button>
+            <button type="button" data-m="force">Force</button>
+            <button type="button" data-m="accel">Accel</button>
+          </div>
+        </div>
       </div>
       <div id="steps-chart"
            style="width:100%;background:rgba(18,26,51,.35);border:1px solid var(--line);border-radius:10px;margin-top:6px;padding:8px 6px 2px"></div>
@@ -2815,9 +2923,13 @@ PHASE_C_HTML = """<!doctype html>
     <div class="meta" id="rd-note" style="margin-top:10px;font-size:10px"></div>
   </div>
 
-  <!-- (reps card split above: target + rail → Live, rep list + past sessions → Review) -->
+  </div><!-- /rg-main -->
+  <aside class="rg-side">
 
-  <div class="card analysis-card review-only" id="analysis-card">
+  <!-- stored/imported sessions — athlete-level, so they live in the sidebar -->
+  <div class="past-sessions" id="past-sessions" style="display:none"></div>
+
+  <div class="card analysis-card" id="analysis-card">
     <!-- Athlete header — PRs, meta, CSV export (formerly the top-of-page profile card) -->
     <div class="profile-card" id="athlete-profile-card" hidden>
       <div class="pc-stats" id="pc-stats"></div>
@@ -2825,27 +2937,16 @@ PHASE_C_HTML = """<!doctype html>
       <a class="pc-export" id="pc-export" href="#" title="Download every rep as CSV — 1080-compatible columns + all PPA metrics. Off-machine backup.">⭳ CSV</a>
     </div>
     <div class="an-tabs" role="tablist" aria-label="Rep analysis">
-      <button type="button" class="an-tab active" data-an="compare" role="tab">Compare reps</button>
-      <button type="button" class="an-tab" data-an="fv" role="tab">Force–Velocity</button>
+      <button type="button" class="an-tab active" data-an="fv" role="tab">Force–Velocity</button>
       <button type="button" class="an-tab" data-an="trends" role="tab">Trends</button>
       <button type="button" class="an-tab" data-an="steploads" role="tab">Step-load</button>
       <button type="button" class="an-tab" data-an="race" role="tab">Race</button>
     </div>
-    <div class="an-panel" data-an="compare">
-      <div class="meta">Speed + force overlaid across the two reps.</div>
-      <div class="row">
-        <select id="cmp-a" style="flex:1"><option value="">Rep A</option></select>
-        <select id="cmp-b" style="flex:1"><option value="">Rep B</option></select>
-        <button id="cmp-go" class="secondary">Compare</button>
-      </div>
-      <svg id="cmp-chart" viewBox="0 0 600 140"></svg>
-    </div>
-    <div class="an-panel" data-an="fv" hidden>
-      <div class="meta">Tether-model fit of each rep's velocity trace — every value passes a physiological validity gate.</div>
-      <div class="row">
-        <button id="fv-go" class="secondary">Build F-V profile</button>
-      </div>
-      <div id="fv-result" class="meta" style="margin-top:8px">Needs at least 1 rep with a full trace</div>
+    <!-- Compare-reps card retired: rep comparison now overlays on the top trace
+         (tap the Compare toggle by the Review rail, then pick reps). -->
+    <div class="an-panel" data-an="fv">
+      <div class="meta">Tether-model fit of each rep's velocity trace — every value passes a physiological validity gate. Builds automatically as reps land.</div>
+      <div id="fv-result" class="meta" style="margin-top:8px">Waiting for a rep with a full trace…</div>
       <svg id="fv-chart" viewBox="0 0 600 200"></svg>
     </div>
     <div class="an-panel" data-an="trends" hidden>
@@ -2882,6 +2983,9 @@ PHASE_C_HTML = """<!doctype html>
       <div class="pc-steploads" id="pc-steploads" style="display:none"></div>
     </div>
   </div>
+
+  </aside><!-- /rg-side -->
+  </div><!-- /review-grid -->
 
 </div>
 
@@ -3306,7 +3410,13 @@ async function showPastSessions(aid){
 }
 async function loadSessionIntoView(sid){
   try{
+    // Loading a stored session flips the service's athletic_mode on, which the
+    // poll loop would read as a drill starting (→ auto-switch to Live). Mark
+    // the mode as already-seen BEFORE the POST (a poll can interleave the
+    // await) and pin the Review view: this is reviewing, not training.
+    window._prevAthleticMode=true;
     await fetch('/api/sessions/'+sid+'/load',{method:'POST'});
+    if(typeof setView==='function') setView('review');
     const d=await fetch('/api/c/athletic/reps').then(function(r){return r.json();});
     const reps=Array.isArray(d)?d:(d.reps||[]);
     window._lastReps=reps;
@@ -3907,9 +4017,12 @@ async function loadAthletes(){
 
 // ---- Compare reps ----
 function populateRepSelects(reps){
+  // Compare-reps dropdowns were retired (comparison now overlays on the top
+  // trace). Kept as a no-op guard in case the selects aren't present.
+  const a=document.getElementById('cmp-a'); if(!a) return;
   const opts='<option value="">Rep…</option>'+reps.map(r=>'<option value="'+r.rep_idx+'">Rep '+r.rep_idx+' · '+(r.peak_speed_mps||0).toFixed(2)+' m/s · '+(r.peak_force_n||0).toFixed(0)+' N</option>').join('');
   for(const id of ['cmp-a','cmp-b']){
-    const sel=document.getElementById(id);
+    const sel=document.getElementById(id); if(!sel) continue;
     const cur=sel.value;
     sel.innerHTML=opts;
     if(cur)sel.value=cur;
@@ -3923,6 +4036,7 @@ function populateRepSelects(reps){
       var k=t.getAttribute('data-an');
       card.querySelectorAll('.an-tab').forEach(function(x){x.classList.toggle('active',x===t);});
       card.querySelectorAll('.an-panel').forEach(function(p){p.hidden=(p.getAttribute('data-an')!==k);});
+      if(k==='fv'&&typeof buildSessionFV==='function') buildSessionFV();
     });
   });
 })();
@@ -3977,36 +4091,39 @@ function renderSessionDebrief(reps,score){
       (best.peak_power_w||0).toFixed(0)+' W · '+(best.duration_s||0).toFixed(2)+' s'+
       (best.fv&&best.fv.valid&&best.fv.pmax_rel_wkg!=null?(' · F-V '+best.fv.pmax_rel_wkg.toFixed(1)+' W/kg'):'');
   } else bEl.style.display='none';
-  // sortable rep table
-  const cols=[['rep_idx','Rep'],['peak_speed_mps','m/s'],['peak_force_n','N'],
-              ['peak_power_w','W'],['duration_s','s']];
-  const st=window._sdSort;
-  const rows=reps.slice().sort((a,b)=>((a[st.key]||0)-(b[st.key]||0))*st.dir);
-  let html='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'" class="'+(st.key===c[0]?'sorted':'')+'">'+
-    c[1]+(st.key===c[0]?(st.dir>0?' ▲':' ▼'):'')+'</th>').join('')+'<th>status</th></tr>';
-  rows.forEach(r=>{
-    const g=score&&(score.grades||[]).find(x=>x.rep_idx===r.rep_idx);
-    let stat=r.valid===false?'<span style="color:var(--bad)">invalid</span>'
-      :(r.fv&&!r.fv.valid?'<span class="badge fv-rejected">F-V rejected</span>':'');
-    if(g&&g.status&&g.status!=='none'&&r.valid!==false){
-      const map={reached:'<span style="color:var(--good)">✓ reached</span>',
-                 near:'<span style="color:#ffcf5c">≈ near</span>',
-                 missed:'<span style="color:var(--muted)">✗ missed</span>'};
-      stat=(stat?stat+' ':'')+(map[g.status]||'');
-    }
-    html+='<tr><td>'+r.rep_idx+'</td><td>'+(r.peak_speed_mps||0).toFixed(2)+'</td>'+
-      '<td>'+(r.peak_force_n||0).toFixed(0)+'</td><td>'+(r.peak_power_w||0).toFixed(0)+'</td>'+
-      '<td>'+(r.duration_s||0).toFixed(2)+'</td><td>'+(stat||'–')+'</td></tr>';
-  });
+  // Per-rep table retired from the Live debrief (rep depth lives in Review) —
+  // the guard keeps old markup working if it ever comes back.
   const tbl=document.getElementById('sd-table');
-  tbl.innerHTML=html;
-  tbl.querySelectorAll('th[data-k]').forEach(th=>{
-    th.onclick=()=>{
-      const k=th.getAttribute('data-k');
-      window._sdSort={key:k,dir:(st.key===k?-st.dir:-1)};
-      renderSessionDebrief(window._sdReps,window._sdScore);
-    };
-  });
+  if(tbl){
+    const cols=[['rep_idx','Rep'],['peak_speed_mps','m/s'],['peak_force_n','N'],
+                ['peak_power_w','W'],['duration_s','s']];
+    const st=window._sdSort;
+    const rows=reps.slice().sort((a,b)=>((a[st.key]||0)-(b[st.key]||0))*st.dir);
+    let html='<tr>'+cols.map(c=>'<th data-k="'+c[0]+'" class="'+(st.key===c[0]?'sorted':'')+'">'+
+      c[1]+(st.key===c[0]?(st.dir>0?' ▲':' ▼'):'')+'</th>').join('')+'<th>status</th></tr>';
+    rows.forEach(r=>{
+      const g=score&&(score.grades||[]).find(x=>x.rep_idx===r.rep_idx);
+      let stat=r.valid===false?'<span style="color:var(--bad)">invalid</span>'
+        :(r.fv&&!r.fv.valid?'<span class="badge fv-rejected">F-V rejected</span>':'');
+      if(g&&g.status&&g.status!=='none'&&r.valid!==false){
+        const map={reached:'<span style="color:var(--good)">✓ reached</span>',
+                   near:'<span style="color:#ffcf5c">≈ near</span>',
+                   missed:'<span style="color:var(--muted)">✗ missed</span>'};
+        stat=(stat?stat+' ':'')+(map[g.status]||'');
+      }
+      html+='<tr><td>'+r.rep_idx+'</td><td>'+(r.peak_speed_mps||0).toFixed(2)+'</td>'+
+        '<td>'+(r.peak_force_n||0).toFixed(0)+'</td><td>'+(r.peak_power_w||0).toFixed(0)+'</td>'+
+        '<td>'+(r.duration_s||0).toFixed(2)+'</td><td>'+(stat||'–')+'</td></tr>';
+    });
+    tbl.innerHTML=html;
+    tbl.querySelectorAll('th[data-k]').forEach(th=>{
+      th.onclick=()=>{
+        const k=th.getAttribute('data-k');
+        window._sdSort={key:k,dir:(st.key===k?-st.dir:-1)};
+        renderSessionDebrief(window._sdReps,window._sdScore);
+      };
+    });
+  }
   card.style.display='block';
 }
 document.getElementById('sd-close').onclick=()=>{
@@ -4146,16 +4263,19 @@ function racePause(){ window._racePlaying=false; const b=document.getElementById
   const rr=document.getElementById('race-reset'); if(rr) rr.onclick=function(){ window._raceT=0; racePause(); drawRace(); };
   const sel=document.getElementById('athlete-select'); if(sel) sel.addEventListener('change',function(){ const p=document.querySelector('.an-panel[data-an="race"]'); if(p&&!p.hidden) renderGhostRace(); });
 })();
-document.getElementById('cmp-go').onclick=async()=>{
-  const a=document.getElementById('cmp-a').value;
-  const b=document.getElementById('cmp-b').value;
-  if(!a||!b){alert('Pick two reps to compare');return;}
-  const [ja,jb]=await Promise.all([
-    fetch('/api/c/athletic/rep/'+a+'/samples').then(r=>r.json()),
-    fetch('/api/c/athletic/rep/'+b+'/samples').then(r=>r.json()),
-  ]);
-  renderCompare(ja.samples||[],jb.samples||[],a,b);
-};
+// Retired Compare-reps card — guarded so the removed button doesn't throw.
+(function(){ const go=document.getElementById('cmp-go'); if(!go) return;
+  go.onclick=async()=>{
+    const a=document.getElementById('cmp-a').value;
+    const b=document.getElementById('cmp-b').value;
+    if(!a||!b){alert('Pick two reps to compare');return;}
+    const [ja,jb]=await Promise.all([
+      fetch('/api/c/athletic/rep/'+a+'/samples').then(r=>r.json()),
+      fetch('/api/c/athletic/rep/'+b+'/samples').then(r=>r.json()),
+    ]);
+    renderCompare(ja.samples||[],jb.samples||[],a,b);
+  };
+})();
 function renderCompare(sa,sb,la,lb){
   const svg=document.getElementById('cmp-chart');
   if(!sa.length||!sb.length){svg.innerHTML='<text x="300" y="70" fill="#56618a" text-anchor="middle">No data for one of the reps</text>';return;}
@@ -4191,8 +4311,16 @@ function fvRepChips(perRep){
     return '<span class="badge '+cls+'" title="'+title+'">'+label+'</span>';
   }).join(' ');
 }
-document.getElementById('fv-go').onclick=async()=>{
-  const j=await(await fetch('/api/c/athletic/fv')).json();
+// Session F-V profile — builds automatically (on tab open + whenever the rep
+// set changes); the old manual "Build" button is gone.
+async function buildSessionFV(){
+  if(!(window._lastReps||[]).length){
+    const out=document.getElementById('fv-result');
+    if(out) out.textContent='Waiting for a rep with a full trace…';
+    const svg=document.getElementById('fv-chart'); if(svg) svg.innerHTML='';
+    return;
+  }
+  let j; try{ j=await(await fetch('/api/c/athletic/fv')).json(); }catch(e){ return; }
   const out=document.getElementById('fv-result');
   const chips=fvRepChips(j.per_rep);
   if(!j.ok){
@@ -4209,7 +4337,7 @@ document.getElementById('fv-go').onclick=async()=>{
     ' · R² '+(b.r2!=null?b.r2.toFixed(3):'–')+' · '+j.n_valid+'/'+j.n+' reps valid'+
     '<div class="rep-badges" style="margin-top:6px">'+chips+'</div>';
   renderFV(j);
-};
+}
 function renderFV(j){
   const svg=document.getElementById('fv-chart');
   const W=600,H=200,PAD=28;
@@ -4434,9 +4562,10 @@ function renderRunDetail(rep){
     note.textContent='Steps from tether speed-residual peaks. Foot labels are declared + alternated (not measured); L/R asymmetry is experimental until strikes are validated by video or manual correction. GCT / flight time still need a foot sensor.';
   } else { note.textContent=''; }
 
-  // Persistent velocity trace: the chart lives above the tabs, so render it on
-  // every rep load (not only when the Steps tab is open).
-  renderStepsTab(rep);
+  // Persistent velocity trace above the tabs — one rep = full step analysis,
+  // 2+ selected in Compare mode = overlaid race lines (renderTraceForSelection).
+  if(typeof renderTraceForSelection==='function') renderTraceForSelection();
+  else renderStepsTab(rep);
   // Render the active tab's content (lazy — only what's visible)
   renderTab(activeTab);
 }
@@ -4638,6 +4767,38 @@ function fftCadence(samples, peakV){
   }
   return {hz:bestF, n:win.length, span:span};
 }
+// ---- Review-trace metric + x-axis (mirrors the Live hero chart's config) ----
+window._revMetric='speed'; window._revX='dist';
+function _revCfg(samples, metric){
+  const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  if(metric==='force')
+    return {ys:samples.map(s=>s.F_N!=null?s.F_N:null), color:cssv('--accent')||'#5b8bff', unit:'N', label:'Force (N)'};
+  if(metric==='power')
+    return {ys:samples.map(s=>(s.P_W!=null?s.P_W:((s.F_N!=null&&s.v_mps!=null)?s.F_N*s.v_mps:null))),
+            color:'#d4a13a', unit:'W', label:'Power (W)'};
+  if(metric==='accel'){
+    // derived from the velocity trend (stored a_mps2 is zeroed), ±4-sample smooth
+    const raw=samples.map((s,i)=>{ if(i<1) return 0;
+      const dt=(samples[i].t_ms-samples[i-1].t_ms)/1000;
+      return dt>0?(samples[i].v_mps-samples[i-1].v_mps)/dt:0; });
+    const sm=raw.map((v,i)=>{ let a=0,c=0;
+      for(let j=Math.max(0,i-4);j<=Math.min(raw.length-1,i+4);j++){a+=raw[j];c++;}
+      return a/c; });
+    return {ys:sm, color:cssv('--cool')||'#2bd0e2', unit:'m/s²', label:'Accel (m/s²)'};
+  }
+  return {ys:samples.map(s=>s.v_mps), color:cssv('--accent')||'#5b8bff', unit:'m/s', label:'Speed (m/s)'};
+}
+(function(){
+  const wire=(id,attr,key)=>{ const tg=document.getElementById(id); if(!tg) return;
+    tg.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{
+      window[key]=b.getAttribute(attr);
+      tg.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));
+      if(typeof renderTraceForSelection==='function') renderTraceForSelection();
+    }));
+  };
+  wire('rv-metric-toggle','data-m','_revMetric');
+  wire('rv-x-toggle','data-x','_revX');
+})();
 function renderStepsTab(rep){
   const svg=document.getElementById('steps-chart');
   const empty=document.getElementById('steps-empty');
@@ -4648,7 +4809,14 @@ function renderStepsTab(rep){
   const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   const warm=cssv('--warm')||'#ff9440', cool=cssv('--cool')||'#2bd0e2';
   const zoneEl=document.getElementById('st-zones');
-  if(!events.length || events.length<2){
+  const metric=window._revMetric||'speed';
+  const xmode=window._revX||'dist';
+  const hasEvents=events.length>=2;
+  const rvSamples=(window._lastSamples||[])
+    .filter(s=>s.v_mps!=null && (xmode==='time'?s.t_ms!=null:s.pos_m!=null));
+  // No trace at all → the old empty state. A trace WITHOUT step events still
+  // charts (metric toggles work); only the step analysis below needs events.
+  if(rvSamples.length<2){
     svg.style.display='none'; empty.style.display='block';
     legend.style.display='none'; twrap.style.display='none'; asymEl.style.display='none';
     if(zoneEl) zoneEl.style.display='none';
@@ -4656,9 +4824,9 @@ function renderStepsTab(rep){
   }
   svg.style.display='block'; empty.style.display='none';
 
-  // ---- Speed vs Position via uPlot: crisp canvas + hover crosshair + drag-zoom ----
+  // ---- Metric vs Time/Distance via uPlot: crisp canvas + crosshair + drag-zoom ----
   const gl=cssv('--line')||'#243157', mut=cssv('--ink-3')||'#818eae', acc=cssv('--accent')||'#5b8bff', bad=cssv('--bad')||'#ff5a5f';
-  const samples=(window._lastSamples||[]).filter(s=>s.pos_m!=null&&s.v_mps!=null);
+  const samples=rvSamples;
   // FFT cadence cross-check (MuscleLab): compare to the counted step frequency
   const fftEl=document.getElementById('st-fft');
   if(fftEl){
@@ -4674,39 +4842,67 @@ function renderStepsTab(rep){
   }
   if(window._stepsU){ try{window._stepsU.destroy();}catch(e){} window._stepsU=null; }
   svg.innerHTML='';
-  if(samples.length && typeof uPlot!=='undefined'){
-    // strictly-ascending x + ~90 ms display smooth (detection ran on the raw signal)
+  const cfg=_revCfg(samples, metric);
+  const nGood=cfg.ys.filter(v=>v!=null).length;
+  if(typeof uPlot==='undefined'){
+    svg.textContent='chart library missing';
+  } else if(nGood<2){
+    svg.innerHTML='<div class="meta" style="padding:24px 0;text-align:center">No '+metric+' data in this trace</div>';
+  } else {
+    // strictly-ascending x + ~90 ms display smooth (analysis ran on the raw signal)
     let mxp=-1e9; const xs=[],ys=[];
-    for(const d of samples){ const p=Math.max(mxp+1e-4,d.pos_m); mxp=p; xs.push(p); ys.push(d.v_mps); }
+    for(let i=0;i<samples.length;i++){
+      let p=xmode==='time'?(samples[i].t_ms/1000):samples[i].pos_m;
+      if(p<=mxp) p=mxp+1e-4; mxp=p; xs.push(p); ys.push(cfg.ys[i]);
+    }
     const dtms=Math.max(1, samples[1]?(samples[1].t_ms-samples[0].t_ms):10);
     const sw=Math.max(1, Math.round(90/dtms));
-    const sv=(function(a,w){const h=(w-1)>>1,nn=a.length,o=new Array(nn);
-      for(let i=0;i<nn;i++){let ac=0,c=0;for(let j=Math.max(0,i-h);j<=Math.min(nn-1,i+h);j++){ac+=a[j];c++;}o[i]=ac/c;}return o;})(ys, sw);
+    const sv=(metric==='accel')?ys   // accel is already smoothed at source
+      :(function(a,w){const h=(w-1)>>1,nn=a.length,o=new Array(nn);
+        for(let i=0;i<nn;i++){ if(a[i]==null){o[i]=null;continue;}
+          let ac=0,c=0;
+          for(let j=Math.max(0,i-h);j<=Math.min(nn-1,i+h);j++){ if(a[j]==null) continue; ac+=a[j];c++; }
+          o[i]=c?ac/c:null; }
+        return o;})(ys, sw);
     const dpr=(uPlot.pxRatio||window.devicePixelRatio||1);
-    const markers={hooks:{draw:u=>{const c=u.ctx,yb=u.bbox.top+u.bbox.height;c.save();
+    // step markers only make sense on the speed-vs-position view
+    const showMarkers=hasEvents && metric==='speed' && xmode==='dist';
+    const markers={hooks:{draw:u=>{ if(!showMarkers) return;
+      const c=u.ctx,yb=u.bbox.top+u.bbox.height;c.save();
       for(const e of events){ if(e.pos_m==null) continue; const x=u.valToPos(e.pos_m,'x',true);
         const col=e.foot==='left'?warm:e.foot==='right'?cool:'#5b8bff';
         c.beginPath();c.arc(x,yb+9*dpr,4*dpr,0,7);c.fillStyle=col;c.fill();
         if(e.flags&&e.flags.length){c.lineWidth=2*dpr;c.strokeStyle=bad;c.stroke();} }
       c.restore();}}};
+    const hex2rgba=(h,a)=>{const m=/^#?([0-9a-f]{6})$/i.exec((h||'').trim());
+      if(!m) return 'rgba(91,139,255,'+a+')';
+      const n=parseInt(m[1],16);
+      return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';};
+    const yRange=(metric==='speed')?((u,mn,mxx)=>[0,Math.max(5,Math.ceil((mxx||1)*1.05/5)*5)])
+      :(metric==='accel')?((u,mn,mxx)=>[Math.min(0,(mn||0)*1.1),Math.max(1,(mxx||1)*1.1)])
+      :((u,mn,mxx)=>[0,(mxx||1)*1.05]);
     window._stepsU=new uPlot({
       width:(svg.clientWidth||600), height:300, padding:[10,10,24,6],
-      scales:{x:{time:false},y:{range:(u,mn,mxx)=>[0,Math.max(5,Math.ceil((mxx||1)*1.05/5)*5)]}},
+      scales:{x:{time:false},y:{range:yRange}},
       axes:[
-        {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+' m')},
-        {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},size:46,font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+' m/s')},
+        {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+(xmode==='time'?' s':' m'))},
+        {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},size:52,font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+' '+cfg.unit)},
       ],
-      series:[{label:'Pos (m)'},{label:'Speed (m/s)',stroke:acc,width:1.8,fill:'rgba(91,139,255,0.14)'}],
+      series:[{label:xmode==='time'?'t (s)':'Pos (m)'},{label:cfg.label,stroke:cfg.color,width:1.8,fill:hex2rgba(cfg.color,0.14)}],
       cursor:{x:true,y:true},
       plugins:[markers],
     },[xs,sv],svg);
     if(!window._stepsUResizeHooked){ window._stepsUResizeHooked=true;
       window.addEventListener('resize',function(){ const el=document.getElementById('steps-chart');
         if(window._stepsU&&el&&el.clientWidth) window._stepsU.setSize({width:el.clientWidth,height:300}); }); }
-  } else if(!samples.length){
-    svg.innerHTML='<div class="meta" style="padding:24px 0;text-align:center">No sample trace for this rep</div>';
   }
 
+  // Step analysis below the chart needs actual step events
+  if(!hasEvents){
+    legend.style.display='none'; twrap.style.display='none'; asymEl.style.display='none';
+    if(zoneEl) zoneEl.style.display='none';
+    return;
+  }
   // Legend + confidence
   legend.style.display='flex';
   document.getElementById('st-conf').textContent=
@@ -5173,39 +5369,167 @@ document.getElementById('target-pill').onclick=async()=>{
   }catch(e){ alert('Network error'); }
 };
 
+// ---- Compare-on-trace state: tap reps in the Review rail to overlay them ----
+window._compareMode=false;      // Compare toggle on/off
+window._compareReps=[];         // rep_idx set overlaid on the top trace (primary first)
+window._samplesCache={};        // rep_idx -> samples[] (avoid re-fetching)
+async function ensureSamples(idx){
+  if(idx==null) return [];
+  if(window._samplesCache[idx]) return window._samplesCache[idx];
+  try{ const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
+    window._samplesCache[idx]=sj.samples||[]; }catch(e){ window._samplesCache[idx]=[]; }
+  return window._samplesCache[idx];
+}
 async function activateRep(idx){
   const lastArr=window._lastReps||[];
   const latestIdx=lastArr.length?lastArr[lastArr.length-1].rep_idx:null;
-  window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
-  window._lastSamplesRepIdx=idx;
-  updateRailSelection();
-  // Tapping a rep = reviewing it: fetch its trace for the Review view only.
-  // The Live hero keeps showing the live / most-recent run (no double render).
-  try{ const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
-    window._lastSamples=sj.samples||[]; }catch(e){}
+  if(window._compareMode){
+    // Toggle this rep into/out of the overlay set (keep at least one, cap at 5).
+    const cur=(window._compareReps||[]).slice();
+    const at=cur.indexOf(idx);
+    if(at>=0){ if(cur.length>1) cur.splice(at,1); }
+    else if(cur.length<5) cur.push(idx);
+    window._compareReps=cur;
+    window._selectedRepIdx=cur[0];
+  } else {
+    // Single-select — preserve the pin/unpin feel (re-tap or latest = follow live).
+    window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
+    window._compareReps=[ (window._selectedRepIdx!=null?window._selectedRepIdx:idx) ];
+  }
+  const primary=window._compareReps[0];
+  window._lastSamplesRepIdx=primary;
+  window._lastSamples=await ensureSamples(primary);
+  await Promise.all(window._compareReps.map(ensureSamples));  // prefetch overlay traces
   setView('review');
-  const repObj=(window._lastReps||[]).find(r=>r.rep_idx===idx);
+  updateRailSelection();
+  const repObj=(window._lastReps||[]).find(r=>r.rep_idx===primary);
   if(repObj && typeof renderRunDetail==='function') renderRunDetail(repObj);
+  else renderTraceForSelection();
   const rl=document.getElementById('reps-list');
-  if(rl){ rl.setAttribute('data-active-rep',idx);
-    rl.querySelectorAll('.rep-row').forEach(x=>x.classList.toggle('active',x.getAttribute('data-rep')===String(idx))); }
+  if(rl){ rl.setAttribute('data-active-rep',primary);
+    rl.querySelectorAll('.rep-row').forEach(x=>x.classList.toggle('active',x.getAttribute('data-rep')===String(primary))); }
+}
+// Compare toggle — flip overlay mode; turning it off collapses back to the primary.
+(function(){ const b=document.getElementById('compare-toggle'); if(!b) return;
+  b.onclick=function(){
+    window._compareMode=!window._compareMode;
+    b.classList.toggle('on',window._compareMode);
+    b.setAttribute('aria-pressed',window._compareMode?'true':'false');
+    if(window._compareMode){
+      if(!window._compareReps.length && window._shownRepIdx!=null) window._compareReps=[window._shownRepIdx];
+    } else {
+      const primary=(window._selectedRepIdx!=null)?window._selectedRepIdx:window._compareReps[0];
+      window._compareReps=(primary!=null)?[primary]:[];
+      const rep=(window._lastReps||[]).find(r=>r.rep_idx===primary);
+      if(rep) renderRunDetail(rep); else renderTraceForSelection();
+    }
+    updateRailSelection();
+  };
+})();
+// Dispatch the top trace: 1 rep = full step analysis; 2+ = overlaid race lines.
+function renderTraceForSelection(){
+  const set=(window._compareReps&&window._compareReps.length)?window._compareReps:[];
+  if(set.length>1){ renderOverlay(set); return; }
+  hideOverlayLegend();
+  const idx=set.length?set[0]:window._shownRepIdx;
+  const rep=(window._lastReps||[]).find(r=>r.rep_idx===idx);
+  if(rep){ if(window._samplesCache[idx]) window._lastSamples=window._samplesCache[idx];
+    if(typeof renderStepsTab==='function') renderStepsTab(rep); }
+}
+function hideOverlayLegend(){ const leg=document.getElementById('overlay-legend'); if(leg){ leg.hidden=true; leg.innerHTML=''; } }
+// Overlay 2+ reps as speed-vs-position "race" lines on the top trace.
+function renderOverlay(idxs){
+  const svg=document.getElementById('steps-chart');
+  const empty=document.getElementById('steps-empty');
+  const legend=document.getElementById('steps-legend');
+  if(!svg) return;
+  if(legend) legend.style.display='none';
+  const metric=window._revMetric||'speed';
+  const xmode=window._revX||'dist';
+  const series=idxs.map(function(i){ return {idx:i,s:(window._samplesCache[i]||[]).filter(function(d){return d.v_mps!=null&&(xmode==='time'?d.t_ms!=null:d.pos_m!=null);})}; })
+                   .filter(function(o){return o.s.length>1;});
+  if(series.length<2){   // not enough traces — fall back to the single-rep view
+    hideOverlayLegend();
+    const rep=(window._lastReps||[]).find(r=>r.rep_idx===idxs[0]);
+    if(rep){ window._lastSamples=window._samplesCache[idxs[0]]||[]; if(typeof renderStepsTab==='function') renderStepsTab(rep); }
+    return;
+  }
+  svg.style.display='block'; if(empty) empty.style.display='none';
+  const mcfg=_revCfg(series[0].s, metric);   // color/unit/label source of truth
+  let maxPos=0;
+  const norm=series.map(function(o){
+    const ycfg=_revCfg(o.s, metric);
+    let mx=-1e9; const xs=[],ys=[];
+    for(let k=0;k<o.s.length;k++){
+      let p=xmode==='time'?(o.s[k].t_ms/1000):o.s[k].pos_m;
+      if(p<=mx) p=mx+1e-4; mx=p; xs.push(p); ys.push(ycfg.ys[k]);
+    }
+    if(xs[xs.length-1]>maxPos) maxPos=xs[xs.length-1];
+    return {idx:o.idx,xs:xs,ys:ys};
+  });
+  const N=240,grid=[]; for(let k=0;k<=N;k++) grid.push(maxPos*k/N);
+  function interp(xs,ys,x){
+    if(x<xs[0]||x>xs[xs.length-1]) return null;
+    let lo=0,hi=xs.length-1;
+    while(hi-lo>1){ const m=(lo+hi)>>1; if(xs[m]<=x) lo=m; else hi=m; }
+    if(ys[lo]==null||ys[hi]==null) return null;
+    const t=(x-xs[lo])/((xs[hi]-xs[lo])||1);
+    return ys[lo]+t*(ys[hi]-ys[lo]);
+  }
+  const data=[grid];
+  norm.forEach(function(o){ data.push(grid.map(function(x){ return interp(o.xs,o.ys,x); })); });
+  const cssv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const PAL=[cssv('--accent')||'#5b8bff',cssv('--warm')||'#ff9440',cssv('--cool')||'#2bd0e2',cssv('--good')||'#33d17a',cssv('--bad')||'#ff5a5f'];
+  const gl=cssv('--line')||'#243157', mut=cssv('--ink-3')||'#818eae';
+  if(window._stepsU){ try{window._stepsU.destroy();}catch(e){} window._stepsU=null; }
+  svg.innerHTML='';
+  if(typeof uPlot==='undefined'){ return; }
+  const dpr=(uPlot.pxRatio||window.devicePixelRatio||1);
+  const seriesDef=[{label:xmode==='time'?'t (s)':'Pos (m)'}].concat(norm.map(function(o,i){ return {label:'Rep '+o.idx,stroke:PAL[i%PAL.length],width:2}; }));
+  const yRange=(metric==='speed')?((u,mn,mxx)=>[0,Math.max(5,Math.ceil((mxx||1)*1.05/5)*5)])
+    :(metric==='accel')?((u,mn,mxx)=>[Math.min(0,(mn||0)*1.1),Math.max(1,(mxx||1)*1.1)])
+    :((u,mn,mxx)=>[0,(mxx||1)*1.05]);
+  window._stepsU=new uPlot({
+    width:(svg.clientWidth||600),height:300,padding:[10,10,24,6],
+    scales:{x:{time:false},y:{range:yRange}},
+    axes:[
+      {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+(xmode==='time'?' s':' m'))},
+      {stroke:mut,grid:{stroke:gl,width:1},ticks:{stroke:gl,width:1},size:52,font:(11*dpr)+'px system-ui,sans-serif',values:(u,v)=>v.map(x=>x+' '+mcfg.unit)},
+    ],
+    series:seriesDef,cursor:{x:true,y:true},
+  },data,svg);
+  if(!window._stepsUResizeHooked){ window._stepsUResizeHooked=true;
+    window.addEventListener('resize',function(){ const el=document.getElementById('steps-chart');
+      if(window._stepsU&&el&&el.clientWidth) window._stepsU.setSize({width:el.clientWidth,height:300}); }); }
+  const leg=document.getElementById('overlay-legend');
+  if(leg){ leg.hidden=false;
+    leg.innerHTML=norm.map(function(o,i){ const rep=(window._lastReps||[]).find(r=>r.rep_idx===o.idx);
+      const pk=rep?(rep.peak_speed_mps||0).toFixed(2):'';
+      return '<span class="ol-item"><i class="ol-dot" style="background:'+PAL[i%PAL.length]+'"></i>Rep '+o.idx+(pk?(' · '+pk+' m/s'):'')+'</span>'; }).join('');
+  }
 }
 function updateRailSelection(){
-  const rail=document.getElementById('rep-rail'); if(!rail) return;
   const reps=window._lastReps||[];
   const latest=reps.length?reps[reps.length-1].rep_idx:null;
-  const sel=(window._selectedRepIdx!=null)?window._selectedRepIdx:latest;
-  rail.querySelectorAll('.rr-card').forEach(function(c){
-    c.classList.toggle('rr-sel', parseInt(c.getAttribute('data-rep'),10)===sel);
+  const primary=(window._selectedRepIdx!=null)?window._selectedRepIdx:latest;
+  const cmp=window._compareReps||[];
+  document.querySelectorAll('.rep-rail').forEach(function(rail){
+    rail.querySelectorAll('.rr-card').forEach(function(c){
+      const i=parseInt(c.getAttribute('data-rep'),10);
+      c.classList.toggle('rr-sel', i===primary);
+      c.classList.toggle('rr-cmp', cmp.length>1 && cmp.indexOf(i)>=0);
+    });
   });
 }
+// Renders every .rep-rail on the page (Live card + Review run-detail) in sync,
+// so rep selection works from whichever view you're in.
 function renderRepRail(reps){
-  const rail=document.getElementById('rep-rail'); if(!rail) return;
-  if(!reps||!reps.length){ rail.innerHTML=''; return; }
+  const rails=document.querySelectorAll('.rep-rail'); if(!rails.length) return;
+  if(!reps||!reps.length){ rails.forEach(function(r){r.innerHTML='';}); return; }
   const recent=reps.slice(-8);
   const latestIdx=reps[reps.length-1].rep_idx;
   const sc=window._targetScore;
-  rail.innerHTML=recent.map(function(r){
+  const html=recent.map(function(r){
     const isLatest=r.rep_idx===latestIdx, inv=r.valid===false;
     const g=sc&&(sc.grades||[]).find(function(x){return x.rep_idx===r.rep_idx;});
     const stc=(g&&g.status&&g.status!=='none')?(' st-'+g.status):'';
@@ -5222,34 +5546,66 @@ function renderRepRail(reps){
       (r.load_kg!=null?'<div class="lt">'+r.load_kg+' kg</div>':'')+
     '</div>';
   }).join('');
-  rail.querySelectorAll('.rr-card').forEach(function(c){
-    const go=function(){ activateRep(parseInt(c.getAttribute('data-rep'),10)); };
-    c.addEventListener('click',function(e){ if(e.target.closest('.rr-acts')) return; go(); });
-    c.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+  const added=(window._railLastCount!==reps.length);
+  rails.forEach(function(rail){
+    rail.innerHTML=html;
+    rail.querySelectorAll('.rr-card').forEach(function(c){
+      const go=function(){ activateRep(parseInt(c.getAttribute('data-rep'),10)); };
+      c.addEventListener('click',function(e){ if(e.target.closest('.rr-acts')) return; go(); });
+      c.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+    });
+    rail.querySelectorAll('.rr-note').forEach(function(b){ b.onclick=async function(e){ e.stopPropagation();
+      const idx=parseInt(b.getAttribute('data-rep'),10);
+      const cur=(window._lastReps||[]).find(function(r){return r.rep_idx===idx;});
+      const note=prompt('Rep comment:', (cur&&cur.comment)||''); if(note===null) return;
+      if(await patchRepAnnotation(idx,{comment:note})){ if(cur) cur.comment=note||null; renderRepsList(window._lastReps||[]); }
+    };});
+    rail.querySelectorAll('.rr-inv').forEach(function(b){ b.onclick=async function(e){ e.stopPropagation();
+      const idx=parseInt(b.getAttribute('data-rep'),10);
+      const cur=(window._lastReps||[]).find(function(r){return r.rep_idx===idx;});
+      const isInvalid=cur&&cur.valid===false; const body={valid:isInvalid};
+      if(!isInvalid){ const reason=prompt('Mark invalid? Optional reason (false_start / slip / fall / equipment / other):','other'); if(reason===null) return; body.reason=reason||'other'; }
+      try{ const r=await fetch('/api/c/athletic/rep/'+idx+'/validity',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        if(r.ok){ if(cur) cur.valid=!isInvalid; renderRepsList(window._lastReps||[]); } }catch(err){}
+    };});
+    // auto-scroll to the newest card only when a rep is added (never on a plain poll)
+    if(added) rail.scrollLeft=rail.scrollWidth;
   });
-  rail.querySelectorAll('.rr-note').forEach(function(b){ b.onclick=async function(e){ e.stopPropagation();
-    const idx=parseInt(b.getAttribute('data-rep'),10);
-    const cur=(window._lastReps||[]).find(function(r){return r.rep_idx===idx;});
-    const note=prompt('Rep comment:', (cur&&cur.comment)||''); if(note===null) return;
-    if(await patchRepAnnotation(idx,{comment:note})){ if(cur) cur.comment=note||null; renderRepsList(window._lastReps||[]); }
-  };});
-  rail.querySelectorAll('.rr-inv').forEach(function(b){ b.onclick=async function(e){ e.stopPropagation();
-    const idx=parseInt(b.getAttribute('data-rep'),10);
-    const cur=(window._lastReps||[]).find(function(r){return r.rep_idx===idx;});
-    const isInvalid=cur&&cur.valid===false; const body={valid:isInvalid};
-    if(!isInvalid){ const reason=prompt('Mark invalid? Optional reason (false_start / slip / fall / equipment / other):','other'); if(reason===null) return; body.reason=reason||'other'; }
-    try{ const r=await fetch('/api/c/athletic/rep/'+idx+'/validity',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      if(r.ok){ if(cur) cur.valid=!isInvalid; renderRepsList(window._lastReps||[]); } }catch(err){}
-  };});
-  // auto-scroll the rail to the newest card ONLY when a rep is added (never on
-  // a plain poll re-render), and horizontally only so the page never jumps.
+  window._railLastCount=reps.length;
   updateRailSelection();
-  if(window._railLastCount!==reps.length){ window._railLastCount=reps.length; rail.scrollLeft=rail.scrollWidth; }
+}
+// Within-session rep comparison for the Live panel — one bar per rep (peak
+// speed), graded against the session target. Glanceable only; the interactive
+// rep rail lives in Review.
+function renderRepBars(reps){
+  const el=document.getElementById('rep-bars'); if(!el) return;
+  if(!reps||!reps.length){ el.innerHTML=''; return; }
+  const vmax=Math.max(...reps.map(r=>r.peak_speed_mps||0))||1;
+  const sc=window._targetScore;
+  const latestIdx=reps[reps.length-1].rep_idx;
+  el.innerHTML='<div class="rb-title">Rep speeds · this session</div>'+
+    '<div class="rb-bars">'+reps.map(function(r){
+      const v=r.peak_speed_mps||0;
+      const h=Math.max(6,Math.round(v/vmax*100));
+      const g=sc&&(sc.grades||[]).find(function(x){return x.rep_idx===r.rep_idx;});
+      const cls=(r.valid===false)?' rb-inv'
+        :(g&&g.status==='reached')?' rb-hit'
+        :(g&&g.status==='near')?' rb-near':'';
+      const latest=(r.rep_idx===latestIdx)?' rb-latest':'';
+      return '<div class="rb-col" title="Rep '+r.rep_idx+' · '+v.toFixed(2)+' m/s'+
+          (r.load_kg!=null?(' · '+r.load_kg+' kg'):'')+'">'+
+        '<div class="rb-v">'+v.toFixed(2)+'</div>'+
+        '<div class="rb-bar'+cls+latest+'" style="height:'+h+'%"></div>'+
+        '<div class="rb-n">'+r.rep_idx+'</div></div>';
+    }).join('')+'</div>';
 }
 function renderRepsList(reps){
   renderRepRail(reps);
+  renderRepBars(reps);
+  const setSum=document.getElementById('rd-set-sum');
   if(!reps.length){
     repsList.innerHTML='<div class="reps-empty">No reps yet — start a drill to log reps here.</div>';
+    if(setSum) setSum.textContent='';
     if(typeof renderPresetTarget==='function') renderPresetTarget();
     return;
   }
@@ -5261,6 +5617,10 @@ function renderRepsList(reps){
     setStats[s].count++;
     if((r.peak_speed_mps||0)>setStats[s].best) setStats[s].best=r.peak_speed_mps||0;
   });
+  // Set summary lives in the run-detail rail strip (the old Reps card is gone)
+  if(setSum) setSum.textContent=Object.keys(setStats).sort((a,b)=>a-b)
+    .map(s=>'Set '+s+' · '+setStats[s].count+' rep'+(setStats[s].count===1?'':'s')+
+      ' · best '+setStats[s].best.toFixed(2)+' m/s').join('   ·   ');
   const recent=reps.slice().reverse().slice(0,8);
   let html='', lastSet=null;
   recent.forEach(r=>{
@@ -5353,25 +5713,9 @@ function renderRepsList(reps){
     };
   });
   repsList.querySelectorAll('.rep-row').forEach(row=>{
-    const activate=async()=>{
-      const idx=parseInt(row.getAttribute('data-rep'),10);
-      // Pin this rep as the run feeding the detail card. Tapping the pinned
-      // rep again (or the newest rep) unpins and follows live again.
-      const lastArr=window._lastReps||[];
-      const latestIdx=lastArr.length?lastArr[lastArr.length-1].rep_idx:null;
-      window._selectedRepIdx=(idx===latestIdx||window._selectedRepIdx===idx)?null:idx;
-      window._lastSamplesRepIdx=idx;
-      const sj=await(await fetch('/api/c/athletic/rep/'+idx+'/samples')).json();
-      window._lastSamples = sj.samples||[];
-      // Surface the rep's full metric panel on click (the list lives in Review;
-      // the Live hero no longer re-renders a reviewed rep)
-      const repObj = (window._lastReps||[]).find(r=>r.rep_idx===idx);
-      if(repObj) renderRunDetail(repObj);
-      // Persist which rep is expanded so its left-border accent survives re-render
-      repsList.setAttribute('data-active-rep', idx);
-      repsList.querySelectorAll('.rep-row').forEach(x=>
-        x.classList.toggle('active', x.getAttribute('data-rep')===String(idx)));
-    };
+    // Route through activateRep so the list honours Compare mode too (pin/unpin
+    // when off, add/remove from the overlay set when on).
+    const activate=()=>activateRep(parseInt(row.getAttribute('data-rep'),10));
     row.addEventListener('click', activate);
     row.addEventListener('keydown', e=>{
       if(e.target!==row) return;   // let the v-toggle button handle its own keys
@@ -6005,7 +6349,12 @@ async function refresh(){
   // user's finger and fighting page scrolling / taps.
   const _repsSig=reps.length+'|'+reps.map(function(r){return r.rep_idx+':'+(r.peak_speed_mps||0).toFixed(2)+':'+(r.valid===false?0:1)+':'+(r.comment||'');}).join(',');
   const _repsChanged=(_repsSig!==window._repsSig); window._repsSig=_repsSig;
-  if(_repsChanged){ renderRepsList(reps); populateRepSelects(reps); }
+  if(_repsChanged){
+    renderRepsList(reps); populateRepSelects(reps);
+    // keep the (auto-built) session F-V profile current when its panel is open
+    const fvp=document.querySelector('.an-panel[data-an="fv"]');
+    if(fvp&&!fvp.hidden&&typeof buildSessionFV==='function') buildSessionFV();
+  }
 
   // Cache reps for click-to-render lookup. Run detail (profile / steps /
   // F-V / quadrants) FOLLOWS THE NEWEST REP unless the coach pinned one by
@@ -6021,6 +6370,9 @@ async function refresh(){
     }
     const _shownChanged=_repsChanged||(window._shownRepIdx!==shown.rep_idx); window._shownRepIdx=shown.rep_idx;
     if(_shownChanged){
+      // Outside Compare mode the trace follows the single shown rep — keep the
+      // overlay set in sync so a poll re-render never shows a stale comparison.
+      if(!window._compareMode) window._compareReps=[shown.rep_idx];
       repsList.setAttribute('data-active-rep', String(shown.rep_idx));
       repsList.querySelectorAll('.rep-row').forEach(x=>
         x.classList.toggle('active', x.getAttribute('data-rep')===String(shown.rep_idx)));
