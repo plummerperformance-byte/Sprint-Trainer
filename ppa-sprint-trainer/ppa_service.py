@@ -2377,6 +2377,35 @@ PHASE_C_HTML = """<!doctype html>
     .lg-side{position:sticky;top:14px;max-height:calc(100vh - 160px);
       overflow-y:auto;overscroll-behavior:contain}
   }
+  /* Session squad — quick athlete switch chips (Live panel) */
+  #squad-card{position:relative}
+  #squad-add{padding:6px 12px;font-size:12px;font-weight:700;background:transparent;
+    color:var(--muted);border:1px solid var(--line);border-radius:8px;cursor:pointer;min-height:30px}
+  #squad-add:hover{color:var(--fg);border-color:var(--accent)}
+  .squad-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .squad-empty{font-size:11.5px;color:var(--muted)}
+  .sq-chip{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;
+    border-radius:999px;background:var(--raised);border:1px solid var(--line);
+    cursor:pointer;color:var(--fg)}
+  .sq-chip:hover{border-color:var(--accent)}
+  .sq-chip.active{border-color:var(--accent);background:var(--accent-soft)}
+  .sq-chip .av{width:26px;height:26px;border-radius:50%;flex:0 0 auto;
+    background:linear-gradient(150deg,#6f80b8,#8b93c9);color:#08101f;
+    font-weight:800;font-size:12px;display:grid;place-items:center}
+  .sq-chip.active .av{background:linear-gradient(150deg,var(--accent),#8b6bff)}
+  .sq-chip .nm{font-size:12px;font-weight:600;white-space:nowrap}
+  .sq-chip .ld{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .sq-chip .rm{background:none;border:0;color:var(--ink-faint);cursor:pointer;
+    font-size:12px;padding:0 2px;line-height:1}
+  .sq-chip .rm:hover{color:var(--bad)}
+  .squad-menu{position:absolute;top:48px;right:14px;z-index:40;background:var(--card);
+    border:1px solid var(--line-strong);border-radius:10px;padding:6px;min-width:200px;
+    max-height:260px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+  .squad-menu[hidden]{display:none}
+  .sqm-item{display:block;width:100%;text-align:left;padding:9px 10px;background:transparent;
+    border:0;color:var(--fg);font-size:13px;cursor:pointer;border-radius:6px}
+  .sqm-item:hover{background:var(--accent-soft)}
+  .sqm-none{padding:9px 10px;font-size:12px;color:var(--muted)}
   /* Within-session rep bars (Live panel) */
   .rb-title{font-size:10px;letter-spacing:.08em;text-transform:uppercase;
     color:var(--muted);margin:12px 0 6px}
@@ -2685,6 +2714,20 @@ PHASE_C_HTML = """<!doctype html>
 
   </div><!-- /lg-main -->
   <aside class="lg-side">
+
+  <!-- Session squad — quick athlete switching for group sessions. Tapping a
+       chip snapshots the outgoing athlete's setup, restores the incoming
+       one's, and the next Arm starts THEIR session (reps never mix). -->
+  <div class="card" id="squad-card">
+    <div class="reps-head">
+      <span class="meta">Session athletes</span>
+      <div class="reps-head-actions">
+        <button type="button" id="squad-add" title="Add an athlete to this session">+ Add</button>
+      </div>
+    </div>
+    <div class="squad-chips" id="squad-chips"></div>
+    <div class="squad-menu" id="squad-menu" hidden></div>
+  </div>
 
   <!-- End-of-session debrief (renders when the drill stops with reps logged) -->
   <div class="card" id="session-debrief" style="display:none">
@@ -3239,6 +3282,8 @@ async function armRig(){
   await fetch('/api/c/athletic/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(buildAthleticCfg())});
   const aid=document.getElementById('athlete-select').value;
   await fetch('/api/c/athletic/start'+(aid?('?athlete_id='+encodeURIComponent(aid)):''),{method:'POST'});
+  // arming = this athlete's working setup — snapshot it as their "last set"
+  if(aid&&typeof saveAthCfg==='function'){ saveAthCfg(aid); addToSquad(aid); renderSquad(); }
 }
 async function repAction(){
   const c=await(await fetch('/api/c/state')).json();
@@ -3291,9 +3336,9 @@ function openAthleteSheet(){
   menu.innerHTML='<div class="ath-grid">'+cells+
     '<a class="ath-cell" href="/setup"><span class="av" style="background:var(--raised);color:var(--muted)">+</span><span class="nm">Add</span></a></div>';
   menu.querySelectorAll('.ath-cell[data-aid]').forEach(b=>b.onclick=()=>{
-    athleteSel.value=b.getAttribute('data-aid');
-    renderAthleteChip();
-    if(typeof loadAthleteProfile==='function') loadAthleteProfile(athleteSel.value);
+    // route through the squad switcher: snapshots the outgoing athlete's
+    // setup, restores the incoming one's, adds them to the session squad
+    switchAthlete(b.getAttribute('data-aid'));
     menu.hidden=true;
   });
   menu.hidden=false;
@@ -3303,6 +3348,132 @@ document.addEventListener('click',(e)=>{
   const chip=document.getElementById('athlete-chip');
   if(chip&&!chip.contains(e.target)) document.getElementById('athlete-menu').hidden=true;
 });
+
+// ---- Session squad: quick athlete switching for group sessions ----
+// Each athlete's rig setup (mode, load, distances, drill, vcap) is snapshotted
+// on switch and on arm, and restored when they come back — so athletes on the
+// same session can run different loads/protocols. Sessions never mix: a switch
+// closes the outgoing athlete's drill, and the next Arm opens the incoming
+// athlete's own session (athlete_id binds at /api/c/athletic/start).
+function _squadLoad(){ try{ return JSON.parse(localStorage.getItem('ppa.squad')||'[]'); }catch(e){ return []; } }
+function _squadSave(sq){ try{ localStorage.setItem('ppa.squad',JSON.stringify(sq)); }catch(e){} }
+function addToSquad(aid){
+  aid=String(aid||''); if(!aid) return;
+  const sq=_squadLoad();
+  if(sq.indexOf(aid)<0){ sq.push(aid); _squadSave(sq); }
+}
+function removeFromSquad(aid){
+  _squadSave(_squadLoad().filter(x=>x!==String(aid)));
+  renderSquad();
+}
+function saveAthCfg(aid){
+  aid=String(aid||''); if(!aid) return;
+  try{
+    localStorage.setItem('ppa.athcfg.'+aid, JSON.stringify({
+      mode:currentMode,
+      cfg:buildAthleticCfg(),
+      ecc_kg:parseFloat((document.getElementById('cfg-ecc-kg')||{}).value)||null,
+    }));
+  }catch(e){}
+}
+function restoreAthCfg(aid){
+  let snap=null;
+  try{ snap=JSON.parse(localStorage.getItem('ppa.athcfg.'+String(aid))||'null'); }catch(e){}
+  if(!snap||!snap.cfg) return false;
+  const c=snap.cfg;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el&&v!=null&&!isNaN(v)) el.value=v; };
+  if(snap.mode&&typeof applyMode==='function') applyMode(snap.mode,{push:false});
+  set('cfg-resist',c.resist_kg);
+  set('cfg-resist-dist',c.resist_distance_m);
+  set('cfg-ecc-kg',snap.ecc_kg);
+  set('cfg-chain',c.chain_kg_per_m);
+  set('cfg-fw-mass',c.virtual_mass_kg);
+  set('cfg-fw-visc',c.viscous_damping);
+  const vt=document.getElementById('cfg-vcap-toggle');
+  if(vt) vt.checked=(c.velocity_cap_mps>0);
+  if(c.velocity_cap_mps>0) set('cfg-vcap',c.velocity_cap_mps);
+  if(c.drill){ const d=document.getElementById('cfg-drill'); if(d) d.value=c.drill; }
+  if(typeof renderDrillGrid==='function') renderDrillGrid(snap.mode||currentMode);
+  if(typeof window.updateLoadBullet==='function') window.updateLoadBullet();
+  if(typeof window._syncVcap==='function') window._syncVcap();
+  if(typeof updateEccNote==='function') updateEccNote();
+  if(typeof updateResistSummary==='function') updateResistSummary();
+  if(typeof refreshSuggestedLoad==='function') refreshSuggestedLoad();
+  return true;
+}
+async function switchAthlete(aid){
+  aid=String(aid||''); if(!aid) return;
+  addToSquad(aid);
+  if(String(athleteSel.value)===aid){ renderSquad(); return; }
+  let c=null; try{ c=await(await fetch('/api/c/state')).json(); }catch(e){}
+  if(c&&(c.athletic_phase==='resist'||c.athletic_phase==='return')){
+    alert('Rep in progress — stop the rep before switching athletes.');
+    return;
+  }
+  saveAthCfg(athleteSel.value);
+  if(c&&c.athletic_mode){
+    // close the outgoing athlete's drill so their session ends cleanly
+    try{ await fetch('/api/c/athletic/stop',{method:'POST'}); }catch(e){}
+  }
+  athleteSel.value=aid;
+  renderAthleteChip();
+  if(typeof loadAthleteProfile==='function') loadAthleteProfile(aid);
+  restoreAthCfg(aid);
+  renderSquad();
+}
+function renderSquad(){
+  const box=document.getElementById('squad-chips'); if(!box) return;
+  const known={};
+  Array.from(athleteSel.options).forEach(o=>{ if(o.value) known[o.value]=o.textContent; });
+  const sq=_squadLoad().filter(id=>known[id]);   // prune deleted athletes
+  _squadSave(sq);
+  if(!sq.length){
+    box.innerHTML='<div class="squad-empty">Add athletes to switch between them mid-session — each keeps their own load and protocol.</div>';
+    return;
+  }
+  const active=String(athleteSel.value);
+  box.innerHTML=sq.map(function(id){
+    const name=known[id]||('#'+id);
+    let load='';
+    try{ const s=JSON.parse(localStorage.getItem('ppa.athcfg.'+id)||'null');
+      if(s&&s.cfg&&s.cfg.resist_kg!=null&&!isNaN(s.cfg.resist_kg)) load=s.cfg.resist_kg+' kg'; }catch(e){}
+    return '<div class="sq-chip'+(id===active?' active':'')+'" role="button" tabindex="0" data-aid="'+id+'" title="Switch to '+name+'">'+
+      '<span class="av">'+name.trim().charAt(0).toUpperCase()+'</span>'+
+      '<span class="nm">'+name+'</span>'+
+      (load?('<span class="ld">'+load+'</span>'):'')+
+      '<button class="rm" data-aid="'+id+'" title="Remove from session">✕</button>'+
+    '</div>';
+  }).join('');
+  box.querySelectorAll('.sq-chip').forEach(ch=>{
+    const go=()=>switchAthlete(ch.getAttribute('data-aid'));
+    ch.addEventListener('click',e=>{ if(e.target.closest('.rm')) return; go(); });
+    ch.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+  });
+  box.querySelectorAll('.rm').forEach(b=>{
+    b.onclick=e=>{ e.stopPropagation(); removeFromSquad(b.getAttribute('data-aid')); };
+  });
+}
+// + Add menu — athletes not yet in the squad
+(function(){
+  const btn=document.getElementById('squad-add'), menu=document.getElementById('squad-menu');
+  if(!btn||!menu) return;
+  btn.onclick=function(e){
+    e.stopPropagation();
+    if(!menu.hidden){ menu.hidden=true; return; }
+    const inSq=_squadLoad();
+    const opts=Array.from(athleteSel.options).filter(o=>o.value&&inSq.indexOf(o.value)<0);
+    menu.innerHTML=opts.length
+      ?opts.map(o=>'<button type="button" class="sqm-item" data-aid="'+o.value+'">'+o.textContent+'</button>').join('')
+      :'<div class="sqm-none">Everyone\'s already in — add new athletes on the Setup page.</div>';
+    menu.querySelectorAll('.sqm-item').forEach(m=>{
+      m.onclick=function(){ addToSquad(m.getAttribute('data-aid')); menu.hidden=true; renderSquad(); };
+    });
+    menu.hidden=false;
+  };
+  document.addEventListener('click',function(e){
+    if(!menu.hidden&&!menu.contains(e.target)&&e.target!==btn) menu.hidden=true;
+  });
+})();
 
 // ---- Athlete profile card + auto-load advisor ----
 window._athleteProfile=null;
@@ -4011,6 +4182,7 @@ async function loadAthletes(){
     if(typeof renderAthleteChip==='function') renderAthleteChip();
     if(athleteSel.value && typeof loadAthleteProfile==='function')
       loadAthleteProfile(athleteSel.value);
+    if(typeof renderSquad==='function') renderSquad();
   }catch(e){}
 }
 // Adding athletes is done on /setup (Athletes tab).
